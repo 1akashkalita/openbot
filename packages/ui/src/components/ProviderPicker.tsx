@@ -29,6 +29,7 @@ import type { JSX } from "@solidjs/web";
 import { createEffect, createSignal, createStore, createUniqueId, For, Show } from "solid-js";
 import { providerUpdateAvailable, providerVersionLabel } from "../features/provider-updates/provider-update";
 import { useText } from "../text";
+import { createCodeSignInFallback } from "./createCodeSignInFallback";
 import { MoreProvidersDialog } from "./MoreProvidersDialog";
 
 export interface ProviderPickerOption {
@@ -459,6 +460,25 @@ export function ProviderPicker(props: ProviderPickerProps) {
                 (props.codeSignInProviders?.includes(option().id) ?? agentProviderDescriptor(option().id).codeSignIn) &&
                 (runtimeStatus()?.phase ?? "ready") === "ready";
               /**
+               * The browser sign-in is slow or failed. Only a row whose Connect is that browser
+               * hand-off offers the code here; a host's Connect is already the code.
+               */
+              const codeFallback = createCodeSignInFallback(connecting);
+              const codeFallbackOffered = () =>
+                Boolean(props.onConnectProvider) &&
+                codeSignInOffered() &&
+                !off() &&
+                state() !== "available" &&
+                codeFallback.offered();
+              const signInWithCode = () => {
+                codeFallback.startedWithCode();
+                void props.onSignInWithCodeProvider?.(option().id);
+              };
+              const connect = () => {
+                codeFallback.startedInBrowser();
+                void props.onConnectProvider?.(option().id);
+              };
+              /**
                * Every row with a runtime on the computer offers Update in the same place, so the user
                * looks for it in one menu. While a newer version waits, the badge says so and the menu
                * names the version it installs; otherwise the same item checks for one.
@@ -595,6 +615,19 @@ export function ProviderPicker(props: ProviderPickerProps) {
                   <div class="provider-picker-actions">
                     {/* An off provider has no process to act on, so the switch is its only action. */}
                     <Show when={!off()}>
+                      <Show when={codeFallbackOffered()}>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="xs"
+                          class="provider-picker-install"
+                          aria-label={t("provider.aria.codeFallback", { name: option().name })}
+                          disabled={props.disabled || props.refreshingProviders}
+                          onClick={signInWithCode}
+                        >
+                          {t("provider.action.signInWithCode")}
+                        </Button>
+                      </Show>
                       <Show when={runtimeAction()}>
                         {(action) => (
                           <Button
@@ -620,9 +653,9 @@ export function ProviderPicker(props: ProviderPickerProps) {
                                 ) {
                                   void props.onSignInProvider(option().id);
                                 } else if (!props.onConnectProvider && codeSignInOffered()) {
-                                  void props.onSignInWithCodeProvider?.(option().id);
+                                  signInWithCode();
                                 } else {
-                                  void props.onConnectProvider?.(option().id);
+                                  connect();
                                 }
                               } else {
                                 void props.onDownloadProvider?.(option().id);
@@ -665,7 +698,7 @@ export function ProviderPicker(props: ProviderPickerProps) {
                           })}
                           aria-busy={connecting() ? "true" : undefined}
                           disabled={props.disabled || props.refreshingProviders}
-                          onClick={() => void props.onConnectProvider?.(option().id)}
+                          onClick={connect}
                         >
                           <Show when={connecting()}>
                             <Spinner size="sm" />
@@ -674,15 +707,19 @@ export function ProviderPicker(props: ProviderPickerProps) {
                         </Button>
                       </Show>
                       {/* Claude's sign-in is a browser round trip it only needs while signed out.
-                      OpenCode reconnects through its runtime Reconnect, so Sign in stays only where
-                      the row cannot offer it: with no runtime action at all, or a Connect or Restart
-                      that retries the same credentials. A saved key that blocks startup must stay
-                      replaceable and removable, so those actions never take the dialog away. */}
+                      The key providers (OpenCode, Muse, Gemini) reconnect through their runtime
+                      Reconnect, so Sign in stays only where the row cannot offer it: with no runtime
+                      action at all, or a Connect or Restart that retries the same credentials. A
+                      saved key that blocks startup must stay replaceable and removable, so those
+                      actions never take the dialog away. */}
                       <Show
                         when={
                           props.onSignInProvider &&
                           !connectOptional() &&
-                          (option().id === "opencode" || option().id === "muse"
+                          // A released host stores a Gemini key but never reads it, so only this computer offers it.
+                          (option().id === "opencode" ||
+                          option().id === "muse" ||
+                          (option().id === "antigravity" && props.onConnectProvider)
                             ? runtimeAction() === undefined ||
                               runtimeAction() === "connect" ||
                               runtimeAction() === "restart"
@@ -750,7 +787,7 @@ export function ProviderPicker(props: ProviderPickerProps) {
                                 </Show>
                               </Show>
                               <Show when={codeSignInOffered()}>
-                                <DropdownMenu.Item onSelect={() => void props.onSignInWithCodeProvider?.(option().id)}>
+                                <DropdownMenu.Item onSelect={signInWithCode}>
                                   <Smartphone aria-hidden="true" />
                                   {t("provider.action.signInWithCode")}
                                 </DropdownMenu.Item>
