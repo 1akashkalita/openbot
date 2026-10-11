@@ -2102,6 +2102,14 @@ export async function createApplicationServices({
         return { ok: true, checks: ["initialization-succeeded", "agent-list"] };
       }),
   });
+  // A client that used the server in the last minutes still uses it.
+  const clientInUse = () =>
+    host.connectedClientCount() > 0 && Date.now() - (host.lastClientUseAt() ?? 0) < CLIENT_USE_WINDOW_MS;
+  // A client wakes a hosted server, and reading is not use. Without this, a member who only reads
+  // would see the restart at the end of the disk restore.
+  const startedAt = Date.now();
+  const clientInUseSinceStart = () =>
+    clientInUse() || (host.connectedClientCount() > 0 && Date.now() - startedAt < CLIENT_USE_WINDOW_MS);
   requestedUpdate = new RequestedUpdate({
     updater,
     describeReadiness: describeRestartReadiness,
@@ -2109,6 +2117,8 @@ export async function createApplicationServices({
     savePreference: (change) => writeUpdatePreference(updatePreferenceFile, change),
     log: (message) => logger.info(message),
     announce: (state, version) => host.announceRestart(state, version),
+    // boat restores the disk of a woken server lazily, so its start no longer applies a release.
+    clientInUse: hostedServer ? clientInUseSinceStart : undefined,
   });
   const remoteUpdate = requestedUpdate;
   teardown.push(TEARDOWN_ORDER.requestedUpdate, "the requested update", () =>
@@ -2163,7 +2173,7 @@ export async function createApplicationServices({
         service.hasActiveWork().length > 0 ||
         messaging.hasLiveConnection() ||
         host.describeRestartBlockers().some((reason) => reason !== "browser-view") ||
-        (host.connectedClientCount() > 0 && Date.now() - (host.lastClientUseAt() ?? 0) < CLIENT_USE_WINDOW_MS),
+        clientInUse(),
       nextRunAt: () => {
         const dueAt = service.nextRoutineDueAt();
         return dueAt ? Date.parse(dueAt) : null;
