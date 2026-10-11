@@ -1,4 +1,4 @@
-import { VOICE_AUDIO_LIMITS } from "@openbot/contracts/ipc";
+import { VOICE_AUDIO_LIMITS, VOICE_MODELS, type VoiceModelId } from "@openbot/contracts/ipc";
 import { currentText } from "@openbot/ui/text";
 import { onCleanup } from "solid-js";
 import { desktopAnalytics } from "../../../analytics";
@@ -86,6 +86,8 @@ export interface VoiceStoreDeps {
 
 export function createVoiceStore(deps: VoiceStoreDeps) {
   const { resources } = deps;
+  /** The model that `prepareModel` downloads, so the progress of another model is not shown. */
+  let preparingModelId: VoiceModelId | null = null;
 
   async function startVoiceRecording(): Promise<void> {
     const agentId = deps.props.agent?.id;
@@ -100,7 +102,16 @@ export function createVoiceStore(deps: VoiceStoreDeps) {
     deps.setVoiceModelProgress(0);
     let stream: MediaStream | undefined;
     try {
-      const modelStatus = await conversationRuntime(deps.props).voice.prepareModel();
+      const voice = conversationRuntime(deps.props).voice;
+      let livePreview = true;
+      // The settings answer at once; a download reports progress only after that.
+      const [, modelStatus] = await Promise.all([
+        voice.getSettings().then((settings) => {
+          preparingModelId = settings.modelId;
+          livePreview = VOICE_MODELS.find((model) => model.id === settings.modelId)?.livePreview ?? true;
+        }),
+        voice.prepareModel(),
+      ]);
       if (resources.voiceDisposed || resources.voiceRequestGeneration !== generation) return;
       if (modelStatus.phase !== "ready") {
         deps.setVoicePhase("idle");
@@ -136,7 +147,7 @@ export function createVoiceStore(deps: VoiceStoreDeps) {
         if (event.data.size === 0 || resources.voiceRecorder !== recorder) return;
         resources.voiceChunks.push(event.data);
         // The last chunk arrives after Stop, and the final pass already covers it.
-        if (recorder.state === "recording" && !resources.voiceLiveRequest) {
+        if (livePreview && recorder.state === "recording" && !resources.voiceLiveRequest) {
           resources.voiceLiveRequest = refreshLiveTranscript(recorder, target).finally(() => {
             resources.voiceLiveRequest = undefined;
           });
@@ -165,7 +176,8 @@ export function createVoiceStore(deps: VoiceStoreDeps) {
   }
 
   const removeVoiceModelListener = conversationRuntime(deps.props).voice.onModelStatus((status) => {
-    if (deps.voicePhase() !== "preparing") return;
+    // Settings can download another model at the same time.
+    if (deps.voicePhase() !== "preparing" || status.modelId !== preparingModelId) return;
     deps.setVoiceModelProgress(status.progress);
   });
   onCleanup(removeVoiceModelListener);
