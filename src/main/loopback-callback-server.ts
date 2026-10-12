@@ -49,8 +49,18 @@ export async function startLoopbackCallbackServer(
 ): Promise<LoopbackCallbackServer> {
   // A browser keeps its connection open after the page is served, and `server.close` waits for
   // every one of them - so shutdown would sit on a socket nobody is using. They are ended by hand.
+  // A socket whose page is still on its way is ended when the page is sent: the callback that ends a
+  // sign-in can close this listener before the browser has the page that says so.
   const sockets = new Set<Socket>();
+  const answering = new Set<Socket>();
+  let closing = false;
   const server: Server = createServer((request, response) => {
+    const socket = request.socket;
+    answering.add(socket);
+    response.on("close", () => {
+      answering.delete(socket);
+      if (closing) socket.destroy();
+    });
     const checked = checkCallbackRequest(request.method, request.url, request.headers.host, options.path);
     const answer = checked instanceof URL ? options.receive(checked) : checked;
     response
@@ -74,8 +84,8 @@ export async function startLoopbackCallbackServer(
   return {
     port,
     close: async () => {
-      for (const socket of sockets) socket.destroy();
-      sockets.clear();
+      closing = true;
+      for (const socket of sockets) if (!answering.has(socket)) socket.destroy();
       await new Promise<void>((resolve) => server.close(() => resolve()));
     },
   };

@@ -152,7 +152,7 @@ export const messages = {
   "mcp.panel.appSaved": "Aplikacja zapisana. Zaloguj się, aby jej użyć.",
   "mcp.panel.appRemoved": "Aplikacja usunięta.",
   "mcp.signIn.relayDescription":
-    "Strona logowania {page} jest otwarta w Twojej przeglądarce. Gdy skończysz, OpenBot wyśle logowanie do {host}.",
+    "Sprawdź, czy strona logowania jest na {page}, a potem otwórz ją w przeglądarce. Gdy skończysz, OpenBot wyśle logowanie do {host}.",
   "mcp.signIn.relayOpenDescription":
     "Otwórz stronę logowania {page} w tej przeglądarce. Gdy skończysz, wklej tutaj wyświetlany adres. OpenBot wyśle wtedy logowanie do {host}.",
   "mcp.signIn.relayOpen": "Otwórz stronę logowania",

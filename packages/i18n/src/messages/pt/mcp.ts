@@ -143,7 +143,7 @@ export const messages = {
   "mcp.panel.appSaved": "App salvo. Faça a autenticação para usá-lo.",
   "mcp.panel.appRemoved": "App removido.",
   "mcp.signIn.relayDescription":
-    "A página de autenticação de {page} está aberta no seu navegador. Quando você terminar, o OpenBot envia a autenticação para {host}.",
+    "Confirme que a página de autenticação está em {page} e abra-a no seu navegador. Quando você terminar, o OpenBot envia a autenticação para {host}.",
   "mcp.signIn.relayOpenDescription":
     "Abra a página de autenticação de {page} neste navegador. Quando terminar, cole aqui o endereço que o navegador mostra. O OpenBot então envia a autenticação para {host}.",
   "mcp.signIn.relayOpen": "Abrir página de autenticação",

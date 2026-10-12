@@ -12,7 +12,7 @@
  */
 
 import { Button, Dialog, Field, Input, ShieldCheck, Text } from "@openbot/ui";
-import { createSignal, Show } from "solid-js";
+import { createSignal } from "solid-js";
 import { useText } from "../../text";
 import BrowserLiveView, { type BrowserViewRuntime } from "../browser/BrowserLiveView";
 
@@ -116,8 +116,11 @@ export interface McpSignInRelayDialogProps {
   name: string;
   hostName: string;
   page: McpSignInRelaySource;
-  /** Opens the page again. The web client has no other way to open it, because a browser blocks a page that no click opened. */
-  onOpen?: (() => void) | undefined;
+  /**
+   * Opens the page. Nothing opens it before: the host chose the page, so the user checks its host name
+   * first. A browser also blocks a page that no click opened. A rejection is shown under the field.
+   */
+  onOpen: () => void | Promise<void>;
   /** Sends the address that the browser shows. A rejection is shown under the field. */
   onPaste: (address: string) => Promise<void>;
   onCancel: () => void;
@@ -138,6 +141,14 @@ export function McpSignInRelayDialog(props: McpSignInRelayDialogProps) {
     if (cancelling()) return;
     setCancelling(true);
     props.onCancel();
+  };
+  const openPage = async () => {
+    setError(null);
+    try {
+      await props.onOpen();
+    } catch (cause) {
+      setError(errorMessage(cause, t("error.mcp.relayEnded")));
+    }
   };
   const send = async (event: SubmitEvent) => {
     event.preventDefault();
@@ -165,19 +176,15 @@ export function McpSignInRelayDialog(props: McpSignInRelayDialogProps) {
             <header class="mcp-connect-header">
               <Dialog.Title class="mcp-connect-title">{t("mcp.panel.signInTo", { name: props.name })}</Dialog.Title>
               <Dialog.Description class="mcp-connect-description">
-                {t(props.onOpen ? "mcp.signIn.relayOpenDescription" : "mcp.signIn.relayDescription", {
+                {t(props.page.listening ? "mcp.signIn.relayDescription" : "mcp.signIn.relayOpenDescription", {
                   page: props.page.authorizeHost,
                   host: props.hostName,
                 })}
               </Dialog.Description>
             </header>
-            <Show when={props.onOpen}>
-              {(open) => (
-                <Button type="button" class="mcp-sign-in-relay-open" onClick={() => open()()}>
-                  {t("mcp.signIn.relayOpen")}
-                </Button>
-              )}
-            </Show>
+            <Button type="button" class="mcp-sign-in-relay-open" onClick={() => void openPage()}>
+              {t("mcp.signIn.relayOpen")}
+            </Button>
             <form class="mcp-sign-in-relay-form" onSubmit={send}>
               <Field
                 label={t("mcp.signIn.relayAddress")}

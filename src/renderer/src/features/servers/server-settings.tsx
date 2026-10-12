@@ -497,7 +497,7 @@ const ServerSettings = createSimpleContext({
       }
     }
 
-    /** Reads the relayed page of a sign-in until it ends; main opens it in the browser a moment after start. */
+    /** Reads the relayed page of a sign-in until it ends. The page opens when the user asks. */
     async function followMcpSignInRelay(serverId: string, url: string, waiting: () => boolean): Promise<void> {
       const set = (page: McpSignInRelayPage | null) =>
         setServerSettingsMcpSignInRelays((pages) => {
@@ -517,6 +517,13 @@ const ServerSettings = createSimpleContext({
       } finally {
         set(null);
       }
+    }
+
+    /** Opens a relayed sign-in page in this computer's browser, after the user checked its host name. */
+    async function openMcpSignInRelay(url: string): Promise<void> {
+      const server = serverSettingsTarget();
+      if (!server) throw new Error(currentText().t("server.settings.unavailable"));
+      await serversPort().agent.openMcpSignInRelay({ url }, server.id);
     }
 
     /** The address the browser shows at the end of a relayed sign-in. Main sends only its query to the host. */
@@ -657,6 +664,7 @@ const ServerSettings = createSimpleContext({
       serverSettingsMcpSignIns,
       serverSettingsMcpSignInPages,
       serverSettingsMcpSignInRelays,
+      openMcpSignInRelay,
       pasteMcpSignInRelay,
       signInMcpServer,
       cancelMcpSignIn,

@@ -342,6 +342,7 @@ function ServerSettings(props: {
     serverSettingsMcpSignIns,
     serverSettingsMcpSignInPages,
     serverSettingsMcpSignInRelays,
+    openMcpSignInRelay,
     pasteMcpSignInRelay,
     signInMcpServer,
     cancelMcpSignIn,
@@ -581,7 +582,11 @@ function ServerSettings(props: {
                           clipboard: serverSupportsCapability(server(), "browser-view-clipboard"),
                           pages: serverSettingsMcpSignInPages(),
                           relay: serverSupportsCapability(server(), "sign-in-relay-v1")
-                            ? { pages: serverSettingsMcpSignInRelays(), paste: pasteMcpSignInRelay }
+                            ? {
+                                pages: serverSettingsMcpSignInRelays(),
+                                open: openMcpSignInRelay,
+                                paste: pasteMcpSignInRelay,
+                              }
                             : undefined,
                         }
                       : undefined,

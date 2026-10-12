@@ -141,7 +141,7 @@ export const messages = {
   "mcp.panel.appSaved": "Uygulama kaydedildi. Kullanmak için oturum açın.",
   "mcp.panel.appRemoved": "Uygulama kaldırıldı.",
   "mcp.signIn.relayDescription":
-    "{page} oturum açma sayfası tarayıcınızda açık. Bitirdiğinizde OpenBot oturum açmayı {host} sunucusuna gönderir.",
+    "Oturum açma sayfasının {page} üzerinde olduğunu kontrol edin, sonra tarayıcınızda açın. Bitirdiğinizde OpenBot oturum açmayı {host} sunucusuna gönderir.",
   "mcp.signIn.relayOpenDescription":
     "{page} oturum açma sayfasını bu tarayıcıda açın. Bitirdiğinizde tarayıcının gösterdiği adresi buraya yapıştırın. OpenBot ardından oturum açmayı {host} sunucusuna gönderir.",
   "mcp.signIn.relayOpen": "Oturum açma sayfasını aç",

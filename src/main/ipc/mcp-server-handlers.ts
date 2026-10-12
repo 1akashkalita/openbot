@@ -124,7 +124,7 @@ interface McpServerIpcDependencies {
   /** What the managed store holds right now, so an installed command waits for no download. */
   toolRuntimes: () => McpToolRuntimes;
   /** Opens the page of a joined server's sign-in in this computer's browser, and relays the callback. */
-  relay: Pick<SignInRelayClient, "run" | "page" | "paste">;
+  relay: Pick<SignInRelayClient, "run" | "page" | "open" | "paste">;
 }
 
 /** How long a connection test waits for the managed runtimes before probing without them. */
@@ -294,6 +294,12 @@ export function mcpServerIpcHandlers({
       mcpSignInRelay: scopedHandler(parseCancelMcpSignIn, {
         local: () => null,
         remote: (parsed, serverId) => relay.page(remotePageKey(serverId, parsed.url)),
+      }),
+      openMcpSignInRelay: scopedHandler(parseCancelMcpSignIn, {
+        local: () => {
+          throw new Error(sourceText("error.mcp.relayEnded"));
+        },
+        remote: (parsed, serverId) => relay.open(remotePageKey(serverId, parsed.url)),
       }),
       // A local sign-in takes its callback on this computer's own listener, so nothing waits for a paste.
       completeMcpSignInRelay: scopedHandler(parseCompleteMcpSignInRelay, {

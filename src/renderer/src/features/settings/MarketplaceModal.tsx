@@ -136,6 +136,7 @@ export function MarketplaceModal(props: MarketplaceModalProps) {
                     name={pending.subject.name}
                     hostName={props.pluginHostName ?? ""}
                     page={relay.page}
+                    onOpen={controller.openSignInRelay}
                     onPaste={controller.pasteSignInRelay}
                     onCancel={controller.cancelSignInRelay}
                   />

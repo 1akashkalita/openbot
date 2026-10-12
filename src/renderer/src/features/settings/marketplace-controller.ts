@@ -549,6 +549,15 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
     }
   }
 
+  /** Opens the relayed sign-in page in this computer's browser, after the user checked its host name. */
+  async function openSignInRelay(): Promise<void> {
+    const relay = signInRelay();
+    const current = relayed();
+    const serverId = props.pluginServerId;
+    if (!relay || !current || !serverId) throw new Error(t("error.mcp.relayEnded"));
+    await relay.open(current.url, serverId);
+  }
+
   /** The address the browser shows at the end of a relayed sign-in. Main sends only its query to the host. */
   async function pasteSignInRelay(address: string): Promise<void> {
     const relay = signInRelay();
@@ -856,6 +865,7 @@ export function createMarketplaceController(props: MarketplaceControllerProps) {
     testPluginApp,
     signInPluginApp,
     signInRelayed: relayed,
+    openSignInRelay,
     pasteSignInRelay,
     cancelSignInRelay,
     openPluginUrl,

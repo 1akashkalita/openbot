@@ -127,6 +127,7 @@ function setup(options: {
       relay: {
         run: () => Effect.die("The relay is not used here."),
         page: () => null,
+        open: async () => undefined,
         paste: () => undefined,
       },
     }).mcpServers,

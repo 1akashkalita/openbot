@@ -54,9 +54,12 @@ POST mcp/start {config}  ---------------------> McpHostSignIns.startRelay: start
                          <--------------------- {flowId, expiresAt}
 POST status {flowId}     ---------------------> SignInRelayHost.status
                          <--------------------- {authorizeUrl, callback {port, path, state}, result}
-Listen on callback.port (or use the own
+Read port, path and state from authorizeUrl
+(refuse a page with no state)
+Listen on that port (or use the own
 MCP listener on 28417 /mcp-auth, by state)
-Open authorizeUrl in the browser (https only)
+Show the page's host name; the user clicks
+"Open sign-in page" (https only)
         ... the user signs in ...
 Browser -> http://127.0.0.1:<port><path>?code&state
 POST complete {flowId, query} ----------------> check state, give code to McpOAuth
@@ -73,7 +76,7 @@ POST complete {flowId, query} ----------------> check state, give code to McpOAu
 | Host sign-in with no tab (`"relay"` mode) | [`src/main/host-sign-in-pages.ts`](../../src/main/host-sign-in-pages.ts), [`src/main/mcp-host-sign-ins.ts`](../../src/main/mcp-host-sign-ins.ts) |
 | Client flow (listen, open, complete, paste) | [`src/main/sign-in-relay-client.ts`](../../src/main/sign-in-relay-client.ts) |
 | Loopback listener checks (Host, method, path) | [`src/main/loopback-callback-server.ts`](../../src/main/loopback-callback-server.ts) |
-| Desktop IPC (`servers:mcp:sign-in-relay`, `servers:mcp:complete-sign-in-relay`) | [`src/main/ipc/mcp-server-handlers.ts`](../../src/main/ipc/mcp-server-handlers.ts) |
+| Desktop IPC (`servers:mcp:sign-in-relay`, `servers:mcp:open-sign-in-relay`, `servers:mcp:complete-sign-in-relay`) | [`src/main/ipc/mcp-server-handlers.ts`](../../src/main/ipc/mcp-server-handlers.ts) |
 | Paste dialog | `McpSignInRelayDialog` in [`packages/ui/src/features/settings/McpSignInPage.tsx`](../../packages/ui/src/features/settings/McpSignInPage.tsx) |
 | Browser client (paste only) | [`src/renderer/src/features/web-client/web-server-settings.ts`](../../src/renderer/src/features/web-client/web-server-settings.ts) |
 | Marketplace | [`src/renderer/src/features/settings/marketplace-controller.ts`](../../src/renderer/src/features/settings/marketplace-controller.ts) |
@@ -105,7 +108,12 @@ capability answers that the sign-in must be done on the host.
 - The client sends only the query of the callback. The host checks `state` against the page address
   that its own sign-in made. A client can never choose a host port, host name or path.
 - The host names a callback only for `http:` on `127.0.0.1`, `localhost` or `[::1]`, with a port.
-- The client opens only an `https:` page. The dialog shows the page's host name.
+- The host chooses the page, so a host that is not honest could ask for a grant of another account
+  in the user's browser. The client therefore:
+  - opens only an `https:` page, and only when the user clicks "Open sign-in page" in the dialog
+    that shows the page's host name;
+  - reads the callback port and path from the page's `redirect_uri`, not from the host's `callback`;
+  - refuses a page with no `state`, so its listener hands on only the callback of this sign-in.
 - The client listener refuses a request whose `Host` header is not a loopback name, a method that
   is not GET or HEAD, and any other path. Its page is a fixed catalog message.
 - The code is a secret. The host calls `registerSecretValue` on it before delivery. No log line,
@@ -115,7 +123,8 @@ capability answers that the sign-in must be done on the host.
 ### Security checklist for a new relay kind
 
 - [ ] The host builds the full callback address from its own record. The client sends only a query.
-- [ ] The host checks `state`, when the page has one, before it delivers.
+- [ ] The host checks `state` before it delivers. The client refuses a page with no `state`.
+- [ ] Nothing opens the page before the user sees its host name and asks.
 - [ ] One flow completes once, for one member, before its deadline.
 - [ ] The code is registered with `registerSecretValue` and never logged.
 - [ ] The route uses `requireAdmin`, and its codec is in an optional capability (not in bootstrap).

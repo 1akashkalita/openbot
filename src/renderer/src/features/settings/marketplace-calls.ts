@@ -24,6 +24,7 @@ export interface MarketplaceCalls {
 /** The relayed sign-in of the app at `url` on the joined server `serverId`, while it waits. */
 export interface MarketplaceSignInRelay {
   page: (url: string, serverId: string) => Promise<McpSignInRelayPage | null>;
+  open: (url: string, serverId: string) => Promise<void>;
   paste: (url: string, address: string, serverId: string) => Promise<void>;
   cancel: (url: string, serverId: string) => Promise<void>;
 }
@@ -41,6 +42,7 @@ export function desktopMarketplaceCalls(): MarketplaceCalls {
     openUrl: (url) => appPort().openUrl(url),
     signInRelay: {
       page: (url, serverId) => port.agent.mcpSignInRelay({ url }, serverId),
+      open: (url, serverId) => port.agent.openMcpSignInRelay({ url }, serverId),
       paste: (url, address, serverId) => port.agent.completeMcpSignInRelay({ url, address }, serverId),
       cancel: (url, serverId) => port.agent.cancelMcpSignIn({ url }, serverId),
     },

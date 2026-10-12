@@ -139,7 +139,7 @@ export const messages = {
   "mcp.panel.appSaved": "アプリを保存しました。使用するにはサインインしてください。",
   "mcp.panel.appRemoved": "アプリを削除しました。",
   "mcp.signIn.relayDescription":
-    "{page} のサインインページがブラウザーで開いています。完了すると、OpenBot がサインインを {host} に送信します。",
+    "サインインページが {page} にあることを確認してから、ブラウザーで開いてください。完了すると、OpenBot がサインインを {host} に送信します。",
   "mcp.signIn.relayOpenDescription":
     "このブラウザーで {page} のサインインページを開いてください。完了したら、ブラウザーに表示されたアドレスをここに貼り付けてください。その後、OpenBot がサインインを {host} に送信します。",
   "mcp.signIn.relayOpen": "サインインページを開く",

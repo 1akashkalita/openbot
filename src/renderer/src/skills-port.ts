@@ -22,6 +22,7 @@ export interface SkillsPort {
     | "listInstalledSkills"
     | "listMcpServers"
     | "mcpSignInRelay"
+    | "openMcpSignInRelay"
     | "onEvent"
     | "removeMcpServer"
     | "saveMcpServer"

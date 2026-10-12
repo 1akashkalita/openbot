@@ -799,6 +799,7 @@ const openbotApi: OpenBotDesktopApi = {
       signInMcpServer: decodeMcpTestResult,
       mcpSignInPage: decodeMcpSignInPage,
       mcpSignInRelay: decodeMcpSignInRelayPage,
+      openMcpSignInRelay: decodeVoid,
       completeMcpSignInRelay: decodeVoid,
       cancelMcpSignIn: decodeVoid,
       signOutMcpServer: decodeMcpSignInStates,

@@ -7,4 +7,4 @@
 
 ### Security
 
-- Only an owner or admin can start a relayed sign-in. Each relay completes once, only for the member who started it, and ends after 10 minutes. Your computer sends only the query of the callback. The host checks its `state` and never lets a client choose a host port or address. OpenBot does not log the sign-in code.
+- Only an owner or admin can start a relayed sign-in. Each relay completes once, only for the member who started it, and ends after 10 minutes. Your computer sends only the query of the callback. The host checks its `state` and never lets a client choose a host port or address. The page opens only when you click "Open sign-in page" in the dialog that shows its host name, and your computer refuses a page that has no `state`, so a host cannot use your browser for a grant you did not ask for. OpenBot does not log the sign-in code.

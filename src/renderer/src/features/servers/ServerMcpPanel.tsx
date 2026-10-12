@@ -140,8 +140,8 @@ interface McpPanelRelay {
   pages: Record<string, McpSignInRelaySource>;
   /** Sends the address that the browser shows at the end of the sign-in. */
   paste: (url: string, address: string) => Promise<void>;
-  /** Opens the page again; only the web client needs it. */
-  open?: ((url: string) => void) | undefined;
+  /** Opens the page in the user's browser. Nothing opens it before the user saw its host name and asked. */
+  open: (url: string) => void | Promise<void>;
 }
 
 /** A test or a sign-in that has answered. */
@@ -1136,7 +1136,7 @@ export function ServerMcpPanel(props: ServerMcpPanelProps) {
                 name={page.name}
                 hostName={page.remote.hostName}
                 page={relay()}
-                onOpen={page.remote.relay?.open ? () => page.remote.relay?.open?.(page.url) : undefined}
+                onOpen={() => page.remote.relay?.open(page.url)}
                 onPaste={(address) => page.remote.relay?.paste(page.url, address) ?? Promise.resolve()}
                 onCancel={() => cancelSignIn(page.url)}
               />

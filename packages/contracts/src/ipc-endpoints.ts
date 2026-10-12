@@ -1115,11 +1115,13 @@ export const IPC_ENDPOINTS = {
     signInMcpServer: scopedRequest<TestMcpServerInput, McpTestResult, "required">()("servers:mcp:sign-in"),
     mcpSignInPage: scopedRequest<CancelMcpSignInInput, string | null, "required">()("servers:mcp:sign-in-page"),
     // A host with `sign-in-relay-v1` opens no tab: the page opens in this computer's browser, and the
-    // callback comes back here. `mcpSignInRelay` names the page while it waits, and
-    // `completeMcpSignInRelay` takes the address the user pastes when no listener took the callback.
+    // callback comes back here. `mcpSignInRelay` names the page while it waits, `openMcpSignInRelay`
+    // opens it when the user asks, and `completeMcpSignInRelay` takes the address the user pastes when
+    // no listener took the callback.
     mcpSignInRelay: scopedRequest<CancelMcpSignInInput, McpSignInRelayPage | null, "required">()(
       "servers:mcp:sign-in-relay",
     ),
+    openMcpSignInRelay: scopedRequest<CancelMcpSignInInput, void, "required">()("servers:mcp:open-sign-in-relay"),
     completeMcpSignInRelay: scopedRequest<CompleteMcpSignInRelayInput, void, "required">()(
       "servers:mcp:complete-sign-in-relay",
     ),

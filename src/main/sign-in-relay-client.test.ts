@@ -1,8 +1,9 @@
 import { createServer } from "node:net";
 import type { McpServerConfig, McpTestResult } from "@openbot/contracts/ipc";
 import { translateFor } from "@openbot/i18n";
+import { sourceText } from "@openbot/i18n/source";
 import { Effect } from "effect";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { SignInRelayClient, type SignInRelayRemote } from "./sign-in-relay-client";
 import { SignInRelayHost } from "./sign-in-relay-host";
 
@@ -41,11 +42,17 @@ function freePort(port = 0): Promise<number> {
 /** A real host and a real client, joined by direct calls in place of the encrypted Team channel. */
 function setup(
   port: number,
-  options: { ownListener?: boolean; browser: (client: SignInRelayClient) => Promise<void> },
+  options: {
+    ownListener?: boolean;
+    state?: string | null;
+    browser: (client: SignInRelayClient) => Promise<void>;
+  },
 ) {
   const granted: string[] = [];
+  const opened: string[] = [];
   let result: McpTestResult | null = null;
-  const page = `https://auth.example.com/authorize?state=${STATE}&redirect_uri=${encodeURIComponent(`http://127.0.0.1:${port}/cb`)}`;
+  const state = options.state === undefined ? STATE : options.state;
+  const page = `https://auth.example.com/authorize?${state ? `state=${state}&` : ""}redirect_uri=${encodeURIComponent(`http://127.0.0.1:${port}/cb`)}`;
   const host = new SignInRelayHost({
     mcp: {
       startRelay: () => Effect.void,
@@ -67,18 +74,34 @@ function setup(
     cancel: (flowId) => Effect.try(() => host.cancel("admin", flowId)),
   };
   const client: SignInRelayClient = new SignInRelayClient({
-    openExternal: () => options.browser(client),
+    openExternal: (url) => {
+      opened.push(url);
+      return options.browser(client);
+    },
     language: { locale: "en", translate: translateFor("en") },
     ownListener: () => (options.ownListener ? { port, path: "/cb" } : null),
   });
-  return { granted, run: () => Effect.runPromise(client.run("key", remote)) };
+  return {
+    granted,
+    opened,
+    client,
+    run: () => Effect.runPromise(client.run("key", remote)),
+    /** The user reads the page's host name in the dialog, then asks to open it. */
+    runAndOpen: async () => {
+      const done = Effect.runPromise(client.run("key", remote));
+      await vi.waitFor(() => expect(client.page("key")?.authorizeHost).toBe("auth.example.com"));
+      expect(opened).toEqual([]);
+      await client.open("key");
+      return done;
+    },
+  };
 }
 
 describe("SignInRelayClient", () => {
   it("takes the callback on the host's port, refuses another sign-in's, and frees the port", async () => {
     const port = await freePort();
     const statuses: number[] = [];
-    const { granted, run } = setup(port, {
+    const { granted, runAndOpen } = setup(port, {
       browser: async () => {
         for (const state of ["other", STATE]) {
           const response = await fetch(`http://127.0.0.1:${port}/cb?code=${CODE}&state=${state}`);
@@ -87,7 +110,7 @@ describe("SignInRelayClient", () => {
       },
     });
 
-    expect(await run()).toEqual({ toolCount: 3, error: null });
+    expect(await runAndOpen()).toEqual({ toolCount: 3, error: null });
     expect(statuses).toEqual([400, 200]);
     expect(granted).toEqual([CODE]);
     await expect(freePort(port)).resolves.toBe(port);
@@ -95,7 +118,7 @@ describe("SignInRelayClient", () => {
 
   it("sends a pasted address when its own listener has the port", async () => {
     const port = await freePort();
-    const { granted, run } = setup(port, {
+    const { granted, runAndOpen } = setup(port, {
       ownListener: true,
       browser: async (client) => {
         expect(() => client.paste("key", "https://example.com/?code=x&state=other")).toThrow();
@@ -103,7 +126,16 @@ describe("SignInRelayClient", () => {
       },
     });
 
-    expect(await run()).toEqual({ toolCount: 3, error: null });
+    expect(await runAndOpen()).toEqual({ toolCount: 3, error: null });
     expect(granted).toEqual([CODE]);
+  });
+
+  it("refuses a page with no state, so its listener cannot hand on another sign-in's callback", async () => {
+    const port = await freePort();
+    const { granted, opened, run } = setup(port, { state: null, browser: async () => undefined });
+
+    expect(await run()).toEqual({ toolCount: 0, error: sourceText("error.mcp.relayNoState") });
+    expect(opened).toEqual([]);
+    expect(granted).toEqual([]);
   });
 });

@@ -332,6 +332,27 @@ export function relayCallbackQuery(address: string, state: string | null): strin
   }
 }
 
+/** The names a loopback callback can use. Any other address is not a callback on the computer that listens. */
+const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]"]);
+
+/**
+ * The loopback address that a sign-in page sends the browser back to, or `null`. A sign-in that returns
+ * to another address, such as `openbot://`, has no callback to listen for. The host names it, and the
+ * client reads it again from the page it opens, so a host cannot name a port that the page does not use.
+ */
+export function loopbackCallback(pageUrl: string): NonNullable<SignInRelayStatus["callback"]> | null {
+  try {
+    const page = new URL(pageUrl);
+    const redirect = page.searchParams.get("redirect_uri");
+    if (!redirect) return null;
+    const target = new URL(redirect);
+    if (target.protocol !== "http:" || !LOOPBACK_HOSTS.has(target.hostname) || !target.port) return null;
+    return { port: Number(target.port), path: target.pathname, state: page.searchParams.get("state") };
+  } catch {
+    return null;
+  }
+}
+
 export function decodeSignInRelayFlow(value: unknown): { flowId: string } {
   if (!isDynamicRecord(value) || !isBounded(value.flowId, INPUT_LIMITS.identifier) || value.flowId.length === 0)
     throw new Error("Invalid sign-in relay response.");

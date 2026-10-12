@@ -1,7 +1,12 @@
 // The client half of `sign-in-relay-v1`: this computer opens the sign-in page of a joined server's
 // sign-in in the user's own browser, takes the callback, and sends its query to the host.
 
-import { type McpSignInRelayPage, relayCallbackQuery, type SignInRelayStatus } from "@openbot/contracts/ipc";
+import {
+  loopbackCallback,
+  type McpSignInRelayPage,
+  relayCallbackQuery,
+  type SignInRelayStatus,
+} from "@openbot/contracts/ipc";
 import { sourceText } from "@openbot/i18n/source";
 import { createOpenBotLogger, toLogValue } from "@openbot/logging";
 import { Deferred, Duration, Effect } from "effect";
@@ -32,7 +37,9 @@ export interface SignInRelayClientDependencies {
 
 interface Waiting {
   page: McpSignInRelayPage;
-  state: string | null;
+  /** The address the browser opens. It goes nowhere until the user, who sees its host name, asks. */
+  url: string;
+  state: string;
   receive: (query: string) => void;
 }
 
@@ -44,6 +51,11 @@ interface Waiting {
  * is another port, this binds that exact port for the time of the sign-in. When neither works, the
  * user pastes the address the browser shows. The query of the callback holds a grant: it goes only to
  * the host, and it is never logged.
+ *
+ * The host chooses the page, so a host that is not honest could ask for a grant of another account in
+ * this browser. The page therefore opens only when the user, who sees its host name, asks; the port is
+ * read from the page and not from the host's answer; and a page with no `state` is refused, so the
+ * listener hands on only the callback of this sign-in.
  */
 export class SignInRelayClient {
   readonly #dependencies: SignInRelayClientDependencies;
@@ -69,6 +81,13 @@ export class SignInRelayClient {
       return true;
     }
     return false;
+  }
+
+  /** Opens the page of the sign-in of `key` in the user's browser, after they checked its host name. */
+  open(key: string): Promise<void> {
+    const waiting = this.#waiting.get(key);
+    if (!waiting) return Promise.reject(new Error(sourceText("error.mcp.relayEnded")));
+    return this.#dependencies.openExternal(waiting.url);
   }
 
   /** The address that the user pasted from the browser, for the sign-in of `key`. */
@@ -99,24 +118,26 @@ export class SignInRelayClient {
       const page = safePage(authorizeUrl);
       if (!page) return { toolCount: 0, error: sourceText("error.backend.mcpSignInNotWebPage") };
 
-      const query = yield* Deferred.make<string>();
       const state = page.searchParams.get("state");
+      if (!state) return { toolCount: 0, error: sourceText("error.mcp.relayNoState") };
+
+      const query = yield* Deferred.make<string>();
+      const callback = loopbackCallback(page.toString());
       const listener = yield* Effect.acquireRelease(
         Effect.promise(() =>
-          self.#listen(first.callback, state, (value) => Deferred.doneUnsafe(query, Effect.succeed(value))),
+          self.#listen(callback, state, (value) => Deferred.doneUnsafe(query, Effect.succeed(value))),
         ),
         (server) => Effect.promise(() => server?.close() ?? Promise.resolve()),
       );
       const own = self.#dependencies.ownListener();
       const routed =
-        first.callback !== null &&
-        (listener !== null || (own?.port === first.callback.port && own.path === first.callback.path));
+        callback !== null && (listener !== null || (own?.port === callback.port && own.path === callback.path));
       self.#waiting.set(key, {
         page: { authorizeHost: page.host, listening: routed },
+        url: page.toString(),
         state,
         receive: (value) => Deferred.doneUnsafe(query, Effect.succeed(value)),
       });
-      yield* Effect.promise(() => self.#dependencies.openExternal(page.toString()));
 
       // The host can end the sign-in first: its deadline passed, or another start replaced it.
       const ended = yield* Effect.raceFirst(
@@ -140,7 +161,7 @@ export class SignInRelayClient {
    */
   async #listen(
     callback: SignInRelayCallback | null,
-    state: string | null,
+    state: string,
     receive: (query: string) => void,
   ): Promise<LoopbackCallbackServer | null> {
     const own = this.#dependencies.ownListener();
@@ -151,8 +172,7 @@ export class SignInRelayClient {
       language: this.#dependencies.language,
       noPort: () => new Error("The sign-in relay listener was given no port."),
       receive: (url) => {
-        if (state !== null && url.searchParams.get("state") !== state)
-          return { status: 400, message: "error.mcp.redirectNoSignIn" };
+        if (url.searchParams.get("state") !== state) return { status: 400, message: "error.mcp.redirectNoSignIn" };
         receive(url.search.slice(1));
         return { status: 200, message: "error.mcp.redirectRelayed" };
       },

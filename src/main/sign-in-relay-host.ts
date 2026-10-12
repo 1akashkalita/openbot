@@ -2,7 +2,12 @@
 // in the browser of their own computer.
 
 import { randomBytes } from "node:crypto";
-import type { McpTestResult, TestMcpServerInput } from "@openbot/contracts/ipc";
+import {
+  loopbackCallback,
+  type McpTestResult,
+  type SignInRelayStatus,
+  type TestMcpServerInput,
+} from "@openbot/contracts/ipc";
 import { sourceText } from "@openbot/i18n/source";
 import { registerSecretValue } from "@openbot/logging";
 import { Effect } from "effect";
@@ -13,22 +18,8 @@ import { HttpError } from "./team-api/http-error";
 export const SIGN_IN_RELAY_TTL_MS = 10 * 60_000;
 /** Flows kept at one time. A new flow above this ends the oldest. */
 const FLOW_LIMIT = 16;
-/** The names a loopback callback can use. Any other address is not a callback on this host. */
-const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]"]);
-
-/** Where the sign-in page sends the browser back to, on this host. The client listens on the same port. */
-export interface SignInRelayCallback {
-  port: number;
-  path: string;
-  state: string | null;
-}
-
 /** What `status` and `complete` answer, as `sign-in-relay-v1` sends it. */
-export interface SignInRelayView {
-  authorizeUrl: string | null;
-  callback: SignInRelayCallback | null;
-  result: McpTestResult | null;
-}
+export type SignInRelayView = SignInRelayStatus;
 
 /** The part of a flow that differs by kind of sign-in. */
 interface RelayTarget {
@@ -165,22 +156,4 @@ export class SignInRelayHost {
 function view(flow: Flow): SignInRelayView {
   const { pageUrl, result } = flow.target.status();
   return { authorizeUrl: pageUrl, callback: pageUrl ? loopbackCallback(pageUrl) : null, result };
-}
-
-/**
- * The loopback address that the page sends the browser back to, or `null`. A sign-in that returns to
- * another address, such as `openbot://`, has no callback to listen for: the client can then only send
- * an address that the user pastes.
- */
-export function loopbackCallback(pageUrl: string): SignInRelayCallback | null {
-  try {
-    const page = new URL(pageUrl);
-    const redirect = page.searchParams.get("redirect_uri");
-    if (!redirect) return null;
-    const target = new URL(redirect);
-    if (target.protocol !== "http:" || !LOOPBACK_HOSTS.has(target.hostname) || !target.port) return null;
-    return { port: Number(target.port), path: target.pathname, state: page.searchParams.get("state") };
-  } catch {
-    return null;
-  }
 }

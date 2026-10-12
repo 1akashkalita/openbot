@@ -752,6 +752,7 @@ export function installOpenbotStub(): void {
       signInMcpServer: notStubbed("agent.signInMcpServer"),
       mcpSignInPage: notStubbed("agent.mcpSignInPage"),
       mcpSignInRelay: notStubbed("agent.mcpSignInRelay"),
+      openMcpSignInRelay: notStubbed("agent.openMcpSignInRelay"),
       completeMcpSignInRelay: notStubbed("agent.completeMcpSignInRelay"),
       cancelMcpSignIn: notStubbed("agent.cancelMcpSignIn"),
       signOutMcpServer: notStubbed("agent.signOutMcpServer"),

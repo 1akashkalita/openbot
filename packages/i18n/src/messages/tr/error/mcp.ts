@@ -17,5 +17,7 @@ export const messages = {
     "Bu sunucu oturum açma uygulamalarını desteklemiyor. Ana bilgisayardaki OpenBot'u güncelleyin.",
   "error.mcp.redirectRelayed": "OpenBot oturum açmayı sunucuya gönderdi. Bu pencereyi kapatabilirsiniz.",
   "error.mcp.relayEnded": "Bu oturum açma sona erdi. Yeniden başlatın.",
+  "error.mcp.relayNoState":
+    "Sunucunun oturum açma sayfası dönüş adresini korumuyor, bu yüzden OpenBot onu bu bilgisayarda açmaz.",
   "error.mcp.relayAddressInvalid": "Bu, bu oturum açmanın sonundaki adres değil. Tarayıcıdan tam adresi kopyalayın.",
 } as const satisfies PartialTranslation<typeof source>;

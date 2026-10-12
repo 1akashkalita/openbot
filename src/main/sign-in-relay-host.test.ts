@@ -1,8 +1,9 @@
 import type { McpServerConfig } from "@openbot/contracts/ipc";
+import { loopbackCallback } from "@openbot/contracts/ipc";
 import { redactText } from "@openbot/logging";
 import { Effect } from "effect";
 import { describe, expect, it, vi } from "vitest";
-import { loopbackCallback, SIGN_IN_RELAY_TTL_MS, SignInRelayHost } from "./sign-in-relay-host";
+import { SIGN_IN_RELAY_TTL_MS, SignInRelayHost } from "./sign-in-relay-host";
 import { HttpError } from "./team-api/http-error";
 
 const PAGE = "https://auth.example.com/authorize?state=state-1&redirect_uri=http%3A%2F%2F127.0.0.1%3A28417%2Fmcp-auth";
