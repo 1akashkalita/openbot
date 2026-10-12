@@ -1,5 +1,6 @@
 import type {
   AccountUsage,
+  AgentContextState,
   AgentEvent,
   AgentModelOption,
   AgentProviderId,
@@ -55,6 +56,7 @@ export interface VoiceLiveTranscript extends ConversationTarget {
 }
 
 export interface ConversationProps {
+  contextState?: AgentContextState | undefined;
   runtime?: ConversationRuntime;
   notice?: JSX.Element;
   onOpenUsage?: (trigger: HTMLButtonElement) => void;
@@ -94,6 +96,8 @@ export interface ConversationProps {
    * needs a way in whether or not OpenBot manages its CLI.
    */
   onSignInProvider?: (provider: AgentProviderId) => void | Promise<void>;
+  /** The code sign-in, for a provider that has one, when the browser sign-in is slow or fails. */
+  onSignInWithCodeProvider?: ((provider: AgentProviderId) => void) | undefined;
   /** Open the Providers section of this server's settings, where the user adds an endpoint. */
   onManageProviders?: (trigger: HTMLElement) => void;
   agent: AgentProfile | undefined;

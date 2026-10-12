@@ -8,6 +8,7 @@ import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import { z } from "zod";
 import { interruptAgentToolSchema } from "./agent/agent-interrupt-tool";
 import { DATA_TOOL_DEFINITIONS } from "./agent/data-tools";
+import { HISTORY_TOOL_DEFINITIONS } from "./agent/history-tools";
 import { MEMORY_RECALL_TOOL_DEFINITIONS } from "./agent/memory-tool-inputs";
 import {
   createAgentToolSchema,
@@ -15,6 +16,7 @@ import {
   readAgentToolSchema,
   updateProfileToolSchema,
 } from "./agent/profile-tools";
+import { ROUTINE_NO_UPDATE_TOOL } from "./agent/routine-quiet-runs";
 import {
   assignAgentSectionToolSchema,
   createSectionToolSchema,
@@ -77,6 +79,7 @@ export const htmlPreviewToolSchema = z.object({
 /** Shared declarations for Codex, Grok, and Claude. Service handlers enforce execution rules. */
 export const OPENBOT_TOOL_DEFINITIONS: readonly OpenBotToolDefinition[] = [
   ...CHANNEL_TOOL_DEFINITIONS,
+  ...HISTORY_TOOL_DEFINITIONS,
   ...DATA_TOOL_DEFINITIONS,
   ...LOCAL_SKILL_TOOL_DEFINITIONS,
   ...ROUTINE_FLOW_TOOL_DEFINITIONS,
@@ -245,6 +248,12 @@ export const OPENBOT_TOOL_DEFINITIONS: readonly OpenBotToolDefinition[] = [
       agentId: z.string().min(1).max(INPUT_LIMITS.identifier).optional(),
       routineId: z.string().min(1).max(INPUT_LIMITS.identifier),
     },
+  },
+  {
+    name: ROUTINE_NO_UPDATE_TOOL,
+    description:
+      "Use only in a scheduled routine run, when the routine task gives nothing to report. OpenBot then removes your text answers of this run and sends no notification; the run history still shows the run. Do not call it when you report anything. In a manual Test run, the user sees your answer.",
+    shape: {},
   },
   ...MEMORY_RECALL_TOOL_DEFINITIONS,
   {

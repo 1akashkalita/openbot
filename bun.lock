@@ -275,6 +275,7 @@
         "@noble/hashes": "catalog:",
         "@openbot/contracts": "workspace:*",
         "@openbot/i18n": "workspace:*",
+        "@openbot/user-errors": "workspace:*",
         "effect": "catalog:",
       },
       "devDependencies": {
@@ -328,6 +329,7 @@
       "name": "@openbot/user-errors",
       "version": "0.0.0",
       "dependencies": {
+        "@openbot/contracts": "workspace:*",
         "@openbot/i18n": "workspace:*",
         "@openbot/logging": "workspace:*",
       },

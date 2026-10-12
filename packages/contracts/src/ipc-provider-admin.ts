@@ -1,11 +1,13 @@
 /**
- * The replies of a host's `providers-v1` to `providers-v4` routes, as the desktop main process and the browser client
- * both read them. The route codec has already checked their fields; these give them their IPC types
- * and fail closed on anything else. They decode what a host sends, so the preload does not use them.
+ * The replies of a host's `providers-v1` to `providers-v4` and `provider-host-sign-in-v1` routes, as the
+ * desktop main process and the browser client both read them. The route codec has already checked
+ * their fields; these give them their IPC types and fail closed on anything else.
  */
 
-import type { ProviderApiKeyStatus, ProviderCodeLoginStart } from "./ipc-agent-status";
+import { INPUT_LIMITS } from "./input-limits";
+import type { ProviderApiKeyStatus, ProviderCodeLoginStart, ProviderHostSignInStatus } from "./ipc-agent-status";
 import type { ProviderRuntimeSnapshot, ProviderRuntimeStatus } from "./ipc-app-auth";
+import { isBoundedString, isNullableBoundedString } from "./ipc-bounded-values";
 import {
   type CustomProviderResult,
   type CustomProviderSummary,
@@ -13,6 +15,7 @@ import {
   isCustomProviderSummary,
 } from "./ipc-custom-providers";
 import { isDynamicRecord, isHttpsUrl, isNumber, isOneOf, isString } from "./runtime-values";
+import { PROVIDER_HOST_SIGN_IN_ERROR_LIMIT } from "./team-protocol/provider-host-sign-in-v1";
 
 /** Each URL becomes a link the admin opens, so it is held to https here as well. */
 export function decodeProviderCodeLoginStart(value: unknown): ProviderCodeLoginStart {
@@ -34,6 +37,16 @@ export function decodeProviderCodeLoginStart(value: unknown): ProviderCodeLoginS
     ...(value.verificationUrlComplete === undefined ? {} : { verificationUrlComplete: value.verificationUrlComplete }),
     expiresAt: value.expiresAt,
   };
+}
+
+export function decodeProviderHostSignInStatus(value: unknown): ProviderHostSignInStatus {
+  const invalid = () => new Error("Invalid sign-in response.");
+  if (!isDynamicRecord(value) || (value.tabId !== null && !isBoundedString(value.tabId, INPUT_LIMITS.identifier)))
+    throw invalid();
+  if (value.result === null) return { tabId: value.tabId, result: null };
+  if (!isDynamicRecord(value.result) || !isNullableBoundedString(value.result.error, PROVIDER_HOST_SIGN_IN_ERROR_LIMIT))
+    throw invalid();
+  return { tabId: value.tabId, result: { error: value.result.error } };
 }
 
 export function decodeProviderApiKeyStatus(value: unknown): ProviderApiKeyStatus {

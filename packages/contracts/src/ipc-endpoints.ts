@@ -69,6 +69,7 @@ import type {
   AgentStatus,
   ProviderApiKeyState,
   ProviderCodeLoginStart,
+  ProviderHostSignInStatus,
   SetProviderApiKeyInput,
   SubmitProviderCodeLoginInput,
 } from "./ipc-agent-status";
@@ -366,7 +367,13 @@ import type {
   UpdateHostIdentityInput,
   UpdateTeamMemberInput,
 } from "./ipc-team-host";
-import type { VoiceModelStatus, VoiceTranscriptionInput, VoiceTranscriptionResult } from "./ipc-voice";
+import type {
+  VoiceModelRequest,
+  VoiceModelStatus,
+  VoiceSettings,
+  VoiceTranscriptionInput,
+  VoiceTranscriptionResult,
+} from "./ipc-voice";
 import type { AccountSession, MobileConnectedDevice, MobileConnectTicket } from "./mobile-connect";
 
 declare const payloadType: unique symbol;
@@ -531,9 +538,11 @@ export const IPC_ENDPOINTS = {
     clearProviderApiKey: request<AgentProviderId, AgentStatus>()("app:clear-provider-api-key"),
     getProviderApiKeyState: request<AgentProviderId, ProviderApiKeyState>()("app:get-provider-api-key-state"),
     /**
-     * Starts a sign-in the user finishes on another device, for a provider whose descriptor says
-     * `codeSignIn`. Cancel it with `cancelProviderCodeLogin`; leaving it running holds one provider
-     * process open until the code expires.
+     * Starts a sign-in the user finishes on another device, for a provider whose backend driver has
+     * one: Codex, Grok, Cursor, Cline and Muse, and Claude on Linux. A pasted code goes to
+     * `providerAdmin.submitCodeLogin` with `LOCAL_SERVER_ID`. Cancel it with
+     * `cancelProviderCodeLogin`; leaving it running holds one provider process open until the code
+     * expires.
      */
     startProviderCodeLogin: request<AgentProviderId, ProviderCodeLoginStart>()("app:start-provider-code-login"),
     /** Abandons a code sign-in: the provider is told, the code is dead, and the provider goes idle. */
@@ -548,8 +557,18 @@ export const IPC_ENDPOINTS = {
     event: event<ProviderRuntimeSnapshot>()("provider-runtimes:event"),
   },
   voice: {
+    /** The status of the model in use. */
     getModelStatus: request<undefined, VoiceModelStatus>()("voice:get-model-status"),
+    /** One status for each model in `VOICE_MODELS`, in the same order. */
+    getModelStatuses: request<undefined, VoiceModelStatus[]>()("voice:get-model-statuses"),
+    /** Downloads the model in use when it is missing. Answers when it is ready or failed. */
     prepareModel: request<undefined, VoiceModelStatus>()("voice:prepare-model"),
+    /** Downloads one model. Answers when it is ready, failed, or cancelled. */
+    downloadModel: request<VoiceModelRequest, VoiceModelStatus>()("voice:download-model"),
+    /** Stops a download. The model is missing again; a later download starts from the first file not complete. */
+    cancelModelDownload: request<VoiceModelRequest, VoiceModelStatus>()("voice:cancel-model-download"),
+    getSettings: request<undefined, VoiceSettings>()("voice:get-settings"),
+    setSettings: request<VoiceSettings, VoiceSettings>()("voice:set-settings"),
     transcribe: request<VoiceTranscriptionInput, VoiceTranscriptionResult>()("voice:transcribe"),
     modelStatus: event<VoiceModelStatus>()("voice:model-status"),
   },
@@ -644,6 +663,13 @@ export const IPC_ENDPOINTS = {
       "provider-admin:submit-code-login",
     ),
     cancelCodeLogin: scopedRequest<AgentProviderId, AgentStatus, "required">()("provider-admin:cancel-code-login"),
+    // A sign-in in the browser of a joined server's host, which the live view shows
+    // (`provider-host-sign-in-v1`). How it ends also arrives as the host's status.
+    startHostSignIn: scopedRequest<AgentProviderId, void, "required">()("provider-admin:start-host-sign-in"),
+    hostSignInStatus: scopedRequest<AgentProviderId, ProviderHostSignInStatus, "required">()(
+      "provider-admin:host-sign-in-status",
+    ),
+    cancelHostSignIn: scopedRequest<AgentProviderId, AgentStatus, "required">()("provider-admin:cancel-host-sign-in"),
     getApiKeyState: scopedRequest<AgentProviderId, ProviderApiKeyState, "required">()(
       "provider-admin:get-api-key-state",
     ),

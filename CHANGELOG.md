@@ -6,6 +6,236 @@ All notable changes to OpenBot will be documented here. The project follows
 
 ## [Unreleased]
 
+## [0.37.0] - 2026-10-11
+
+### Added
+
+- A scheduled routine has the setting "If OpenBot was closed at the scheduled time". "Skip this run"
+  is the default. "Run once when OpenBot opens" starts one run for the most recent missed time.
+- The run history shows the runs that OpenBot skipped while it was closed, as one row for each
+  group, and marks a run that started more than one minute late.
+- Connect the phone app to a self-hosted or Docker server. Run `openbot mobile-connect` on the server
+  (`docker exec -it <container> openbot mobile-connect` in Docker) and scan the QR code with the
+  phone app. Before, only the desktop app could show a Mobile Connect code.
+- On this computer, you can log in to Grok, Cursor, Cline and Muse with a code, as you can for
+  ChatGPT. On Linux, you can also log in to Claude with a code that you paste.
+- When a browser sign-in that you start does not finish after 25 seconds, or fails, the provider
+  row and the composer show a "Log in with code" button.
+- On this computer, you can connect Gemini with a Gemini API key. Select Sign in on the Gemini row
+  to save the key.
+- Settings > Voice shows the dictation models. You can download, cancel, and select a model there.
+- You can download Whisper large-v3 turbo (1 GB) as a second dictation model. It knows about 100
+  languages. With Whisper, you can set the dictation language, for example Hungarian, or keep
+  Automatic. Whisper writes the text when you stop, not while you speak. Parakeet stays the
+  default and finds the spoken language itself.
+
+### Changed
+
+- German, Spanish, French, Japanese, Brazilian Portuguese, Russian and Turkish now translate all
+  interface text. Before, some screens, errors and status messages showed English text.
+
+### Fixed
+
+- Claude agents keep their prompt cache when their saved memories change. Before, each memory
+  change, such as a new memory that the agent saved, made the next turn write the whole
+  conversation to the cache again. The agent now gets the change with its next message.
+- Show "1 unread message" and "1 unread direct message" in the desktop sidebar. Before, these
+  labels used the plural for one message.
+- Translate open notifications again when you change the language. Before, a provider update
+  notification and the close button of each notification kept the previous language.
+- In the desktop app, an image that you paste or a file that you drop into a channel chat now
+  appears as an attachment. Before, the channel chat ignored it, and only the attachment button
+  worked.
+- An agent whose plan ran out of usage can now change to a model of another provider. Before, the
+  change failed with "Could not change model" while the agent held a queued message, and the agent
+  stayed on the spent plan until it reset. The queued message now runs on the new model.
+- Agents in a channel no longer read the thinking of other agents. Before, when one Claude agent
+  in a channel had thinking text in its turn, Claude stopped every later assignment in that
+  channel with a `reasoning_extraction` safeguard error until the channel summary covered the text.
+  The channel still shows the thinking.
+- The chat input keeps focus while agents work in the background. Before, a browser popup that an
+  agent opened, or a browser tab that an agent or a page closed, took focus from the chat input when
+  the browser panel was open.
+- Keys that you type during a short provider restart or server reconnect are no longer lost.
+- A click into the chat input that closes a popover keeps the focus in the chat input. Before, the
+  focus went back to the button that opened the popover.
+- Connect for Gemini now works on a Linux server that you joined, such as a Docker server. Before,
+  the button did nothing. The server opens the Google page in its own browser, and you sign in
+  through the live view of that page in the app or the web client. Only an owner or admin can do
+  this.
+- A finished agent reply no longer stays cut off after about 220 characters until the window is
+  reloaded. This happened most often in a desktop app connected to another computer or server. A
+  streaming reply also no longer loses its middle part while other agents work, and the Dynamic
+  Island no longer cuts a reply that it already shows.
+- After a joined server restarts, the first action on that server no longer fails with "Provider
+  settings are not supported by this connection." Before, a second try was necessary.
+- Let users close the usage-limit notice above the message box. Keep the current notice dismissed
+  when they return to the chat, and show a notice again for a new quota window.
+
+## [0.36.0] - 2026-10-10
+
+### Added
+
+- Polish interface. Choose Polski in Settings > General > Language, or keep System default on a
+  computer that uses Polish. The web client uses it too.
+- A computer that has not signed in to OpenBot now opens on a language wheel, before sign-in. Turn it with the arrow
+  keys, the scroll wheel, a drag or the arrow buttons; the screen changes to each language as you
+  turn it. Continue saves the language. The wheel shows one time on each computer.
+- The diagnostics export now has the memory and CPU use of OpenBot and of each provider's
+  processes, the app's responsiveness, database statement times and crash counts, for today and
+  the previous day.
+- With analytics on, OpenBot sends one daily summary of its memory and CPU use, by computer class
+  and provider. It does not send process names, command lines or paths.
+- Added a guide to run the Docker image as an AWS ECS service on EC2, with the seccomp profile, the
+  data volume, ECS Exec sign-in and CloudWatch logs. AWS Fargate is not supported: it cannot keep
+  the Electron sandbox on. See `docs/aws-ecs.md`.
+
+### Changed
+
+- The Docker image now works when `/dev/shm` is smaller than 1 GiB, for example on Kubernetes:
+  Chromium then keeps its shared memory in `/tmp`. Before, Chromium could run out of shared memory.
+
+### Fixed
+
+- Completed the Brazilian Portuguese catalog: the 643 keys that showed English text — agent and
+  provider settings, routines, webhooks, the routine canvas, billing, server states, the mobile app
+  and the Marketplace — are now translated. `bun run i18n:check` reports pt at 6,676 of 6,676 keys.
+- A server that gets a stop signal while its window loads now quits. Before, it showed a "failed to
+  start" box on its virtual display, and the box blocked the quit until the process was killed.
+
+## [0.35.2] - 2026-10-10
+
+### Fixed
+
+- Agents on Muse models, such as Muse Spark 1.3, reply again. In 0.35.0 and 0.35.1, each message
+  to these agents failed with "Recursive JSON schemas are not currently supported".
+- Keep the agent avatar inside the expanded Dynamic Island when the main window is zoomed in.
+  Before, the avatar moved to the left of the panel and was cut off. The Computer Use rim and the
+  permission help window also no longer change size with the main window zoom.
+
+## [0.35.1] - 2026-10-10
+
+### Changed
+
+- The usage popover now shows each limit that a provider reports, such as the 5-hour limit and the weekly limit. Each limit has a bar, the percent left, and the time until it resets. Before, the popover showed only the limit with the least left.
+- A failed connection to a server, the web app or a hosted server now shows a specific reason, for example when the server is busy, an invitation was already used or a firewall blocks the direct connection. Before, most of these failures showed "The connection failed."
+- Error messages and error notifications show a short error code with a copy button. Send this code when you report a problem, so we can find the cause.
+
+### Fixed
+
+- A hosted server no longer stays at "Starting" with "Too many active remote connections." Before, the phones, browsers and desktops of an account could use all of its remote connections, and the server could not connect. Now only device connections count toward the account limit.
+- The server connection screen shows its errors in your language. Spanish now has the text of this screen.
+- The server menu on the sidebar title now shows all of its width while a server sleeps, wakes, or connects. Before, the loading screen of the server covered the part of the menu that went past the sidebar.
+- The web app connects again by itself when a server comes back after an update or a long restart. Before, the page could wait up to two minutes before it tried again, and you often had to reload it.
+- A device that was connected when its server restarted no longer stays at "Loading" until you reload.
+- A server that lost its remote connection for good no longer shows as online while no device can reach it. The server now reports an error, and a cloud server connects again by itself.
+
+## [0.35.0] - 2026-10-10
+
+### Added
+
+- An owner or admin can turn Computer Use and Local scripts on or off for an agent, and select what a message does while the agent works, from the OpenBot iPhone app.
+- On macOS, you can reply to an agent, answer its question and stop its work from the Dynamic Island. The main window stays where it is. "Open chat" still opens the conversation.
+- Add native Pi RPC and Muse MSP providers, managed runtime downloads, and host sign-in.
+- Add ACP provider settings with saved overrides, deferred changes, and reset.
+- Add ACP registry search, install, update, cancel, and runtime removal on the selected host.
+- Apps connected to a server that runs this version can manage its providers and ACP agents. Custom agents keep their IDs and sessions.
+- An owner or admin can sign in to an MCP server that uses OAuth on a joined server, from the desktop app or the web app. The sign-in page opens in a private tab of the host's browser and shows in the settings. The token stays on the host.
+- The file preview panel has a Copy button for text, code, Markdown and HTML files. It copies the full source of the file, also for Markdown and HTML that the panel shows rendered.
+- The file preview panel now highlights code files, such as JSON, TypeScript, Python, YAML and diff files, with the same colors as code in chat. Files larger than 200,000 characters, or with a line longer than 5,000 characters, stay as plain text.
+- The file preview panel has a wrap button for text files and source views. When it is on, long lines wrap to the panel width, so you do not have to scroll sideways. The app remembers your choice.
+- Agents can search saved memories and list them for maintenance. Essential memories use a fixed prompt budget.
+- You can choose which memories are always included, which need search, and which the agent can select.
+- Show selected release notes after a desktop update. Updates that skip versions show the selected notes together. Close the dialog to continue, or open it again from Settings > Updates. A new installation starts without the dialog.
+- Add Cobrain to the Apps catalog. Agents can load, search and save notes in your Cobrain memory
+  after you sign in to your Cobrain account.
+
+### Changed
+
+- The agent settings panel shows the face, name, title and instructions at the top of the list, as
+  the iPhone app does. You no longer open separate Profile and Instructions pages. Click the face to
+  change the image, the generated face or the color.
+- The right panel cannot be narrower than its default width, because a narrower panel breaks its
+  layout. A panel that you made narrower before opens at the default width.
+- The instructions field of an agent and of a channel has a fixed height. Long instructions scroll
+  inside the field. Before, the field grew and had a resize handle that did not match the field.
+- Voice input now uses NVIDIA Parakeet TDT 0.6B v3 in place of Whisper. The words show in the
+  message box while you speak, and the full text replaces them when you stop. Parakeet supports
+  25 European languages. Japanese, Chinese and Korean dictation is no longer available.
+- The first voice recording downloads a new model of approximately 670 MB. OpenBot deletes the
+  old Whisper files.
+- While you speak, the microphone button changes into a recording bar with a live waveform.
+  The waveform shows small dots in silence and taller bars when you speak.
+  ✓ puts the text in the message box, × discards the recording, and the send arrow sends it.
+  The message box no longer gets a yellow outline during a recording.
+- Local scripts can send messages, read pending questions and approvals, and submit responses. Agents with Local scripts already enabled get these operations after upgrade without a new opt-in. Browser takeovers and secret questions direct the user to OpenBot.
+- Owners and administrators can turn Local scripts on or off from a connected desktop or web client. Scripts run on the host, so a headless server needs no local screen.
+- Existing memories stay saved. During upgrade, recent manual memories receive priority for the essential prompt budget.
+- Remote memory selection uses bounded pages. Older hosts keep memory text editing without the new controls.
+- A scheduled routine run can now end without a message when the agent calls the new
+  `routine_no_update` tool. Before, the run stayed quiet only when the answer was exactly
+  `[[no-update]]`, and an answer such as "Nothing new." sent a notification. The marker still
+  works. A Test run still shows its answer.
+- Agents use less context. They load the details of most tools only when they need them. All tools stay available.
+- When an agent changes provider, it gets a shorter part of the conversation. It can still read the older messages of the same conversation. A context reset still hides earlier messages.
+- A change of the Claude model or reasoning effort no longer starts a new Claude session.
+- A ring near the message box shows how much context the agent uses. The conversation shows when the agent compacts its context. Claude values are estimates.
+
+### Fixed
+
+- A paste into a remote desktop now pastes your own clipboard on the host. Before, Cmd+V or Ctrl+V pasted the host's clipboard.
+- The embedded browser now removes the OpenBot and Electron user-agent tokens for sites such as X and LinkedIn, and sends basic client hints for its Chromium version and platform. Google account requests keep the compatibility token needed for sign-in.
+- The owner of a server can now remove it from the account with Remove server, in the server menu or in server settings, also when its computer is offline or gone. Before, an owner could not remove such a server, and it came back on each computer and after each reinstall. The removal applies to all members and all devices. Members lose access, and connected Slack, Discord, Telegram and webhook routes stop. If you add the server again, invite its members again and set up its connections again. Old webhook URLs do not work again. Files and chats on the server's computer stay.
+- Keep chat input focused while another agent uses the browser. Background browser actions could interrupt typing.
+- Keep chats at the latest message when switching agents. Measurements of routine cards and other messages could move the chat away from the bottom.
+- Custom ACP agents can recover from a closed session when you send a new message. Before, messages could repeatedly fail with `Internal error`. Startup errors now show provider details with secrets removed. Recovery keeps the conversation and does not repeat a failed prompt.
+- Codex now saves “Always allow” approvals for custom MCP server tools and applies saved approvals after a restart.
+- An agent whose provider says "You've reached your weekly usage limit" now waits for the limit to
+  reset, as it does for "You've hit your weekly limit". Before, each queued message and routine run
+  started a turn that failed.
+- Switch chats while OpenBot changes which queued message you edit, and each chat now keeps its own draft. Before, the first chat could get the other chat's draft and lose its own.
+- A voice message sent to one chat while you read another no longer scrolls the chat you read to its latest message.
+- Close the chat search or clear the query while a search is running, and a late result no longer opens an old match, possibly in another chat.
+- If a voice recording fails to start after the microphone opened, OpenBot now releases the microphone. Before, the microphone stayed in use.
+- A Stop that arrives after its turn ended no longer stops the next turn of the same agent.
+- A file or site folder whose name starts with two dots, such as `..notes.md`, now opens or publishes from the workspace. Before, OpenBot refused it as outside the workspace.
+- If saving the preview of a sent message fails, the message is still delivered. Before, it stayed in the queue until the next restart or queue event.
+- A routine set to repeat every 58 or 59 minutes is now refused when you save it, like every other schedule under the 3-minute minimum. Before, it ran twice within 1 or 2 minutes around each hour. Routines already saved this way keep running and can still be edited.
+- The sidebar section name field keeps focus after you choose New section or Rename. Before, the field could lose focus and the name was lost.
+- Remote Control keeps its stream when another server changes, for example when it goes offline or you mute it. Before, the view changed to "Remote access expired".
+- Text you type in a direct message stays when someone on the server starts typing to an agent or connects. Before, the message box cleared and the conversation scrolled back.
+- Deleting a routine now also removes the work it queued and nobody started yet, in agent chats and in channels. Before, that work could still run after the routine was gone. Channel work that already started keeps running and can be stopped as usual. Deleting an agent routine still stops its active turn.
+- Files attached to a channel message are no longer lost when the channel is archived while the message is being sent. You can send them again.
+- Stopping or reassigning a channel task while it was being handed to a member no longer gets undone when that hand-off fails.
+- Show Gemini replies as they arrive while Antigravity background tasks run. Stop now ends the local turn, saves unfinished tool calls as interrupted, and restores the same provider session before the next message.
+- A queued message now appears at the point where you select Steer, after the commentary sent while it waited. Its position stays the same after a restart.
+- Show when a queued message is held for editing, including after restart, and add a Cancel edit button.
+- Keep pending messages visible when no agent turn is active, so users can edit or cancel them.
+- Two attachments whose names differ only in case, such as `Report.txt` and `report.txt`, now both arrive. Before, on macOS and Windows the second file overwrote the first, and the first attachment could not be opened.
+- A Claude turn that ends on an API error, such as an expired sign-in, a low credit balance or an overloaded service, now fails and shows the error. Before, the error text was saved as the agent's answer and the message counted as delivered.
+- When an agent cannot attach a file to its answer, it now gets the reason, for example a file outside its workspace and the shared directory, and can correct the call. Before, Codex agents got only `dynamic tool request failed` and retried the same call.
+- A Codex agent on a Plus or Pro plan now waits for its usage limit to reset. Before, the limit message offered more credits, so OpenBot took it for a spent balance and started each queued message and routine run, and each one failed.
+- Grok agents answer again after their Grok CLI restarts. Before, every message to the agent failed with `Invalid params` after an idle stop, an OpenBot restart or an update.
+- Fix remote reconnects that report too many active connections when an old client socket waits for its host. Concurrent reconnects and failed authentication no longer hold extra account slots. Other device sessions stay connected.
+- Wait before reconnecting when Signal limits connection traffic. Before, repeated retries could keep all devices on an account disconnected.
+- Gemini shows its sign-in and start errors. Before, it could show Ready when it could not run.
+- Restart works while a Gemini sign-in waits. Before, the old sign-in could stop the next attempt.
+- On Linux, Gemini sign-in opens in the desktop browser. When no browser opens, OpenBot shows the setup steps. Before, it waited until the sign-in expired.
+- Remote provider settings explain that Gemini sign-in opens a browser on the server's computer.
+- The message box and its queue stay below an approval request or a browser takeover. A message that you send while an agent waits for your approval now shows in the queue. Before, the message box went away, and a queued message was not visible until the approval was done.
+- When an agent refuses a request, OpenBot now shows the reason that the agent sends. Before, a Grok agent showed only `Invalid params`, for example when Grok refused a session resume after its CLI restarted.
+- Messages stay in the queue when you try to steer a provider that does not support it. Custom ACP agents no longer receive a second prompt that can interrupt the running task or lose the queued message.
+- Recover the affected remote peer when a host data channel closes. Other connected clients stay connected.
+- Report failed Live View connections and invalid frames as failures. Close failed views so they can be opened again.
+- A queued channel task now starts when the agent or normal work that held it becomes free, also when that work ended without a turn, for example when a message failed to start or was cancelled. Before, the task could stay queued until the next channel command or a restart of OpenBot.
+- A message from an agent with an empty reply id no longer stops the sender's and the recipient's
+  conversations from loading or stalls the recipient's queue. Conversations that an earlier version
+  saved with such a message load again.
+
+### Security
+
+- The Bun runtime that OpenBot downloads to start MCP servers is now version 1.4.3, which has security fixes.
+
 ## [0.34.1] - 2026-10-09
 
 ### Changed

@@ -1,5 +1,6 @@
 import type { AgentEvent, TeamRealtimeEvent } from "@openbot/contracts/ipc";
 import { isDynamicRecord, isString } from "@openbot/contracts/runtime-values";
+import type { SignalClientMessage } from "@openbot/contracts/signal-protocol/messages";
 import {
   decodeTeamProtocolV2FileChunk,
   decodeTeamProtocolV2FileControlFrame,
@@ -11,6 +12,7 @@ import {
 } from "@openbot/contracts/team-protocol";
 import { CHANNEL_ROUTES } from "@openbot/contracts/team-protocol/channels-v1";
 import { STORAGE_ROUTES } from "@openbot/contracts/team-protocol/storage-v1";
+import { type SourceMessages, sourceText } from "@openbot/i18n/source";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createEd25519Identity, signEd25519 } from "./ed25519";
 import { runTeamEffect } from "./effect-boundary";
@@ -1011,6 +1013,30 @@ describe("browser remote peer recovery", () => {
     await network.runtime.dispose();
   });
 
+  it("waits on Signal for an offline host without the connect deadline or a new ticket", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    const network = await setupNetwork({ waitForHost: true, hostOffline: () => true });
+    const connecting = network.connect();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(network.updates.at(-1)).toMatchObject({ state: "connecting", hostOffline: true });
+    // Past the 30-second deadline. The waiting socket is renewed with its resume token.
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(network.sockets).toHaveLength(2);
+    expect(network.hellos.at(-1)).toMatchObject({ token: "resume-waiting", waitForHost: true });
+    // The host connects: Signal sends `ready` on the waiting socket.
+    network.socket().receive({
+      type: "ready",
+      version: 1,
+      connectionId: "connection-host-back",
+      resumeToken: "resume",
+      iceServers: [{ urls: "stun:localhost" }],
+    });
+    await expect(connecting).resolves.toMatchObject({ ok: true });
+    expect(network.bootstraps()).toBe(1);
+    expect(network.updates.some((update) => update.state === "offline")).toBe(false);
+    await network.runtime.dispose();
+  });
+
   it("suspends Signal reconnects in the background and resumes healthy data channels without a new ticket", async () => {
     // Fake only timers: network and cryptographic callbacks still run as ordinary microtasks.
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
@@ -1053,6 +1079,116 @@ describe("browser remote peer recovery", () => {
       .receive(encodeTeamProtocolV2Frame({ version: 2, type: "event-reset", nextSequence: 2001 }));
     await reset.promise;
     expect(network.updates.at(-1)).toMatchObject({ hostId: "host", resync: true });
+    await network.runtime.dispose();
+  });
+});
+
+describe("connection failure references", () => {
+  const SERVER_TEXT = "Signal server text.";
+  const signalError = (code: string): TeamProtocolV2Json => ({ type: "error", version: 1, code, message: SERVER_TEXT });
+  interface SignalFailure {
+    name: string;
+    frame: TeamProtocolV2Json;
+    state: RemoteTeamConnectionUpdate["state"];
+    message: string;
+    reference: string;
+  }
+  const SIGNAL_FAILURES: SignalFailure[] = [
+    ...(
+      [
+        ["authentication_required", "error.remote.ticketInvalidOrExpired"],
+        ["invalid_message", "error.remote.signalInvalidMessage"],
+        ["host_unavailable", "error.remote.hostOffline"],
+        ["host_busy", "error.remote.hostBusy"],
+        ["permission_denied", "error.remote.signalPermissionDenied"],
+        ["protocol_error", "error.remote.signalProtocolError"],
+        ["code_from_a_newer_signal", "error.remote.signalRefused"],
+      ] satisfies [string, keyof SourceMessages][]
+    ).map(
+      ([code, key]): SignalFailure => ({
+        name: `Signal ${code}`,
+        frame: signalError(code),
+        state: "offline",
+        message: sourceText(key),
+        reference: `signal/${code}`,
+      }),
+    ),
+    {
+      name: "Signal session_revoked",
+      frame: signalError("session_revoked"),
+      state: "offline",
+      message: SERVER_TEXT,
+      reference: "signal/session_revoked",
+    },
+    {
+      name: "Signal rate_limited",
+      frame: signalError("rate_limited"),
+      state: "connecting",
+      message: sourceText("error.remote.signalRateLimited", { seconds: 60 }),
+      reference: "signal/rate_limited",
+    },
+    {
+      name: "a Signal ready with no relay servers",
+      frame: { type: "ready", version: 1, connectionId: "connection-1", resumeToken: "resume", iceServers: [] },
+      state: "offline",
+      message: sourceText("error.remote.relayUnavailable"),
+      reference: "signal/no_ice_servers",
+    },
+  ];
+
+  it.each(SIGNAL_FAILURES)("names $name", async ({ frame, state, message, reference }) => {
+    const offered = deferred();
+    const answer = deferred();
+    const network = await setupNetwork({
+      beforeAnswer: () => {
+        offered.resolve();
+        return answer.promise;
+      },
+    });
+    void network.connect();
+    await offered.promise;
+    network.socket().receive(frame);
+    // The exact message also shows that no Signal text passes, except where a revoked session keeps it.
+    await vi.waitFor(() => expect(network.updates.at(-1)).toMatchObject({ state, message, reference }));
+    answer.resolve();
+    await network.runtime.dispose();
+  });
+
+  const PATH_ENDS: {
+    name: string;
+    drop: string | null;
+    key: "error.remote.iceFailed" | "error.remote.iceDisconnected" | "error.remote.desktopDidNotConnect";
+    reference: string;
+  }[] = [
+    { name: "a failed ICE path", drop: "failed", key: "error.remote.iceFailed", reference: "webrtc/ice/failed" },
+    {
+      name: "a disconnected ICE path after the grace period",
+      drop: "disconnected",
+      key: "error.remote.iceDisconnected",
+      reference: "webrtc/ice/disconnected",
+    },
+    { name: "a closed ICE path", drop: "closed", key: "error.remote.iceDisconnected", reference: "webrtc/ice/closed" },
+    {
+      name: "a connection whose ICE step does not finish",
+      drop: null,
+      key: "error.remote.desktopDidNotConnect",
+      reference: "timeout/connect/ice",
+    },
+  ];
+
+  it.each(PATH_ENDS)("names $name", async ({ drop, key, reference }) => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    const answer = deferred();
+    const network = await setupNetwork({ beforeAnswer: () => (drop ? Promise.resolve() : answer.promise) });
+    const connecting = network.connect();
+    if (drop) {
+      await expect(connecting).resolves.toMatchObject({ ok: true });
+      network.connection().drop(drop);
+    }
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(network.updates.at(-1)).toMatchObject({ state: "offline", message: sourceText(key), reference });
+    if (!drop) await expect(connecting).resolves.toMatchObject({ ok: false, reference });
+    answer.resolve();
     await network.runtime.dispose();
   });
 });
@@ -1133,6 +1269,9 @@ async function setupNetwork(
     beforeBootstrap?: (hostId: string) => Promise<void>;
     beforeAnswer?: () => Promise<void>;
     refuseHello?: () => boolean;
+    /** Signal holds a hello with `waitForHost` while this returns true. */
+    hostOffline?: () => boolean;
+    waitForHost?: boolean;
     beforeResponse?: () => Promise<void>;
     responseBody?: TeamProtocolV2Json;
     responseFile?: TeamProtocolV2Json;
@@ -1140,6 +1279,7 @@ async function setupNetwork(
 ) {
   const host = await runTeamEffect(createEd25519Identity(() => new Uint8Array(32).fill(7)));
   const sockets: TestSocket[] = [];
+  const hellos: Extract<SignalClientMessage, { type: "hello" }>[] = [];
   const connections: TestConnection[] = [];
   const updates: RemoteTeamConnectionUpdate[] = [];
   const uploadProgress: RemoteUploadProgress[] = [];
@@ -1177,6 +1317,11 @@ async function setupNetwork(
     send(data: string) {
       if (this.halfOpen) return;
       const message = JSON.parse(data);
+      if (message.type === "hello") hellos.push(message);
+      if (message.type === "hello" && message.waitForHost === true && options.hostOffline?.()) {
+        queueMicrotask(() => this.receive({ type: "host-waiting", version: 1, resumeToken: "resume-waiting" }));
+        return;
+      }
       if (message.type === "hello" && options.refuseHello?.()) {
         queueMicrotask(() => this.close(1008));
         return;
@@ -1330,40 +1475,44 @@ async function setupNetwork(
 
   vi.stubGlobal("WebSocket", TestSocket);
   vi.stubGlobal("RTCPeerConnection", TestConnection);
-  const runtime = createRemoteTeamPeer({
-    current: {
-      getBootstrap: async (hostId, _clientPublicKey, existingSessionId) => {
-        await options.beforeBootstrap?.(hostId);
-        currentHostId = hostId;
-        bootstrapCount += 1;
-        keptSessions.push(existingSessionId);
-        currentSessionId = existingSessionId ?? `session-${bootstrapCount}`;
-        return {
-          sessionId: currentSessionId,
-          signalUrl: "wss://signal",
-          ticket: "ticket",
-        };
-      },
-      endSession: options.endSession ?? (async () => {}),
-      onUploadProgress: async (progress) => {
-        uploadProgress.push(progress);
-      },
-      onAccountProfileChanged: options.onAccountProfileChanged,
-      onAccountServersChanged: options.onAccountServersChanged,
-      onNetworkRestored: options.onNetworkRestored,
-      onHostStreamData: options.onHostStreamData,
-      onTeamEvent: options.onTeamEvent ?? (async () => {}),
-      onConnectionUpdate: async (update) => {
-        updates.push(update);
-        if (update.state === "offline") callbacks.onOffline();
-        if (update.resync) callbacks.onReset();
+  const runtime = createRemoteTeamPeer(
+    {
+      current: {
+        getBootstrap: async (hostId, _clientPublicKey, existingSessionId) => {
+          await options.beforeBootstrap?.(hostId);
+          currentHostId = hostId;
+          bootstrapCount += 1;
+          keptSessions.push(existingSessionId);
+          currentSessionId = existingSessionId ?? `session-${bootstrapCount}`;
+          return {
+            sessionId: currentSessionId,
+            signalUrl: "wss://signal",
+            ticket: "ticket",
+          };
+        },
+        endSession: options.endSession ?? (async () => {}),
+        onUploadProgress: async (progress) => {
+          uploadProgress.push(progress);
+        },
+        onAccountProfileChanged: options.onAccountProfileChanged,
+        onAccountServersChanged: options.onAccountServersChanged,
+        onNetworkRestored: options.onNetworkRestored,
+        onHostStreamData: options.onHostStreamData,
+        onTeamEvent: options.onTeamEvent ?? (async () => {}),
+        onConnectionUpdate: async (update) => {
+          updates.push(update);
+          if (update.state === "offline") callbacks.onOffline();
+          if (update.resync) callbacks.onReset();
+        },
       },
     },
-  });
+    { waitForHost: options.waitForHost === true },
+  );
   return {
     runtime,
     slowRequest,
     sockets,
+    hellos,
     connections,
     updates,
     uploadProgress,

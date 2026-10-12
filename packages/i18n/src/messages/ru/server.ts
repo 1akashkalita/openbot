@@ -2,6 +2,27 @@ import type { PartialTranslation } from "../../message";
 import type { messages as source } from "../en/server";
 
 export const messages = {
+  "server.connection.planEnded": "Тариф для {name} закончился",
+  "server.connection.wakeFailed": "Не удалось запустить {name}",
+  "server.connection.startTimeout": "{name} не запустился вовремя",
+  "server.connection.sleeping": "{name} в спящем режиме",
+  "server.connection.waking": "Запуск {name}",
+  "server.connection.loading": "Загрузка {name}",
+  "server.connection.connecting": "Подключение к {name}",
+  "server.connection.reconnecting": "Повторное подключение к {name}",
+  "server.connection.blocked": "{name} требует вашего внимания",
+  "server.connection.nextRetry": "Следующая попытка через {seconds} с.",
+  "server.connection.wakeHint":
+    "Воспользуйтесь этим рабочим пространством или нажмите «Повторить», чтобы запустить сервер.",
+  "server.connection.planHint": "Откройте настройки аккаунта, чтобы проверить тариф сервера.",
+  "server.connection.loadingHint": "Пока этот сервер загружается, можно выбрать другой.",
+  "server.connection.cachedHint":
+    "Загруженное содержимое и черновики сохранены. Действия сервера возобновятся после повторного подключения.",
+  "server.connection.conversationFailed": "Не удалось загрузить диалог. Повторите попытку.",
+  "server.connection.panelsFailed": "Не удалось загрузить некоторые панели рабочего пространства. Повторите попытку.",
+  "server.connection.retry": "Повторить",
+  "server.connection.manage": "Открыть настройки",
+  "server.connection.restored": "Подключение к {name} восстановлено",
   "server.compatibility.updateClientTitle": "Обновите это приложение OpenBot",
   "server.compatibility.updateHostTitle": "Обновите OpenBot на {name}",
   "server.compatibility.unsafeDataTitle": "Хост вернул небезопасные данные",
@@ -376,6 +397,7 @@ export const messages = {
   "server.update.status.checking": "Проверка обновлений…",
   "server.update.status.available": "Доступна версия {version}.",
   "server.update.status.downloading": "Скачивание {version} · {progress}",
+  "server.update.status.downloadingUnknown": "Скачивание {version}…",
   "server.update.status.ready": "Версия {version} скачана.",
   "server.update.status.installing": "{name} перезапускается, чтобы установить обновление.",
   "server.update.status.upToDate": "На {name} установлена последняя версия OpenBot.",

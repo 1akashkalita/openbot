@@ -167,6 +167,7 @@ import { OnePasswordConnectorStore } from "./onepassword-connector-store";
 import { ProviderCredentialStore } from "./provider-credential-store";
 import { createProviderDetection, type ProviderDetection } from "./provider-detection";
 import { PROVIDER_DETECTION_SETTINGS_FILE, ProviderDetectionSettingsStore } from "./provider-detection-settings-store";
+import { ProviderHostSignIns } from "./provider-host-sign-ins";
 import { startProviderLog } from "./provider-log";
 import { toProviderRuntimeFailure } from "./provider-runtime-effects";
 import { ProviderRuntimeManager, providerRuntimeRoot, runtimeTarget } from "./provider-runtime-manager";
@@ -183,6 +184,8 @@ import { RemoteSessionCache } from "./remote-session-cache";
 import { RemoteSessionReusePreferenceStore } from "./remote-session-reuse-preference-store";
 import { sendToRenderer } from "./renderer-ipc";
 import { RequestedUpdate, RequestedUpdateRefusal } from "./requested-update";
+import { ResourceMonitor } from "./resource-monitor";
+import { StatementTimings } from "./resource-summary";
 import { RoutineFeedServer } from "./routine-feed-server";
 import { clearRoutineHold, ROUTINE_HOLD_FILE, takeRoutineHold, writeRoutineHold } from "./routine-hold-file";
 import { ServerMode, type ServerModeEnvironment } from "./server-mode";
@@ -210,7 +213,12 @@ import {
   UpdateService,
 } from "./update-service";
 import { listSiblingOpenBotInstances } from "./update-sibling-instances";
-import { PARAKEET_MODEL_DIRECTORY, removeLegacyWhisperCache } from "./voice-model-service";
+import {
+  PARAKEET_MODEL_DIRECTORY,
+  removeLegacyWhisperCache,
+  WHISPER_TURBO_MODEL_DIRECTORY,
+} from "./voice-model-service";
+import { VoicePreferenceStore } from "./voice-preference-store";
 import { spawnVoiceTranscriptionHost } from "./voice-transcription-host-process";
 import { VoiceTranscriptionService } from "./voice-transcription-service";
 import { WebhookRelay } from "./webhook-relay";
@@ -266,6 +274,8 @@ const PACKAGED_BUNDLE_IDENTIFIER = "app.openbot.desktop";
 const DEVELOPMENT_BUNDLE_IDENTIFIER = "com.github.Electron";
 
 const TEARDOWN_ORDER = {
+  // First, so a process that the teardown ends does not count as a crash.
+  resourceMonitor: 9,
   updater: 10,
   idleRestart: 11,
   hostUpdateCoordinator: 12,
@@ -278,6 +288,7 @@ const TEARDOWN_ORDER = {
   computerUsePermissionHelp: 19,
   dynamicIsland: 20,
   // Before the browser, so no sign-in opens a tab while it stops.
+  providerHostSignIns: 28,
   mcpHostSignIns: 29,
   browser: 30,
   browserPictureInPicture: 40,
@@ -421,6 +432,7 @@ export interface ApplicationServices {
   computerUsePermissionHelp: ComputerUsePermissionHelpWindowController;
   analytics: HostAnalytics;
   trace: TraceFile;
+  resourceMonitor: ResourceMonitor;
   teamStore: TeamStore;
   /**
    * The account state this function read part-way through, and bound the local host to. The
@@ -1082,9 +1094,14 @@ export async function createApplicationServices({
   teardown.push(TEARDOWN_ORDER.onePasswordConnector, "the 1Password connection", () =>
     runCauseEffect(onePasswordConnector.dispose()),
   );
+  // Read by the resource monitor, which starts after the analytics that needs the services.
+  const statementTimings = new StatementTimings();
   const tables = new AgentTables({
     sharedRoot: store.sharedRoot,
-    supervisor: new AgentDatabaseSupervisor({ spawnHost: spawnAgentDatabaseHost }),
+    supervisor: new AgentDatabaseSupervisor({
+      spawnHost: spawnAgentDatabaseHost,
+      onStatementSettled: (durationMs) => statementTimings.record(durationMs),
+    }),
   });
   // Looked up again on demand, because a user may install the driver while OpenBot runs, and the
   // panel's "Check again" has to see it.
@@ -1613,6 +1630,12 @@ export async function createApplicationServices({
   teardown.push(TEARDOWN_ORDER.mcpHostSignIns, "MCP sign-ins of joined servers", () =>
     Effect.runPromise(mcpHostSignIns.close()),
   );
+  // Only on Linux does the Gemini CLI print its sign-in page for this host to open.
+  const providerHostSignIns = process.platform === "linux" ? new ProviderHostSignIns({ service, browser }) : undefined;
+  if (providerHostSignIns)
+    teardown.push(TEARDOWN_ORDER.providerHostSignIns, "Provider sign-ins of joined servers", () =>
+      Effect.runPromise(providerHostSignIns.close()),
+    );
   const host = new HostService({
     appVersion: app.getVersion(),
     store: teamStore,
@@ -1630,6 +1653,8 @@ export async function createApplicationServices({
     mcpServers: service,
     // Present, so the host advertises `mcp-sign-in-v1`. The routes are admin-only.
     mcpSignIns: mcpHostSignIns,
+    // Present on Linux, so the host advertises `provider-host-sign-in-v1`. The routes are admin-only.
+    providerHostSignIns,
     // Present, so the host advertises `storage-v1`. Members read; only admins delete or clear.
     storage: storageUsage,
     // Present, so the host advertises `hosted-sites-v1`. Members list; only admins delete.
@@ -1790,10 +1815,23 @@ export async function createApplicationServices({
             surface: "desktop_host",
             app_version: app.getVersion(),
             platform: analyticsPlatform,
-            event_schema_version: 7,
+            event_schema_version: 8,
           },
         )
       : undefined;
+  const trace = new TraceFile({ directory: join(app.getPath("userData"), "logs") });
+  teardown.push(TEARDOWN_ORDER.trace, "the trace file", () => Effect.runPromise(trace.close()));
+  const resourceMonitor = new ResourceMonitor({
+    userDataPath: app.getPath("userData"),
+    server: hostedServer !== null || serverModeEnvironment !== null,
+    trace,
+    statementTimings,
+    tabProcessIds: () => browser.tabProcessIds(),
+  });
+  teardown.push(TEARDOWN_ORDER.resourceMonitor, "the resource monitor", () =>
+    Effect.runPromise(resourceMonitor.close()),
+  );
+  service.on("event", (event) => resourceMonitor.observeAgentEvent(event));
   const analytics = new HostAnalytics({
     ...(failureReports ? { reports: failureReports } : {}),
     enabled: app.isPackaged && appVariant === "production",
@@ -1836,14 +1874,14 @@ export async function createApplicationServices({
         computerUseEnabled: () => cuaDriver.mcpServerForProviders() !== null,
       }),
     inventoryDay: analyticsInventoryDayStore(join(app.getPath("userData"), ANALYTICS_INVENTORY_FILE)),
+    resources: resourceMonitor,
   });
   teardown.push(TEARDOWN_ORDER.analytics, "host analytics", () => Effect.runPromise(analytics.close()));
   // Immediately after construction: this attributes buffered events to the current owner rather
   // than flushing a queue, so a later call would attribute them to nobody.
   analytics.flushPending();
   service.on("failure", (failure) => analytics.handleFailure(failure));
-  const trace = new TraceFile({ directory: join(app.getPath("userData"), "logs") });
-  teardown.push(TEARDOWN_ORDER.trace, "the trace file", () => Effect.runPromise(trace.close()));
+  resourceMonitor.start(() => analytics.checkResources());
   const connectTrace = new RemoteConnectTrace((span) => trace.record(span));
   const remoteServers = new RemoteServerManager(
     join(app.getPath("userData"), REMOTE_SERVERS_FILE),
@@ -1939,11 +1977,20 @@ export async function createApplicationServices({
     },
   });
   teardown.push(TEARDOWN_ORDER.remoteDesktop, "remote desktop", () => Effect.runPromise(remoteDesktop.stop()));
+  const voicePreferences = new VoicePreferenceStore(join(app.getPath("userData"), "voice-preference.json"));
+  await runCauseEffect(voicePreferences.load());
   const voice = new VoiceTranscriptionService({
     resourcesRoot: app.isPackaged ? join(process.resourcesPath, "voice") : resolve(".openbot-build/voice"),
-    modelDirectory: app.isPackaged
-      ? join(app.getPath("userData"), "runtimes", PARAKEET_MODEL_DIRECTORY)
-      : resolve(".openbot-build/voice/model"),
+    // `voice:prepare` puts Parakeet in `.openbot-build/voice/model` for development.
+    modelDirectories: {
+      "parakeet-tdt-0.6b-v3": app.isPackaged
+        ? join(app.getPath("userData"), "runtimes", PARAKEET_MODEL_DIRECTORY)
+        : resolve(".openbot-build/voice/model"),
+      "whisper-turbo": app.isPackaged
+        ? join(app.getPath("userData"), "runtimes", WHISPER_TURBO_MODEL_DIRECTORY)
+        : resolve(".openbot-build/voice", WHISPER_TURBO_MODEL_DIRECTORY),
+    },
+    preferences: voicePreferences,
     spawnHost: spawnVoiceTranscriptionHost,
   });
   if (app.isPackaged) {
@@ -2063,6 +2110,14 @@ export async function createApplicationServices({
         return { ok: true, checks: ["initialization-succeeded", "agent-list"] };
       }),
   });
+  // A client that used the server in the last minutes still uses it.
+  const clientInUse = () =>
+    host.connectedClientCount() > 0 && Date.now() - (host.lastClientUseAt() ?? 0) < CLIENT_USE_WINDOW_MS;
+  // A client wakes a hosted server, and reading is not use. Without this, a member who only reads
+  // would see the restart at the end of the disk restore.
+  const startedAt = Date.now();
+  const clientInUseSinceStart = () =>
+    clientInUse() || (host.connectedClientCount() > 0 && Date.now() - startedAt < CLIENT_USE_WINDOW_MS);
   requestedUpdate = new RequestedUpdate({
     updater,
     describeReadiness: describeRestartReadiness,
@@ -2070,6 +2125,8 @@ export async function createApplicationServices({
     savePreference: (change) => writeUpdatePreference(updatePreferenceFile, change),
     log: (message) => logger.info(message),
     announce: (state, version) => host.announceRestart(state, version),
+    // boat restores the disk of a woken server lazily, so its start no longer applies a release.
+    clientInUse: hostedServer ? clientInUseSinceStart : undefined,
   });
   const remoteUpdate = requestedUpdate;
   teardown.push(TEARDOWN_ORDER.requestedUpdate, "the requested update", () =>
@@ -2124,7 +2181,7 @@ export async function createApplicationServices({
         service.hasActiveWork().length > 0 ||
         messaging.hasLiveConnection() ||
         host.describeRestartBlockers().some((reason) => reason !== "browser-view") ||
-        (host.connectedClientCount() > 0 && Date.now() - (host.lastClientUseAt() ?? 0) < CLIENT_USE_WINDOW_MS),
+        clientInUse(),
       nextRunAt: () => {
         const dueAt = service.nextRoutineDueAt();
         return dueAt ? Date.parse(dueAt) : null;
@@ -2243,6 +2300,7 @@ export async function createApplicationServices({
     computerUsePermissionHelp,
     analytics,
     trace,
+    resourceMonitor,
     teamStore,
     appliedAccount: signedInState,
     centralAuthInitialization,

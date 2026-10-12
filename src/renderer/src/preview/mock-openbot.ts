@@ -129,9 +129,11 @@ import { createMockSkills, type MockSkillsOptions } from "./mock-skills";
 import { createMockStorage } from "./mock-storage";
 import { clone, type Listener, type MockRuntime, matchesQuery } from "./mock-support";
 import { createMockTeam, type MockTeamOptions } from "./mock-team";
+import { createMockVoice, type MockVoiceOptions } from "./mock-voice";
 
 export interface MockOpenBotOptions
   extends MockProviderRuntimeOptions,
+    MockVoiceOptions,
     MockAuthOptions,
     MockBrowserOptions,
     MockTeamOptions,
@@ -508,6 +510,7 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
     timezone: string;
     schedule: RoutineSchedule;
     limitPolicy?: Routine["limitPolicy"];
+    missedPolicy?: Routine["missedPolicy"];
   }): Routine {
     const now = new Date().toISOString();
     const routineId = crypto.randomUUID();
@@ -519,6 +522,7 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
       active: input.active,
       timezone: input.timezone,
       limitPolicy: input.limitPolicy ?? "wait",
+      missedPolicy: input.missedPolicy ?? "skip",
       trigger: {
         id: crypto.randomUUID(),
         routineId,
@@ -537,6 +541,7 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
     (agentId) => agents.find((entry) => entry.id === agentId)?.name ?? agentId,
   );
   const mockProviderRuntimes = createMockProviderRuntimes(options, runtime);
+  const mockVoice = createMockVoice(options, runtime);
   const mockAuth = createMockAuth(options, runtime);
   const mockSkills = createMockSkills(options, (agentId) => emitAgentEvent({ type: "skills-changed", agentId }));
   const { installedSkills, readInstalledSkills } = mockSkills;
@@ -670,13 +675,27 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
     restartProvider: async () => clone(agentStatus),
     cancelProviderRestart: async () => clone(agentStatus),
     // A code that never completes: the preview has no provider to finish the sign-in, so this shows
-    // the waiting screen and leaves it there.
-    startProviderCodeLogin: async () => ({
-      kind: "code",
-      userCode: "KTQ4-B62MX",
-      verificationUrl: "https://auth.openai.com/codex/device",
-      expiresAt: Date.now() + 10 * 60_000,
-    }),
+    // the waiting screen and leaves it there. Claude signs in with a code its page shows, which the
+    // user pastes back, and Cursor with a page that signs its CLI in by itself.
+    startProviderCodeLogin: async (provider) =>
+      provider === "claude"
+        ? {
+            kind: "paste",
+            verificationUrl: "https://claude.com/cai/oauth/authorize?code=true",
+            expiresAt: Date.now() + 10 * 60_000,
+          }
+        : provider === "cursor"
+          ? {
+              kind: "link",
+              verificationUrl: "https://cursor.com/loginDeepControl?mode=login&redirectTarget=cli",
+              expiresAt: Date.now() + 10 * 60_000,
+            }
+          : {
+              kind: "code",
+              userCode: "KTQ4-B62MX",
+              verificationUrl: "https://auth.openai.com/codex/device",
+              expiresAt: Date.now() + 10 * 60_000,
+            },
     cancelProviderCodeLogin: async () => clone(agentStatus),
     setProviderApiKey: async ({ provider, key }) => {
       if (!key.trim()) throw new Error("A provider key is required.");
@@ -693,12 +712,7 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
     }),
     providerRuntimes: mockProviderRuntimes.providerRuntimes,
     openUrl: async () => undefined,
-    voice: {
-      getModelStatus: async () => ({ phase: "ready", progress: 100, message: null }),
-      prepareModel: async () => ({ phase: "ready", progress: 100, message: null }),
-      transcribe: async () => ({ text: "Mock voice transcript" }),
-      onModelStatus: () => () => undefined,
-    },
+    voice: mockVoice.voice,
     routineFlows: mockRoutineFlows({ routines, routineRuns }),
     auth: mockAuth.auth,
     skills: mockSkills.skills,
@@ -886,25 +900,14 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
     messaging: createMockMessaging(() => agents[0]?.id ?? "preview-agent"),
     // Preview has one host, so every server answers from the same providers as this computer.
     providerAdmin: {
-      // A host signs Claude in with a code its page shows, which the user pastes back, and Cursor
-      // with a page that signs its CLI in by itself.
-      startCodeLogin: async (provider) =>
-        provider === "claude"
-          ? {
-              kind: "paste",
-              verificationUrl: "https://claude.com/cai/oauth/authorize?code=true",
-              expiresAt: Date.now() + 10 * 60_000,
-            }
-          : provider === "cursor"
-            ? {
-                kind: "link",
-                verificationUrl: "https://cursor.com/loginDeepControl?mode=login&redirectTarget=cli",
-                expiresAt: Date.now() + 10 * 60_000,
-              }
-            : api.startProviderCodeLogin(provider),
+      startCodeLogin: (provider) => api.startProviderCodeLogin(provider),
       // As with the code above, the preview has no provider to finish the sign-in.
       submitCodeLogin: async () => clone(agentStatus),
       cancelCodeLogin: (provider) => api.cancelProviderCodeLogin(provider),
+      // The preview has no host browser, so its Gemini sign-in waits with no page until it is cancelled.
+      startHostSignIn: async () => undefined,
+      hostSignInStatus: async () => ({ tabId: null, result: null }),
+      cancelHostSignIn: async () => clone(agentStatus),
       getApiKeyState: (provider) => api.getProviderApiKeyState(provider),
       setApiKey: (input) => api.setProviderApiKey(input),
       clearApiKey: (provider) => api.clearProviderApiKey(provider),
@@ -1523,6 +1526,7 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
           ...(input.instruction === undefined ? {} : { instruction: input.instruction.trim() }),
           ...(input.active === undefined ? {} : { active: input.active }),
           ...(input.limitPolicy === undefined ? {} : { limitPolicy: input.limitPolicy }),
+          ...(input.missedPolicy === undefined ? {} : { missedPolicy: input.missedPolicy }),
           ...(input.schedule === undefined
             ? {}
             : {
@@ -1880,7 +1884,7 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
         return clone(updateStatus);
       },
       download: async () => {
-        updateStatus = { ...updateStatus, phase: "downloading", progress: 0 };
+        updateStatus = { ...updateStatus, phase: "downloading", progress: null };
         emit(updateListeners, updateStatus);
         const downloadSteps = [
           { delay: 350, expectedPhase: "downloading", phase: "downloading", progress: 28 },

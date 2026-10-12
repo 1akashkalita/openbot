@@ -49,10 +49,12 @@ import { recordRestartActivity } from "../restart-activity";
 import { shortenDiagnostic } from "./../stderr-diagnostics";
 import { stopProcessTree } from "../windows-process-tree";
 import { normalizeAccountUsage } from "./account-usage";
+import { startCliCodeLogin } from "./cli-code-login";
 import { CliLoginFailed, CliLoginFlow, toCliLoginFailed } from "./cli-login-flow";
 import { CodexLoginFlow, toCodexLoginFailed } from "./codex-login";
 import type { ConversationRuntime } from "./conversation-runtime";
 import { ModelCatalog } from "./model-catalog";
+import { startMuseDeviceLogin } from "./muse-login";
 import {
   createAcpRequestEchoReader,
   ignoredCodexSettings,
@@ -955,6 +957,37 @@ export class ProviderRuntime implements ProviderPort {
   });
 
   /**
+   * Signs `provider` in through the page that its CLI prints, which `openPage` shows, and waits until
+   * the sign-in ends. For a host whose browser the user reaches only through a live view
+   * (`provider-host-sign-in-v1`). Fails with the reason when the provider is not signed in at the end.
+   */
+  readonly signInProviderOnHost = Effect.fn("ProviderRuntime.signInProviderOnHost")(function* (
+    this: ProviderRuntime,
+    provider: AgentProvider,
+    openPage: (url: string) => Promise<void>,
+  ) {
+    yield* this.connectProvider(provider, openPage);
+    // A sign-in that ended before this read leaves no task; the clients then tell how it ended.
+    const signedIn =
+      (yield* this.#cliLogin.settled(provider)) ?? (this.#clients.has(provider) && this.#accounts.has(provider));
+    if (signedIn) return;
+    const message = this.#status.providers?.find((status) => status.id === provider)?.message;
+    return yield* new ProviderOperationFailed({
+      cause: new Error(message ?? sourceText("error.provider.hostSignInEnded", { provider: providerLabel(provider) })),
+    });
+  }).bind(this);
+
+  /** Ends a sign-in that `signInProviderOnHost` started. The CLI stops, so its page cannot finish it. */
+  readonly cancelProviderSignIn = Effect.fn("ProviderRuntime.cancelProviderSignIn")(function* (
+    this: ProviderRuntime,
+    provider: AgentProvider,
+  ) {
+    return yield* this.#runProviderConnectionCommand(provider, () =>
+      this.#cancelCliLogin(provider).pipe(Effect.map(() => this.status())),
+    );
+  }).bind(this);
+
+  /**
    * Starts a sign-in the user finishes on another device, for a provider that offers one.
    *
    * Runs in the same queue as Connect, and cancels a sign-in already waiting: two live codes for
@@ -985,7 +1018,30 @@ export class ProviderRuntime implements ProviderPort {
       return yield* this.#codexLogin.startDevice().pipe(toProviderOperationFailed);
     }
     yield* this.#cancelCliLogin(provider);
-    return yield* this.#cliLogin.startCode(provider, codeSignIn).pipe(toProviderOperationFailed);
+    if (codeSignIn.kind === "muse-device") {
+      return yield* this.#cliLogin
+        .startCode(
+          provider,
+          (cli) => startMuseDeviceLogin({ cli, timeoutMs: codeSignIn.timeoutMs }),
+          codeSignIn.timeoutMs,
+        )
+        .pipe(toProviderOperationFailed);
+    }
+    const { command, flow } = codeSignIn;
+    return yield* this.#cliLogin
+      .startCode(
+        provider,
+        (cli) =>
+          startCliCodeLogin({
+            flow,
+            executable: cli.executable,
+            argv: command.argv,
+            env: command.env(cli),
+            timeoutMs: command.timeoutMs,
+          }),
+        command.timeoutMs,
+      )
+      .pipe(toProviderOperationFailed);
   }, Effect.uninterruptible);
 
   /**

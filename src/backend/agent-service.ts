@@ -117,7 +117,6 @@ import { DeltaBuffer } from "./agent/delta-buffer";
 import { DrainScheduler } from "./agent/drain-scheduler";
 import { DuplicationGate, toAgentDuplicationFailed } from "./agent/duplication-gate";
 import type { FailureContext, FailureSignal } from "./agent/failure-signal";
-import { readCapturedSteps } from "./agent/handoff-tool-steps";
 import { type AgentHostedSites, HostedSiteCoordinator } from "./agent/hosted-site-coordinator";
 import { ImageGenRuntime } from "./agent/image-gen-runtime";
 import { MailboxSync } from "./agent/mailbox-sync";
@@ -139,7 +138,7 @@ import {
   generateTextWithoutTools,
   ProfileGenerationFailed,
 } from "./agent/profile-generation";
-import { ProfileSave, toProfileSaveFailed } from "./agent/profile-save";
+import { ProfileSave, standingProfileChanged, toProfileSaveFailed } from "./agent/profile-save";
 import { isPlanLimitDiagnostic } from "./agent/provider-diagnostics";
 import { type AgentClientFactory, ProviderRuntime, toProviderOperationFailed } from "./agent/provider-runtime";
 import { QueueControls } from "./agent/queue-controls";
@@ -149,7 +148,7 @@ import { SessionSettings } from "./agent/session-settings";
 import type { AgentSidebar } from "./agent/sidebar-tools";
 import type { LocalSkillTools } from "./agent/skill-tools";
 import { isRequestTimeout, providerForAgent, providerLabel, type ToolUsageSignal } from "./agent/thread-items";
-import { ThreadLifecycle, ThreadOperationFailed } from "./agent/thread-lifecycle";
+import { ThreadLifecycle } from "./agent/thread-lifecycle";
 import { toToolOperationFailed } from "./agent/tool-operation";
 import { type AgentBrowserHost, TurnLifecycle } from "./agent/turn-lifecycle";
 import { toUsageReadFailed, UsageLimitGate } from "./agent/usage-limit-gate";
@@ -179,7 +178,6 @@ import { RoutineRecords } from "./routine-records";
 import type { RoutineHoldWindow } from "./routine-store";
 import { RoutineTimer } from "./routine-timer";
 import type { SidebarLayoutStore } from "./sidebar-layout-store";
-import { TimeoutError, withTimeout } from "./with-timeout";
 import {
   listWorkspaceDirectory,
   type ResolvedSharedFile,
@@ -397,8 +395,8 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
           input.operationId,
           sender,
         ).pipe(toProfileSaveFailed),
-      changed: (agent) => {
-        this.#conversation.unloadAgentThreads(agent.id);
+      changed: (agent, previous) => {
+        if (standingProfileChanged(previous, agent)) this.#conversation.unloadAgentThreads(agent.id);
         this.#emit({ type: "agents-changed", agents: this.listAgents() });
         this.#drain.scheduleDrain(agent.id);
       },
@@ -592,6 +590,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       },
     });
     this.#compaction = new ContextCompaction({
+      changed: () => this.#emitRuntimeSnapshot(),
       store,
       providers: this.#providers,
       emitError: (code, error, agentId) => this.#emitError(code, error, agentId),
@@ -695,24 +694,6 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       mcpToolRuntimes: () => this.#mcp.toolRuntimes(),
       mcpAuthorization: (config) => this.#mcp.authorization(config).pipe(toMcpOperationError),
       ...(credentials.agentEnvironment ? { agentEnvironment: credentials.agentEnvironment } : {}),
-      // The previous provider's CLI stops a minute after no agent uses it, so it is started again. The
-      // first turn on the new provider waits for the start and the read, so both share one short
-      // limit. No `cwd` is sent, as in the boot backfill: a replaced ACP session is not opened again.
-      readProviderSteps: (provider, threadId) =>
-        withTimeout(
-          Effect.gen({ self: this }, function* () {
-            yield* this.#providers.ensureProvider(provider);
-            const client = this.#providers.clientFor(provider);
-            return client ? yield* readCapturedSteps(client, threadId) : new Map<string, string>();
-          }),
-          10_000,
-          "The earlier provider session could not be read in time.",
-        ).pipe(
-          Effect.mapError(
-            (failure) =>
-              new ThreadOperationFailed({ cause: failure instanceof TimeoutError ? failure : failure.cause }),
-          ),
-        ),
       passwordVaultConnected: () => options.passwordVault?.connected() ?? false,
       hooks: {
         logRecovery: (agentId, provider, outcome) =>
@@ -872,6 +853,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     });
     this.messaging = new MessagingThreads(store.database, mailbox, {
       schedule: (agentId) => this.#drain.scheduleDrain(agentId),
+      queueChanged: (agentId) => this.#mailboxSync.emitQueue(agentId),
       busy: (agentId) =>
         Boolean(this.#conversation.workingSnapshot(agentId)?.activeTurnId || this.#mailbox.nextQueued(agentId)),
       interrupt: (agentId, turnId, threadId) => this.interrupt(agentId, turnId, threadId).pipe(toMessagingThreadFailed),
@@ -1011,6 +993,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       },
     });
     this.#tools = new OpenBotToolRouter({
+      capturedSteps: (session) => this.#threads.capturedWorkSteps(session).pipe(toToolOperationFailed),
       store,
       mailbox,
       mailboxSync: this.#mailboxSync,
@@ -1060,6 +1043,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
           startedAt: turnId ? this.#turn.turnStartedAt(turnId) : null,
           lastEventAt: this.#turn.lastEventAt(agentId),
         }),
+        requestNoUpdate: (agentId, threadId, turnId) => this.#turn.requestNoUpdate(agentId, threadId, turnId),
       },
     });
   }
@@ -1109,6 +1093,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
 
   getRuntimeSnapshot(): AgentRuntimeSnapshot {
     return buildRuntimeSnapshot({
+      contextStates: this.#compaction.snapshot(),
       agents: this.listAgents(),
       conversation: this.#conversation,
       database: this.#store.database,
@@ -1340,8 +1325,9 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     if (!agent || !agentAutomationAllowed(agent)) throw new Error(sourceText("error.agent.automationOff"));
   }
 
-  listRoutineRuns(input: ListRoutineRunsInput): RoutineRun[] {
-    return this.#routines.listRuns(input);
+  /** `withSkipped` adds the skipped-run records, which only the local history shows. */
+  listRoutineRuns(input: ListRoutineRunsInput, withSkipped = false): RoutineRun[] {
+    return this.#routines.listRuns(input, withSkipped);
   }
 
   listChannelMemories(channelId: string): ChannelMemory[] {
@@ -1390,8 +1376,8 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       );
   }
 
-  listChannelRoutineRuns(input: ListChannelRoutineRunsInput): ChannelRoutineRun[] {
-    return this.#channelRoutines.listRuns(input);
+  listChannelRoutineRuns(input: ListChannelRoutineRunsInput, withSkipped = false): ChannelRoutineRun[] {
+    return this.#channelRoutines.listRuns(input, withSkipped);
   }
 
   /**
@@ -1862,7 +1848,12 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
   ) {
     // A provider change waits until the agent has no work. It is checked again after the reads below.
     const requireIdle = (previous: AgentSummary) => {
-      const hasPendingWork = this.#mailbox.hasUnfinishedDelivery(input.agentId);
+      // A spent plan holds the queue until it resets, and a switch to another provider is the way out
+      // of that hold. So while the hold lasts, only started work blocks the switch; the queue then
+      // runs on the new provider.
+      const hasPendingWork = this.#usageLimits.mayDrain(input.agentId)
+        ? this.#mailbox.hasUnfinishedDelivery(input.agentId)
+        : this.#mailbox.hasStartedDelivery(input.agentId);
       const activeTurn =
         this.#conversation.workingSnapshot(input.agentId)?.activeTurnId ??
         (previous.threadId ? this.#store.database.readActiveTurnId(input.agentId, previous.threadId) : null);
@@ -1916,23 +1907,16 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       // The reads and the provider start take time, and a message sent in it can start a turn.
       yield* lifecycleStep("validate agent update", () => requireIdle(previous));
     }
-    const profileChanged =
-      input.name !== undefined ||
-      input.title !== undefined ||
-      input.description !== undefined ||
-      input.model !== undefined ||
-      input.reasoningEffort !== undefined ||
-      input.access !== undefined ||
-      input.computerUse !== undefined ||
-      input.allowAutomation !== undefined;
     if (requestedProvider && (input.provider || input.model))
       yield* lifecycleStep("check provider switch", () => this.#providers.requireProviderOn(requestedProvider));
     const agent = yield* this.#store.updateAgent(
       { ...input, ...(requestedModel && !input.provider ? { provider: requestedModel.provider } : {}) },
       initiatingAgentId,
     );
+    const profileChanged = standingProfileChanged(previous, agent);
     const activeSession = this.#store.activeProviderSession(agent.id);
-    if (previous?.threadId && requestedProvider && requestedProvider !== providerForAgent(previous)) {
+    const providerChanged = previous && requestedProvider && requestedProvider !== providerForAgent(previous);
+    if (previous?.threadId && providerChanged) {
       // Retire first, with no wait after the update: a turn that starts while a file is written
       // binds a session of the new provider, and a later retirement would close that one too.
       this.#store.database.deactivateProviderSessions(previous.threadId);
@@ -1956,7 +1940,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     // Leaving a hold, nothing else would start the queue before the limit it left resets. Entering
     // one, the queue is settled as at any other start of a hold.
     const isHeld = !this.#usageLimits.mayDrain(agent.id);
-    if (wasHeld !== isHeld) this.#emitRuntimeSnapshot();
+    if (providerChanged || wasHeld !== isHeld) this.#emitRuntimeSnapshot();
     if (wasHeld && !isHeld) {
       this.#drain.scheduleDrain(agent.id);
       // A channel task that the hold gave back waits in its channel, not in this queue.
@@ -1975,6 +1959,10 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
         ),
         Effect.forkIn(this.#scope),
       );
+    } else if (providerChanged && !isHeld) {
+      // A hold that started during the switch let queued work through the second `requireIdle`, and
+      // its release drains only the agents still on the spent model.
+      this.#drain.scheduleDrain(agent.id);
     }
     return agent;
   }, Effect.uninterruptible);
@@ -2260,6 +2248,30 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       .connectProvider(provider, openExternal)
       .pipe(
         Effect.mapError((failure) => new AgentLifecycleFailed({ operation: "connectProvider", cause: failure.cause })),
+      );
+  }
+
+  /** See `ProviderRuntime.signInProviderOnHost`. */
+  signInProviderOnHost(
+    provider: AgentProvider,
+    openPage: (url: string) => Promise<void>,
+  ): Effect.Effect<void, AgentLifecycleFailed> {
+    return this.#providers
+      .signInProviderOnHost(provider, openPage)
+      .pipe(
+        Effect.mapError(
+          (failure) => new AgentLifecycleFailed({ operation: "signInProviderOnHost", cause: failure.cause }),
+        ),
+      );
+  }
+
+  cancelProviderSignIn(provider: AgentProvider): Effect.Effect<AgentStatus, AgentLifecycleFailed> {
+    return this.#providers
+      .cancelProviderSignIn(provider)
+      .pipe(
+        Effect.mapError(
+          (failure) => new AgentLifecycleFailed({ operation: "cancelProviderSignIn", cause: failure.cause }),
+        ),
       );
   }
 
@@ -3076,7 +3088,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     );
     for (const session of sessions)
       yield* this.#threads
-        .deleteProviderSessionFiles(session.externalSessionId)
+        .deleteProviderSessionFiles(session.externalSessionId, session.id)
         .pipe(
           Effect.mapError(
             (failure) =>

@@ -57,6 +57,16 @@ The service stores payment facts and a delivery ledger in D1 to prevent duplicat
 It does not send Stripe identifiers, server identifiers, or Checkout return tokens to OpenPanel.
 An account deletion clears its profile reference and stops pending account event delivery.
 
+## AI conversation context
+
+When a provider session is replaced, OpenBot sends a bounded excerpt of the current conversation
+to the selected provider. The agent can request older messages from that same conversation through
+local history tools. Requested text and selected saved work steps are then sent to that provider.
+These tools exclude messages before the latest context reset and cannot search another conversation.
+Channel history keeps its existing membership and task checks. Messaging history stays within its
+current link. The full conversation stays in local SQLite storage. No history text is sent to the
+account service or analytics by these tools.
+
 ## Local scripts
 
 Local scripts is off by default for each agent. When enabled, scripts that run as the same OS user
@@ -177,6 +187,13 @@ The local host also records how the agents are used:
 - **Setup.** At most once a day, the host sends counts of agents, enabled routines, custom MCP
   servers, local skills and community skills; the slugs of enabled catalog plugins and of curated
   skills and agents; the providers in use; and whether Computer Use is enabled.
+- **Resource use.** At most once a day, the host sends a summary of the previous day: the memory and
+  CPU use of OpenBot's process groups (main, windows, browser tabs, GPU, the database and voice
+  processes) and of each provider's CLI and its child processes, by provider id; the main process
+  responsiveness; agent database statement times and counts; counts of processes that stopped
+  unexpectedly, by reason; and the computer's memory and processor class, architecture, and whether
+  it is a server. Memory is rounded to 50 MB. Process IDs, program names, command lines and paths
+  are not sent. A day that ends while analytics is off is not sent.
 - **Agent source.** Turn events say whether the agent came from a curated listing, a community
   listing, or neither, and name only a curated listing. Marketplace events name only a curated
   skill, agent or catalog plugin.
@@ -440,6 +457,12 @@ is not included in analytics; provider output uses the application's secret reda
   and the outcome word. A connection step does not name the server. The failure's error text goes only to the redacted log. The trace holds no payloads,
   messages, URLs, paths, or identifiers, and it goes through log redaction before it is written. It
   is kept to two files of 2 MB each and is never sent.
+- `~/Library/Application Support/OpenBot/logs/resources.ndjson` holds one line a minute: the memory
+  and CPU use of each OpenBot process group and provider id, the main process delay, the number of
+  agent database statements, active turns and browser tabs. It holds no process IDs, program names,
+  command lines or paths. It is kept to two files of 1 MB each and is never sent.
+  `~/Library/Application Support/OpenBot/openbot-resource-summary-v1.json` holds the totals of
+  today and of the previous day for the daily analytics summary and the diagnostics export.
 
 Attachments copied into OpenBot remain in managed storage after their original file is moved or
 deleted. All agents share the embedded browser profile, including cookies and website sessions.
@@ -493,6 +516,11 @@ Network traffic can also occur when:
   pins from `cache.agilebits.com`, checks its SHA-256, and keeps it in
   `~/Library/Application Support/OpenBot/provider-state/1password-cli`. The request carries no user
   data;
+- the user dictates for the first time, or presses Download in **Settings → Voice**. OpenBot
+  downloads the speech model that it pins, Parakeet or Whisper turbo, from `huggingface.co`, checks
+  its size and SHA-256, and keeps it in `runtimes` in the application data folder. The request
+  carries no user data. Dictation audio stays on the computer, and the chosen model and language
+  are saved in `voice-preference.json` in the same folder;
 - the user connects Bitwarden. OpenBot runs the installed `bw` CLI to sync with the server already
   configured in that CLI, including a self-hosted server. It syncs before listing or filling logins.
   These calls send no OpenBot conversations, files, or agent instructions to Bitwarden;
@@ -723,8 +751,9 @@ and managed message attachments. It intentionally excludes CLI credentials, brow
 agent workspace files.
 
 The diagnostics export contains application and CLI versions, capability states, aggregate queue
-counts, and a summary of the local trace: counts, outcomes, and durations for each IPC channel,
-turn origin, and failure origin. It contains no conversations, visited URLs, account email, file
+counts, a summary of the local trace: counts, outcomes, and durations for each IPC channel,
+turn origin, and failure origin, and the resource summary: the last sample and the memory, CPU,
+responsiveness, database statement and crash figures of today and the previous day. It contains no conversations, visited URLs, account email, file
 contents, or local file paths.
 
 ## Delete local data
@@ -788,8 +817,10 @@ OpenBot downloads Google's Antigravity ACP server from `dl.google.com` when you 
 the Gemini row. Each provider update check also asks `dl.google.com` for the size of the newest
 download, also when you do not use Gemini. Google's license does not let OpenBot include it in the application. OpenBot
 starts the server as a local process. Prompts, attachments, and tool results go to that process,
-and the server sends them to Google. Sign in opens Google's sign-in page in your browser. The
-server keeps its login and session files in `~/.gemini`, or in `$GEMINI_HOME`. OpenBot does not
+and the server sends them to Google. Connect opens Google's sign-in page in your browser. On this
+computer, Sign in saves a Gemini API key instead: OpenBot encrypts it in its existing provider
+credential store, gives it to the server as `GEMINI_API_KEY`, and redacts it from logs. The server
+sends the key to Google. The server keeps its login and session files in `~/.gemini`, or in `$GEMINI_HOME`. OpenBot does not
 read, copy, or upload these files. Google's terms apply: <https://antigravity.google/terms>.
 Gemini agents stay on this computer: OpenBot does not show them to team members.
 
@@ -997,7 +1028,9 @@ check status, and installation method.
 Pi and Muse run on the host selected for the agent. They receive the conversation input, attached
 images, tool definitions, and enabled MCP server configuration needed for a turn. Provider account
 files remain under each provider's control. An explicit Meta API key is encrypted in OpenBot's
-existing provider credential store. Settings responses and settings-change events contain no
+existing provider credential store. Log in with code for Muse starts a local Muse process, with no
+shell, no file writes and no Meta API key, that asks Meta for a code. You confirm the code on Meta's
+page, and Muse keeps the account in its own files. Settings responses and settings-change events contain no
 provider credentials; the event carries only the agent ID.
 
 ACP registry search fetches the catalog from `cdn.agentclientprotocol.com`; search text is matched
