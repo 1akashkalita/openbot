@@ -1119,6 +1119,24 @@ describe("signing in to an http MCP server", () => {
     expect(server.tokenRequests).toHaveLength(0);
   });
 
+  it("keeps the binding of a saved secret when only the client ID changes", async () => {
+    const url = "https://mcp.example.com/mcp";
+    const storage = memoryStorage();
+    storage.records.set(url, {
+      app: { clientId: "admin-client", clientSecret: "admin-secret", issuer: "https://auth.example.com" },
+    });
+    const oauth = createOAuth({ storage, redirectUrl: "openbot://mcp-auth", openExternal: async () => undefined });
+
+    await runMcp(oauth.saveSignInApp(url, { clientId: "other-client", clientSecret: null, scope: "" }));
+    expect(storage.read(url)?.app).toEqual({
+      clientId: "other-client",
+      clientSecret: "admin-secret",
+      issuer: "https://auth.example.com",
+    });
+    await runMcp(oauth.saveSignInApp(url, { clientId: "other-client", clientSecret: "new-secret", scope: "" }));
+    expect(storage.read(url)?.app).toEqual({ clientId: "other-client", clientSecret: "new-secret" });
+  });
+
   it("ends a sign-in the user cancels and keeps no token", async () => {
     const server = await fakeServer();
     const storage = memoryStorage();

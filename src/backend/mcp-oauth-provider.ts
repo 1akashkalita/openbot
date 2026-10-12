@@ -486,14 +486,22 @@ export class McpOAuth implements McpOAuthAuthority {
     };
     const sameClient =
       record.app !== undefined && record.app.clientId === app.clientId && record.app.clientSecret === app.clientSecret;
+    // The binding protects the secret, so a secret kept on file keeps it, also under another client
+    // ID. Only a new secret, or no secret, can go to another authorization server.
+    const issuer =
+      sameClient || (app.clientSecret && app.clientSecret === record.app?.clientSecret)
+        ? record.app?.issuer
+        : undefined;
+    const boundApp = { ...app, ...(issuer ? { issuer } : {}) };
     if (sameClient) {
-      // The same client keeps the authorization server it is bound to.
-      const issuer = record.app?.issuer;
-      yield* this.#options.storage.write(resource, { ...record, app: { ...app, ...(issuer ? { issuer } : {}) } });
+      yield* this.#options.storage.write(resource, { ...record, app: boundApp });
       return false;
     }
     this.#invalidate(resource);
-    yield* this.#options.storage.write(resource, { app, ...(record.discovery ? { discovery: record.discovery } : {}) });
+    yield* this.#options.storage.write(resource, {
+      app: boundApp,
+      ...(record.discovery ? { discovery: record.discovery } : {}),
+    });
     return record.tokens !== undefined;
   }).bind(this);
 
