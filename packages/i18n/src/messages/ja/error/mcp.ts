@@ -15,4 +15,8 @@ export const messages = {
   "error.mcp.signInOnHost": "MCP サーバーへのサインインは、ホストコンピューターの OpenBot でのみ行えます。",
   "error.mcp.signInAppUnsupported":
     "このサーバーはサインインアプリに対応していません。ホストの OpenBot をアップデートしてください。",
+  "error.mcp.redirectRelayed": "OpenBot がサインインをサーバーに送信しました。このウィンドウは閉じてかまいません。",
+  "error.mcp.relayEnded": "このサインインは終了しました。もう一度開始してください。",
+  "error.mcp.relayAddressInvalid":
+    "これはこのサインインの最後のアドレスではありません。ブラウザーからアドレス全体をコピーしてください。",
 } as const satisfies PartialTranslation<typeof source>;

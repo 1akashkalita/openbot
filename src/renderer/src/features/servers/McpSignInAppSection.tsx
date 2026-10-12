@@ -36,6 +36,8 @@ export function McpSignInAppSection(props: {
   urlChanged: boolean;
   /** The joined server whose own browser signs in, so its loopback address receives the grant. */
   hostName?: string | undefined;
+  /** The joined server relays its sign-ins (`sign-in-relay-v1`), so the callback opens on this computer. */
+  relayed?: boolean | undefined;
   disabled: boolean;
 }) {
   const { t, sourceText } = useText();
@@ -183,7 +185,9 @@ export function McpSignInAppSection(props: {
           label={t("mcp.panel.callbackUrl")}
           description={
             props.hostName
-              ? t("mcp.panel.callbackUrlOnHost", { host: props.hostName })
+              ? t(props.relayed ? "mcp.panel.callbackUrlRelayed" : "mcp.panel.callbackUrlOnHost", {
+                  host: props.hostName,
+                })
               : t("mcp.panel.callbackUrlDescription")
           }
         >

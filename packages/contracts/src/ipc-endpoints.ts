@@ -230,9 +230,11 @@ import type {
 } from "./ipc-marketplace-agents";
 import type {
   CancelMcpSignInInput,
+  CompleteMcpSignInRelayInput,
   McpServerConfig,
   McpSignInAppInput,
   McpSignInAppState,
+  McpSignInRelayPage,
   McpSignInState,
   McpTestResult,
   RemoveMcpServerInput,
@@ -1112,6 +1114,15 @@ export const IPC_ENDPOINTS = {
     // shows that tab: `mcpSignInPage` names it while the sign-in waits.
     signInMcpServer: scopedRequest<TestMcpServerInput, McpTestResult, "required">()("servers:mcp:sign-in"),
     mcpSignInPage: scopedRequest<CancelMcpSignInInput, string | null, "required">()("servers:mcp:sign-in-page"),
+    // A host with `sign-in-relay-v1` opens no tab: the page opens in this computer's browser, and the
+    // callback comes back here. `mcpSignInRelay` names the page while it waits, and
+    // `completeMcpSignInRelay` takes the address the user pastes when no listener took the callback.
+    mcpSignInRelay: scopedRequest<CancelMcpSignInInput, McpSignInRelayPage | null, "required">()(
+      "servers:mcp:sign-in-relay",
+    ),
+    completeMcpSignInRelay: scopedRequest<CompleteMcpSignInRelayInput, void, "required">()(
+      "servers:mcp:complete-sign-in-relay",
+    ),
     cancelMcpSignIn: scopedRequest<CancelMcpSignInInput, void, "required">()("servers:mcp:cancel-sign-in"),
     signOutMcpServer: scopedRequest<SignOutMcpServerInput, McpSignInState[], "required">()("servers:mcp:sign-out"),
     listMcpSignIns: scopedQuery<McpSignInState[], "required">()("servers:mcp:list-sign-ins"),

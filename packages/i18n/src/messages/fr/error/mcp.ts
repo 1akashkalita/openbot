@@ -15,4 +15,8 @@ export const messages = {
   "error.mcp.signInOnHost": "La connexion à un serveur MCP ne fonctionne que dans OpenBot sur l’ordinateur hôte.",
   "error.mcp.signInAppUnsupported":
     "Ce serveur ne prend pas en charge les apps de connexion. Mettez à jour OpenBot sur l’hôte.",
+  "error.mcp.redirectRelayed": "OpenBot a envoyé la connexion au serveur. Vous pouvez fermer cette fenêtre.",
+  "error.mcp.relayEnded": "Cette connexion est terminée. Relancez-la.",
+  "error.mcp.relayAddressInvalid":
+    "Ce n’est pas l’adresse de fin de cette connexion. Copiez l’adresse complète depuis le navigateur.",
 } as const satisfies PartialTranslation<typeof source>;

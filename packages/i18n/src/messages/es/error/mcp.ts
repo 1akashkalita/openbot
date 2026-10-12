@@ -13,4 +13,8 @@ export const messages = {
   "error.mcp.unsupported": "Este servidor no admite servidores MCP.",
   "error.mcp.signInOnHost": "Solo puedes iniciar sesión en un servidor MCP desde OpenBot en el equipo anfitrión.",
   "error.mcp.signInAppUnsupported": "Este servidor no admite apps de inicio de sesión. Actualiza OpenBot en el host.",
+  "error.mcp.redirectRelayed": "OpenBot envió el inicio de sesión al servidor. Puedes cerrar esta ventana.",
+  "error.mcp.relayEnded": "Este inicio de sesión terminó. Vuelve a iniciarlo.",
+  "error.mcp.relayAddressInvalid":
+    "Esta no es la dirección del final de este inicio de sesión. Copia la dirección completa del navegador.",
 } as const satisfies PartialTranslation<typeof source>;

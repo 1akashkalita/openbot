@@ -104,4 +104,9 @@ export const messages = {
   "error.team.agentSettingsUnsupported": "Les réglages des agents ne sont pas pris en charge par cette connexion.",
   "error.team.adminRequired": "Un accès administrateur est requis.",
   "error.team.requestTooLarge": "Le corps de la requête est trop volumineux.",
+  "error.team.signInRelayUnsupported":
+    "Ce serveur ne peut pas relayer les connexions. Mettez à jour OpenBot sur l’hôte.",
+  "error.team.signInRelayUnknown": "Cette connexion est terminée ou n’existe pas.",
+  "error.team.signInRelayUsed": "Cette connexion a déjà été envoyée.",
+  "error.team.signInRelayMismatch": "Cette adresse ne vient pas de cette connexion.",
 } as const satisfies PartialTranslation<typeof source>;

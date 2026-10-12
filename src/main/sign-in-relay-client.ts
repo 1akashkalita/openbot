@@ -1,0 +1,196 @@
+// The client half of `sign-in-relay-v1`: this computer opens the sign-in page of a joined server's
+// sign-in in the user's own browser, takes the callback, and sends its query to the host.
+
+import { type McpSignInRelayPage, relayCallbackQuery, type SignInRelayStatus } from "@openbot/contracts/ipc";
+import { sourceText } from "@openbot/i18n/source";
+import { createOpenBotLogger, toLogValue } from "@openbot/logging";
+import { Deferred, Duration, Effect } from "effect";
+import type { LanguageService } from "./language-service";
+import { type LoopbackCallbackServer, startLoopbackCallbackServer } from "./loopback-callback-server";
+
+const logger = createOpenBotLogger("sign-in-relay-client");
+
+/** How often a relayed sign-in asks the host how it is. */
+const POLL = Duration.seconds(1);
+
+type SignInRelayCallback = NonNullable<SignInRelayStatus["callback"]>;
+
+/** The routes of one relayed sign-in on its host, so this file does not know the transport. */
+export interface SignInRelayRemote<E> {
+  start: Effect.Effect<{ flowId: string }, E>;
+  status: (flowId: string) => Effect.Effect<SignInRelayStatus, E>;
+  complete: (flowId: string, query: string) => Effect.Effect<SignInRelayStatus, E>;
+  cancel: (flowId: string) => Effect.Effect<void, E>;
+}
+
+export interface SignInRelayClientDependencies {
+  openExternal: (url: string) => Promise<void>;
+  language: Pick<LanguageService, "locale" | "translate">;
+  /** The MCP grant listener of this computer, which takes the callbacks on its port by `state`. */
+  ownListener: () => { port: number; path: string } | null;
+}
+
+interface Waiting {
+  page: McpSignInRelayPage;
+  state: string | null;
+  receive: (query: string) => void;
+}
+
+/**
+ * The relayed sign-ins that wait on this computer, by a key that the caller chooses.
+ *
+ * The callback comes back to the loopback port that the host's sign-in named. When that is the port of
+ * this computer's own MCP grant listener, the listener hands on a `state` that is not its own; when it
+ * is another port, this binds that exact port for the time of the sign-in. When neither works, the
+ * user pastes the address the browser shows. The query of the callback holds a grant: it goes only to
+ * the host, and it is never logged.
+ */
+export class SignInRelayClient {
+  readonly #dependencies: SignInRelayClientDependencies;
+  readonly #waiting = new Map<string, Waiting>();
+
+  constructor(dependencies: SignInRelayClientDependencies) {
+    this.#dependencies = dependencies;
+  }
+
+  /** What the renderer shows while the sign-in of `key` waits, or `null`. */
+  page(key: string): McpSignInRelayPage | null {
+    return this.#waiting.get(key)?.page ?? null;
+  }
+
+  /**
+   * A callback that reached this computer's MCP grant listener or its `openbot://mcp-auth` link with
+   * a `state` that no local sign-in started. Answers whether a relayed sign-in took it.
+   */
+  deliver(state: string, query: string): boolean {
+    for (const waiting of this.#waiting.values()) {
+      if (waiting.state !== state) continue;
+      waiting.receive(query);
+      return true;
+    }
+    return false;
+  }
+
+  /** The address that the user pasted from the browser, for the sign-in of `key`. */
+  paste(key: string, address: string): void {
+    const waiting = this.#waiting.get(key);
+    if (!waiting) throw new Error(sourceText("error.mcp.relayEnded"));
+    const query = relayCallbackQuery(address, waiting.state);
+    if (query === null) throw new Error(sourceText("error.mcp.relayAddressInvalid"));
+    waiting.receive(query);
+  }
+
+  /** Runs one relayed sign-in to its end. An interrupt or a failure cancels the flow on the host. */
+  run<E>(key: string, remote: SignInRelayRemote<E>) {
+    return this.#run(key, remote);
+  }
+
+  readonly #run = Effect.fn("SignInRelayClient.run")(function* <E>(
+    this: SignInRelayClient,
+    key: string,
+    remote: SignInRelayRemote<E>,
+  ) {
+    const { flowId } = yield* remote.start;
+    const self = this;
+    return yield* Effect.gen(function* () {
+      const first = yield* awaitPage(remote, flowId);
+      if (first.result) return first.result;
+      const authorizeUrl = first.authorizeUrl ?? "";
+      const page = safePage(authorizeUrl);
+      if (!page) return { toolCount: 0, error: sourceText("error.backend.mcpSignInNotWebPage") };
+
+      const query = yield* Deferred.make<string>();
+      const state = page.searchParams.get("state");
+      const listener = yield* Effect.acquireRelease(
+        Effect.promise(() =>
+          self.#listen(first.callback, state, (value) => Deferred.doneUnsafe(query, Effect.succeed(value))),
+        ),
+        (server) => Effect.promise(() => server?.close() ?? Promise.resolve()),
+      );
+      const own = self.#dependencies.ownListener();
+      const routed =
+        first.callback !== null &&
+        (listener !== null || (own?.port === first.callback.port && own.path === first.callback.path));
+      self.#waiting.set(key, {
+        page: { authorizeHost: page.host, listening: routed },
+        state,
+        receive: (value) => Deferred.doneUnsafe(query, Effect.succeed(value)),
+      });
+      yield* Effect.promise(() => self.#dependencies.openExternal(page.toString()));
+
+      // The host can end the sign-in first: its deadline passed, or another start replaced it.
+      const ended = yield* Effect.raceFirst(
+        Deferred.await(query).pipe(Effect.map((value) => ({ query: value }))),
+        awaitResult(remote, flowId).pipe(Effect.map((result) => ({ result }))),
+      );
+      if ("result" in ended) return ended.result;
+      self.#waiting.delete(key);
+      const completed = yield* remote.complete(flowId, ended.query);
+      return completed.result ?? (yield* awaitResult(remote, flowId));
+    }).pipe(
+      Effect.scoped,
+      Effect.onError(() => remote.cancel(flowId).pipe(Effect.ignore)),
+      Effect.ensuring(Effect.sync(() => self.#waiting.delete(key))),
+    );
+  });
+
+  /**
+   * Binds the exact callback port for a sign-in whose callback is not on this computer's own listener.
+   * `null` when there is nothing to bind or the port is busy: the user can still paste the address.
+   */
+  async #listen(
+    callback: SignInRelayCallback | null,
+    state: string | null,
+    receive: (query: string) => void,
+  ): Promise<LoopbackCallbackServer | null> {
+    const own = this.#dependencies.ownListener();
+    if (!callback || (own?.port === callback.port && own.path === callback.path)) return null;
+    return startLoopbackCallbackServer({
+      path: callback.path,
+      port: { exact: callback.port },
+      language: this.#dependencies.language,
+      noPort: () => new Error("The sign-in relay listener was given no port."),
+      receive: (url) => {
+        if (state !== null && url.searchParams.get("state") !== state)
+          return { status: 400, message: "error.mcp.redirectNoSignIn" };
+        receive(url.search.slice(1));
+        return { status: 200, message: "error.mcp.redirectRelayed" };
+      },
+    }).catch((error: unknown) => {
+      logger.warn("OpenBot could not listen for a relayed sign-in, so only a pasted address works:", toLogValue(error));
+      return null;
+    });
+  }
+}
+
+/** Reads `status` until the host has the page address, or the sign-in ended first. */
+function awaitPage<E>(remote: SignInRelayRemote<E>, flowId: string) {
+  return Effect.gen(function* () {
+    while (true) {
+      const status = yield* remote.status(flowId);
+      if (status.result || status.authorizeUrl) return status;
+      yield* Effect.sleep(POLL);
+    }
+  });
+}
+
+/** Reads `status` until the sign-in ended. */
+function awaitResult<E>(remote: SignInRelayRemote<E>, flowId: string) {
+  return Effect.gen(function* () {
+    while (true) {
+      const status = yield* remote.status(flowId);
+      if (status.result) return status.result;
+      yield* Effect.sleep(POLL);
+    }
+  });
+}
+
+/** The page address, when it is a web page. The host chose it, so this computer opens nothing else. */
+function safePage(address: string): URL | null {
+  try {
+    const url = new URL(address);
+    return url.protocol === "https:" ? url : null;
+  } catch {
+    return null;
+  }
+}

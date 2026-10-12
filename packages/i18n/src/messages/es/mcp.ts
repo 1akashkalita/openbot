@@ -146,4 +146,16 @@ export const messages = {
   "mcp.panel.removeApp": "Eliminar app",
   "mcp.panel.appSaved": "App guardada. Inicia sesión para usarla.",
   "mcp.panel.appRemoved": "App eliminada.",
+  "mcp.signIn.relayDescription":
+    "La página de inicio de sesión de {page} está abierta en tu navegador. Al terminar, OpenBot envía el inicio de sesión a {host}.",
+  "mcp.signIn.relayOpenDescription":
+    "Abre la página de inicio de sesión de {page} en este navegador. Al terminar, pega aquí la dirección que muestra el navegador. Después, OpenBot envía el inicio de sesión a {host}.",
+  "mcp.signIn.relayOpen": "Abrir página de inicio de sesión",
+  "mcp.signIn.relayPasteHint": "Si el navegador no vuelve a OpenBot, copia la dirección que muestra y pégala aquí.",
+  "mcp.signIn.relayPasteRequired":
+    "Este navegador no puede entregar el inicio de sesión a OpenBot. Al terminar, copia la dirección que muestra el navegador y pégala aquí.",
+  "mcp.signIn.relayAddress": "Dirección del navegador",
+  "mcp.signIn.relaySend": "Enviar",
+  "mcp.panel.callbackUrlRelayed":
+    "La página de inicio de sesión se abre en tu navegador y OpenBot en tu ordenador envía el inicio de sesión a {host}. Añade exactamente esta URL a las URL de redirección permitidas de la app.",
 } as const satisfies PartialTranslation<typeof source>;

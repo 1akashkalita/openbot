@@ -138,4 +138,17 @@ export const messages = {
   "mcp.panel.removeApp": "アプリを削除",
   "mcp.panel.appSaved": "アプリを保存しました。使用するにはサインインしてください。",
   "mcp.panel.appRemoved": "アプリを削除しました。",
+  "mcp.signIn.relayDescription":
+    "{page} のサインインページがブラウザーで開いています。完了すると、OpenBot がサインインを {host} に送信します。",
+  "mcp.signIn.relayOpenDescription":
+    "このブラウザーで {page} のサインインページを開いてください。完了したら、ブラウザーに表示されたアドレスをここに貼り付けてください。その後、OpenBot がサインインを {host} に送信します。",
+  "mcp.signIn.relayOpen": "サインインページを開く",
+  "mcp.signIn.relayPasteHint":
+    "ブラウザーが OpenBot に戻らない場合は、表示されているアドレスをコピーしてここに貼り付けてください。",
+  "mcp.signIn.relayPasteRequired":
+    "このブラウザーはサインインを OpenBot に渡せません。完了したら、ブラウザーに表示されたアドレスをコピーしてここに貼り付けてください。",
+  "mcp.signIn.relayAddress": "ブラウザーのアドレス",
+  "mcp.signIn.relaySend": "送信",
+  "mcp.panel.callbackUrlRelayed":
+    "サインインページはお使いのブラウザーで開き、このコンピューターの OpenBot がサインインを {host} に送信します。この URL をそのまま、アプリで許可するリダイレクト URL に追加してください。",
 } as const satisfies PartialTranslation<typeof source>;

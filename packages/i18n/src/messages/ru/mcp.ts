@@ -150,4 +150,16 @@ export const messages = {
   "mcp.panel.removeApp": "Удалить приложение",
   "mcp.panel.appSaved": "Приложение сохранено. Войдите, чтобы использовать его.",
   "mcp.panel.appRemoved": "Приложение удалено.",
+  "mcp.signIn.relayDescription":
+    "Страница входа {page} открыта в вашем браузере. Когда вы закончите, OpenBot отправит вход на {host}.",
+  "mcp.signIn.relayOpenDescription":
+    "Откройте страницу входа {page} в этом браузере. Когда закончите, вставьте сюда показанный адрес. Затем OpenBot отправит вход на {host}.",
+  "mcp.signIn.relayOpen": "Открыть страницу входа",
+  "mcp.signIn.relayPasteHint": "Если браузер не вернулся в OpenBot, скопируйте показанный адрес и вставьте его сюда.",
+  "mcp.signIn.relayPasteRequired":
+    "Этот браузер не может передать вход в OpenBot. Когда закончите, скопируйте показанный адрес и вставьте его сюда.",
+  "mcp.signIn.relayAddress": "Адрес в браузере",
+  "mcp.signIn.relaySend": "Отправить",
+  "mcp.panel.callbackUrlRelayed":
+    "Страница входа открывается в вашем браузере, а OpenBot на вашем компьютере отправляет вход на {host}. Добавьте именно этот URL в разрешённые URL перенаправления приложения.",
 } as const satisfies PartialTranslation<typeof source>;

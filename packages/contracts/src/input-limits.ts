@@ -82,6 +82,8 @@ export const INPUT_LIMITS = {
   mcpClientId: 1_024,
   mcpClientSecret: 4_096,
   mcpScope: 2_048,
+  // A relayed sign-in (`sign-in-relay-v1`): the page address and the callback the browser came back to.
+  signInRelayAddress: 8_192,
   teamMembers: 100,
   activeInvites: 100,
   // Permanent links accept unlimited joins until revoked, so a leaked link is open

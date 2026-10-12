@@ -142,4 +142,16 @@ export const messages = {
   "mcp.panel.removeApp": "Remover app",
   "mcp.panel.appSaved": "App salvo. Faça a autenticação para usá-lo.",
   "mcp.panel.appRemoved": "App removido.",
+  "mcp.signIn.relayDescription":
+    "A página de autenticação de {page} está aberta no seu navegador. Quando você terminar, o OpenBot envia a autenticação para {host}.",
+  "mcp.signIn.relayOpenDescription":
+    "Abra a página de autenticação de {page} neste navegador. Quando terminar, cole aqui o endereço que o navegador mostra. O OpenBot então envia a autenticação para {host}.",
+  "mcp.signIn.relayOpen": "Abrir página de autenticação",
+  "mcp.signIn.relayPasteHint": "Se o navegador não voltar ao OpenBot, copie o endereço que ele mostra e cole aqui.",
+  "mcp.signIn.relayPasteRequired":
+    "Este navegador não pode entregar a autenticação ao OpenBot. Quando terminar, copie o endereço que o navegador mostra e cole aqui.",
+  "mcp.signIn.relayAddress": "Endereço do navegador",
+  "mcp.signIn.relaySend": "Enviar",
+  "mcp.panel.callbackUrlRelayed":
+    "A página de autenticação abre no seu navegador, e o OpenBot no seu computador envia a autenticação para {host}. Adicione exatamente esta URL às URLs de redirecionamento permitidas do app.",
 } as const satisfies PartialTranslation<typeof source>;

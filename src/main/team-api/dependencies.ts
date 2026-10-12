@@ -46,6 +46,7 @@ import type { LiveActivityPushService } from "../live-activity-push";
 import type { McpHostSignIns } from "../mcp-host-sign-ins";
 import type { ProviderHostSignIns } from "../provider-host-sign-ins";
 import type { RemoteScreenGateway } from "../remote-screen-gateway";
+import type { SignInRelayHost } from "../sign-in-relay-host";
 import type { TeamStore } from "../team-store";
 
 type TeamApiAgentMethods = Pick<
@@ -142,6 +143,9 @@ export type TeamApiMcpSignIns = Pick<
   McpHostSignIns,
   "start" | "status" | "cancel" | "signOut" | "list" | "app" | "saveApp" | "removeApp"
 >;
+
+/** Its presence, beside `mcpServers`, is what `#protocolSupport` advertises `sign-in-relay-v1` on. */
+export type TeamApiSignInRelay = Pick<SignInRelayHost, "startMcp" | "status" | "complete" | "cancel">;
 
 /**
  * Its presence is what `#protocolSupport` advertises `provider-host-sign-in-v1` on. Only a Linux host
@@ -269,6 +273,7 @@ export interface TeamApiOptions {
   channels?: ChannelService;
   mcpServers?: TeamApiMcpServers;
   mcpSignIns?: TeamApiMcpSignIns;
+  signInRelay?: TeamApiSignInRelay;
   providerHostSignIns?: TeamApiProviderHostSignIns;
   /** Starts and waits for the managed tool runtimes behind the MCP save, enable, and test routes. */
   mcpToolRuntimePreparation?: McpToolRuntimePreparation;

@@ -102,4 +102,8 @@ export const messages = {
   "error.team.agentSettingsUnsupported": "Esta conexão não oferece suporte às configurações de agentes.",
   "error.team.adminRequired": "É necessário acesso de administrador.",
   "error.team.requestTooLarge": "O corpo da solicitação é muito grande.",
+  "error.team.signInRelayUnsupported": "Este servidor não pode retransmitir autenticações. Atualize o OpenBot no host.",
+  "error.team.signInRelayUnknown": "Esta autenticação terminou ou não existe.",
+  "error.team.signInRelayUsed": "Esta autenticação já foi enviada.",
+  "error.team.signInRelayMismatch": "Este endereço não é desta autenticação.",
 } as const satisfies PartialTranslation<typeof source>;

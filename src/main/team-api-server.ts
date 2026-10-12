@@ -53,6 +53,7 @@ import {
   PROVIDERS_V5_CAPABILITY,
   QUIET_TURN_CAPABILITY,
   SHARED_TABLES_CAPABILITY,
+  SIGN_IN_RELAY_CAPABILITY,
   SKILLS_ADMIN_CAPABILITY,
   SKILLS_EVENTS_CAPABILITY,
   STORAGE_CAPABILITY,
@@ -148,6 +149,7 @@ import { routeProviderHostSignIn } from "./team-api/route-provider-host-sign-in"
 import { routeProviders } from "./team-api/route-providers";
 import { routeRemoteScreen } from "./team-api/route-remote-screen";
 import { routeSharedTables } from "./team-api/route-shared-tables";
+import { routeSignInRelay } from "./team-api/route-sign-in-relay";
 import { routeSkillsAdmin } from "./team-api/route-skills-admin";
 import { routeStorage } from "./team-api/route-storage";
 import { routeTeam } from "./team-api/route-team";
@@ -707,6 +709,8 @@ export class TeamApiServer {
         return;
       if ((await routeMcpSignIn(context, this.#options.mcpServers && this.#options.mcpSignIns)) === "handled") return;
       if ((await routeMcpSignInApp(context, this.#options.mcpServers && this.#options.mcpSignIns)) === "handled")
+        return;
+      if ((await routeSignInRelay(context, this.#options.mcpServers && this.#options.signInRelay)) === "handled")
         return;
       if ((await routeProviderHostSignIn(context, this.#options.providerHostSignIns)) === "handled") return;
       if ((await routeStorage(context, this.#options.storage)) === "handled") return;
@@ -1482,6 +1486,8 @@ export class TeamApiServer {
           return this.#options.mcpServers !== undefined && this.#options.mcpSignIns !== undefined;
         if (capability === MCP_SIGN_IN_APP_CAPABILITY)
           return this.#options.mcpServers !== undefined && this.#options.mcpSignIns !== undefined;
+        if (capability === SIGN_IN_RELAY_CAPABILITY)
+          return this.#options.mcpServers !== undefined && this.#options.signInRelay !== undefined;
         if (capability === PROVIDER_HOST_SIGN_IN_CAPABILITY) return this.#options.providerHostSignIns !== undefined;
         if (capability === STORAGE_CAPABILITY) return this.#options.storage !== undefined;
         if (capability === HOSTED_SITES_CAPABILITY) return this.#options.hostedSites !== undefined;

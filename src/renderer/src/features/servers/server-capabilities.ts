@@ -31,6 +31,7 @@ export function serverSupportsCapability(
       capability === "mcp-servers-v1" ||
       capability === "mcp-sign-in-v1" ||
       capability === "mcp-sign-in-app-v1" ||
+      capability === "sign-in-relay-v1" ||
       capability === "provider-host-sign-in-v1" ||
       capability === "storage-v1" ||
       capability === "hosted-sites-v1" ||
@@ -62,12 +63,14 @@ export function serverSupportsCapability(
 }
 
 /**
- * Whether a joined server signs in to an MCP server for this computer: the host opens the page in
- * its own browser, and the live view shows it. The live view streams the active server only.
+ * Whether a joined server signs in to an MCP server for this computer. With `sign-in-relay-v1` the
+ * page opens in this computer's browser and the callback is relayed to the host. An older host opens
+ * the page in its own browser, and the live view shows it; the live view streams the active server only.
  */
 export function remoteMcpSignIn(server: ServerSummary | undefined): boolean {
+  if (server?.kind !== "remote") return false;
+  if (serverSupportsCapability(server, "sign-in-relay-v1")) return true;
   return (
-    server?.kind === "remote" &&
     server.active &&
     serverSupportsCapability(server, "mcp-sign-in-v1") &&
     serverSupportsCapability(server, "browser-view")

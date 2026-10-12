@@ -3,6 +3,7 @@ import type {
   InviteSummary,
   McpServerConfig,
   McpSignInAppState,
+  McpSignInRelayPage,
   McpTestResult,
   SaveMcpSignInAppInput,
   ServerSummary,
@@ -16,7 +17,7 @@ import { desktopAnalytics } from "../../analytics";
 import { createSimpleContext } from "../../simple-context";
 import { mcpSignInRecord } from "./mcp-servers";
 import type { ServerSettingsSection } from "./ServerSettingsModal";
-import { serverCanAdminister, serverRoleCanAdminister } from "./server-capabilities";
+import { serverCanAdminister, serverRoleCanAdminister, serverSupportsCapability } from "./server-capabilities";
 import { useServers } from "./servers-context";
 import { serverAdminPort, serversPort } from "./servers-port";
 
@@ -65,6 +66,10 @@ const ServerSettings = createSimpleContext({
     const [serverSettingsMcpSignIns, setServerSettingsMcpSignIns] = createSignal<Record<string, boolean>>({});
     /** The host tab of each remote sign-in page, by the address it signs in to, while the sign-in waits. */
     const [serverSettingsMcpSignInPages, setServerSettingsMcpSignInPages] = createSignal<Record<string, string>>({});
+    /** The relayed sign-in page of each remote sign-in that waits in this computer's browser (`sign-in-relay-v1`). */
+    const [serverSettingsMcpSignInRelays, setServerSettingsMcpSignInRelays] = createSignal<
+      Record<string, McpSignInRelayPage>
+    >({});
     /** Bumped by every open and refresh, so a slower earlier load cannot paint over a newer one. */
     let serverSettingsRequest = 0;
     /**
@@ -463,7 +468,11 @@ const ServerSettings = createSimpleContext({
       if (!server) throw new Error(currentText().t("server.settings.unavailable"));
       let waiting = true;
       const signIn = serversPort().agent.signInMcpServer({ config }, server.id);
-      if (server.kind === "remote") void followMcpSignInPage(server.id, config.url, () => waiting);
+      if (server.kind === "remote") {
+        if (serverSupportsCapability(server, "sign-in-relay-v1"))
+          void followMcpSignInRelay(server.id, config.url, () => waiting);
+        else void followMcpSignInPage(server.id, config.url, () => waiting);
+      }
       const result = await signIn.finally(() => {
         waiting = false;
       });
@@ -486,6 +495,35 @@ const ServerSettings = createSimpleContext({
       } finally {
         setServerSettingsMcpSignInPages((pages) => withMcpSignInPage(pages, url, null));
       }
+    }
+
+    /** Reads the relayed page of a sign-in until it ends; main opens it in the browser a moment after start. */
+    async function followMcpSignInRelay(serverId: string, url: string, waiting: () => boolean): Promise<void> {
+      const set = (page: McpSignInRelayPage | null) =>
+        setServerSettingsMcpSignInRelays((pages) => {
+          const { [url]: _previous, ...rest } = pages;
+          return page ? { ...rest, [url]: page } : rest;
+        });
+      try {
+        while (waiting()) {
+          const page = await serversPort()
+            .agent.mcpSignInRelay({ url }, serverId)
+            .catch(() => null);
+          if (!waiting()) return;
+          const current = serverSettingsMcpSignInRelays()[url];
+          if (current?.authorizeHost !== page?.authorizeHost || current?.listening !== page?.listening) set(page);
+          await new Promise((resolve) => setTimeout(resolve, MCP_SIGN_IN_PAGE_POLL_MS));
+        }
+      } finally {
+        set(null);
+      }
+    }
+
+    /** The address the browser shows at the end of a relayed sign-in. Main sends only its query to the host. */
+    async function pasteMcpSignInRelay(url: string, address: string): Promise<void> {
+      const server = serverSettingsTarget();
+      if (!server) throw new Error(currentText().t("server.settings.unavailable"));
+      await serversPort().agent.completeMcpSignInRelay({ url, address }, server.id);
     }
 
     async function cancelMcpSignIn(url: string): Promise<void> {
@@ -618,6 +656,8 @@ const ServerSettings = createSimpleContext({
       serverSettingsMcpError,
       serverSettingsMcpSignIns,
       serverSettingsMcpSignInPages,
+      serverSettingsMcpSignInRelays,
+      pasteMcpSignInRelay,
       signInMcpServer,
       cancelMcpSignIn,
       signOutMcpServer,

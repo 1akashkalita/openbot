@@ -99,4 +99,8 @@ export const messages = {
   "error.team.agentSettingsUnsupported": "Ajan ayarları bu bağlantı tarafından desteklenmiyor.",
   "error.team.adminRequired": "Yönetici erişimi gereklidir.",
   "error.team.requestTooLarge": "İstek gövdesi çok büyük.",
+  "error.team.signInRelayUnsupported": "Bu sunucu oturum açmaları aktaramaz. Ana bilgisayardaki OpenBot'u güncelleyin.",
+  "error.team.signInRelayUnknown": "Bu oturum açma sona erdi veya mevcut değil.",
+  "error.team.signInRelayUsed": "Bu oturum açma zaten gönderildi.",
+  "error.team.signInRelayMismatch": "Bu adres bu oturum açmaya ait değil.",
 } as const satisfies PartialTranslation<typeof source>;

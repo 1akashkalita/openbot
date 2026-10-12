@@ -341,6 +341,8 @@ function ServerSettings(props: {
     serverSettingsMcpError,
     serverSettingsMcpSignIns,
     serverSettingsMcpSignInPages,
+    serverSettingsMcpSignInRelays,
+    pasteMcpSignInRelay,
     signInMcpServer,
     cancelMcpSignIn,
     signOutMcpServer,
@@ -565,8 +567,8 @@ function ServerSettings(props: {
           onRemoveMcpServer={removeMcpServer}
           onSetMcpServerEnabled={setMcpServerEnabled}
           onTestMcpServer={testMcpServer}
-          // A sign-in opens the browser of the computer that runs the server. A remote host's page
-          // shows here through the live view, which streams the active server only.
+          // A remote host with `sign-in-relay-v1` opens the page in this computer's browser. An older
+          // host's page shows here through the live view, which streams the active server only.
           mcpSignIn={
             server().kind === "local" || remoteMcpSignIn(server())
               ? {
@@ -578,6 +580,9 @@ function ServerSettings(props: {
                           runtime: conversationPort().browser,
                           clipboard: serverSupportsCapability(server(), "browser-view-clipboard"),
                           pages: serverSettingsMcpSignInPages(),
+                          relay: serverSupportsCapability(server(), "sign-in-relay-v1")
+                            ? { pages: serverSettingsMcpSignInRelays(), paste: pasteMcpSignInRelay }
+                            : undefined,
                         }
                       : undefined,
                   start: signInMcpServer,

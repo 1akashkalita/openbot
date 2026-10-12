@@ -21,6 +21,10 @@ plan's site limit.
 A Grok Bot export that a member imports into a joined server, from the desktop app or the browser, goes
 to the computer that runs that server through the same encrypted host connection, not through the
 account Worker. The host keeps the file only until the import ends, is cancelled, or expires.
+When an owner or admin signs in to an MCP server of a joined server, the sign-in page can open in the
+browser of their own computer. That computer then sends the address the page returns to, which holds
+the sign-in code, to the host through the same encrypted host connection, not through the account
+Worker. Neither computer logs the code, and the host keeps the grant.
 To show each server's state, the browser also keeps a status connection to each host of the account
 that no tab has open, as the mobile app does; the host then shows the member as present. Host logos
 come from the account Worker to members of the host, and the browser can cache them.

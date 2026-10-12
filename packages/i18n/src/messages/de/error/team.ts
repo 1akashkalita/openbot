@@ -102,4 +102,9 @@ export const messages = {
   "error.team.agentSettingsUnsupported": "Diese Verbindung unterstützt keine Agenteneinstellungen.",
   "error.team.adminRequired": "Administratorzugriff ist erforderlich.",
   "error.team.requestTooLarge": "Der Anfragetext ist zu groß.",
+  "error.team.signInRelayUnsupported":
+    "Dieser Server kann keine Anmeldungen weiterleiten. Aktualisiere OpenBot auf dem Host.",
+  "error.team.signInRelayUnknown": "Diese Anmeldung ist beendet oder existiert nicht.",
+  "error.team.signInRelayUsed": "Diese Anmeldung wurde bereits gesendet.",
+  "error.team.signInRelayMismatch": "Diese Adresse gehört nicht zu dieser Anmeldung.",
 } as const satisfies PartialTranslation<typeof source>;

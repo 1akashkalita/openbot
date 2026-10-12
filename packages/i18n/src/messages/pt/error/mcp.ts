@@ -14,4 +14,8 @@ export const messages = {
   "error.mcp.signInOnHost": "A autenticação em um servidor MCP só funciona no OpenBot do computador anfitrião.",
   "error.mcp.signInAppUnsupported":
     "Este servidor não é compatível com apps de autenticação. Atualize o OpenBot no host.",
+  "error.mcp.redirectRelayed": "O OpenBot enviou a autenticação para o servidor. Você pode fechar esta janela.",
+  "error.mcp.relayEnded": "Esta autenticação terminou. Inicie-a novamente.",
+  "error.mcp.relayAddressInvalid":
+    "Este não é o endereço do fim desta autenticação. Copie o endereço completo do navegador.",
 } as const satisfies PartialTranslation<typeof source>;

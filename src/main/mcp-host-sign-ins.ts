@@ -1,4 +1,5 @@
-// MCP sign-ins that an administrator starts on this host from another computer (`mcp-sign-in-v1`).
+// MCP sign-ins that an administrator starts on this host from another computer (`mcp-sign-in-v1`, and
+// `sign-in-relay-v1` through `SignInRelayHost`).
 
 import type {
   McpSignInAppInput,
@@ -57,6 +58,25 @@ export class McpHostSignIns {
       (openPage) => this.#dependencies.service.signInMcpServer(input, openPage),
       resultOf,
     );
+  }
+
+  /**
+   * The same sign-in, with no tab: the page address waits in `relayPage` for the administrator's own
+   * computer to open, and the grant comes back through `SignInRelayHost`.
+   */
+  startRelay(input: TestMcpServerInput) {
+    return this.#pages.start(
+      signInKey(input.config.url),
+      (openPage) => this.#dependencies.service.signInMcpServer(input, openPage),
+      resultOf,
+      "relay",
+    );
+  }
+
+  /** The page address of a relayed sign-in, and how it ended. */
+  relayStatus(url: string): { pageUrl: string | null; result: McpTestResult | null } {
+    const key = signInKey(url);
+    return { pageUrl: this.#pages.pageUrl(key), result: this.status(url).result };
   }
 
   status(url: string): McpSignInStatus {

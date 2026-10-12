@@ -129,6 +129,32 @@ export interface CancelMcpSignInInput {
   url: string;
 }
 
+/**
+ * The address that the browser shows at the end of a relayed sign-in. The user pastes it when this
+ * computer did not take the callback. Main sends only its query to the host.
+ */
+export interface CompleteMcpSignInRelayInput {
+  url: string;
+  address: string;
+}
+
+/**
+ * A sign-in of a joined server that waits in the browser of this computer (`sign-in-relay-v1`): the
+ * host name of the page, and whether this computer listens for the callback. When it does not, the
+ * user pastes the address that the browser shows.
+ */
+export interface McpSignInRelayPage {
+  authorizeHost: string;
+  listening: boolean;
+}
+
+/** One relayed sign-in as its host answers it. `callback` is `null` when the page does not return to a loopback address. */
+export interface SignInRelayStatus {
+  authorizeUrl: string | null;
+  callback: { port: number; path: string; state: string | null } | null;
+  result: McpTestResult | null;
+}
+
 export interface SignOutMcpServerInput {
   mcpServerId: string;
 }
@@ -288,6 +314,59 @@ export function decodeMcpSignInStatus(value: unknown): McpSignInStatus {
   )
     throw new Error("Invalid MCP server response.");
   return { tabId: value.tabId, result: value.result };
+}
+
+/**
+ * The query of a pasted callback address, or `null` when it is not the callback of this sign-in. The
+ * host checks `state` too; this check only gives the user a clear answer before the request.
+ */
+export function relayCallbackQuery(address: string, state: string | null): string | null {
+  try {
+    const url = new URL(address.trim());
+    const params = url.searchParams;
+    if (!params.has("code") && !params.has("error")) return null;
+    if (state !== null && params.get("state") !== state) return null;
+    return url.search.slice(1);
+  } catch {
+    return null;
+  }
+}
+
+export function decodeSignInRelayFlow(value: unknown): { flowId: string } {
+  if (!isDynamicRecord(value) || !isBounded(value.flowId, INPUT_LIMITS.identifier) || value.flowId.length === 0)
+    throw new Error("Invalid sign-in relay response.");
+  return { flowId: value.flowId };
+}
+
+export function decodeSignInRelayStatus(value: unknown): SignInRelayStatus {
+  if (
+    !isDynamicRecord(value) ||
+    (value.authorizeUrl !== null && !isBounded(value.authorizeUrl, INPUT_LIMITS.signInRelayAddress)) ||
+    (value.callback !== null && !isSignInRelayCallback(value.callback)) ||
+    (value.result !== null && !isMcpTestResult(value.result))
+  )
+    throw new Error("Invalid sign-in relay response.");
+  return { authorizeUrl: value.authorizeUrl, callback: value.callback, result: value.result };
+}
+
+function isSignInRelayCallback(value: unknown): value is NonNullable<SignInRelayStatus["callback"]> {
+  return (
+    isDynamicRecord(value) &&
+    isNumber(value.port) &&
+    Number.isInteger(value.port) &&
+    value.port > 0 &&
+    value.port < 65_536 &&
+    isBounded(value.path, INPUT_LIMITS.mcpUrl) &&
+    (value.state === null || isBounded(value.state, INPUT_LIMITS.mcpClientId))
+  );
+}
+
+/** The page of a relayed sign-in that waits on this computer, or `null`. */
+export function decodeMcpSignInRelayPage(value: unknown): McpSignInRelayPage | null {
+  if (value === null) return null;
+  if (!isDynamicRecord(value) || !isBounded(value.authorizeHost, INPUT_LIMITS.mcpUrl) || !isBoolean(value.listening))
+    throw new Error("Invalid MCP server response.");
+  return { authorizeHost: value.authorizeHost, listening: value.listening };
 }
 
 /** The host tab that shows a remote sign-in page, or `null` while there is none. */

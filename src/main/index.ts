@@ -426,6 +426,7 @@ function attachWindowsSessionEndHandlers(window: BrowserWindow): void {
 
 function registerIpcHandlers({
   service,
+  signInRelayClient,
   providerRuntimes,
   providerCredentials,
   messaging,
@@ -594,6 +595,7 @@ function registerIpcHandlers({
       },
       ensureToolRuntimesReady: () => providerRuntimes.ensureToolRuntimesReady(),
       toolRuntimes: () => providerRuntimes.mcpToolRuntimes(),
+      relay: signInRelayClient,
     }),
     ...attachmentIpcHandlers({ service, mailbox, remoteServers, getMainWindow, translate: language.translate }),
     ...storageIpcHandlers({
@@ -810,12 +812,18 @@ function receiveDiscordSignIn(link: Extract<DeepLink, { kind: "discord-guild" }>
 /**
  * Hands one MCP sign-in the grant it is waiting for, and shows the window that asked for it.
  *
- * The grant travels no further. A `state` this run did not start finds no sign-in and does nothing,
- * which is what makes a forged or replayed link inert - so an unknown one raises no window either.
+ * The grant travels no further, except to the joined server whose relayed sign-in waits for that
+ * `state`. A `state` that nothing started finds no sign-in and does nothing, which is what makes a
+ * forged or replayed link inert - so an unknown one raises no window either.
  */
 function receiveMcpAuthorizationCode(state: string, code: string): void {
   const elsewhere = services?.mcpOAuth.openedElsewhere(state) ?? false;
-  if (!services?.mcpOAuth.receiveAuthorizationCode(state, code) || elsewhere) return;
+  if (!services?.mcpOAuth.receiveAuthorizationCode(state, code)) {
+    // A joined server's sign-in that waits on this computer; it ends on the host, so no window shows.
+    services?.signInRelayClient.deliver(state, new URLSearchParams({ code, state }).toString());
+    return;
+  }
+  if (elsewhere) return;
   const window = windowHolder.current;
   if (window && !window.isDestroyed()) showMainWindow(window);
 }

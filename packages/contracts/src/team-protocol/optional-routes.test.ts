@@ -23,6 +23,7 @@ import { optionalRouteCodec } from "./optional-routes";
 import { PROVIDERS_ADMIN_ROUTES } from "./providers-v1";
 import { PROVIDERS_SIGN_IN_V3_ROUTES } from "./providers-v3";
 import { SHARED_TABLES_ROUTES } from "./shared-tables-v1";
+import { SIGN_IN_RELAY_CAPABILITY, SIGN_IN_RELAY_ROUTES } from "./sign-in-relay-v1";
 import { SKILLS_ADMIN_ROUTES } from "./skills-admin-v1";
 import { decodeTeamProtocolSupportV1 } from "./v1";
 import { decodeTeamProtocolSupportV6Base } from "./v6-base";
@@ -653,5 +654,40 @@ describe("mcp-sign-in-app-v1", () => {
   it("is advertised only to a protocol 7 peer", () => {
     expect(TEAM_CURRENT_CAPABILITIES).toContain(MCP_SIGN_IN_APP_CAPABILITY);
     expect(TEAM_BOOTSTRAP_CAPABILITIES).not.toContain(MCP_SIGN_IN_APP_CAPABILITY);
+  });
+});
+
+describe("sign-in-relay-v1", () => {
+  const flow = {
+    authorizeUrl: "https://auth.example.com/authorize?client_id=openbot",
+    callback: { port: 28417, path: "/mcp-auth", state: "state-1" },
+    result: null,
+  };
+
+  // The client sends only the query of the callback. It cannot name the host address it reaches.
+  it("sends only a flow and a query to the host", () => {
+    const complete = { flowId: "flow-1", query: "code=abc&state=state-1" };
+    expect(codec(SIGN_IN_RELAY_ROUTES.complete).request({ ...complete, port: 22, path: "/admin" })).toEqual(complete);
+    expect(() => codec(SIGN_IN_RELAY_ROUTES.complete).request({ ...complete, query: "x".repeat(8_193) })).toThrow();
+    expect(() => codec(SIGN_IN_RELAY_ROUTES.status).request({ flowId: "" })).toThrow();
+  });
+
+  it("round-trips a flow and rejects malformed answers", () => {
+    for (const path of [SIGN_IN_RELAY_ROUTES.status, SIGN_IN_RELAY_ROUTES.complete]) {
+      expect(codec(path).response(200, flow)).toEqual(flow);
+      expect(
+        codec(path).response(200, { authorizeUrl: null, callback: null, result: { error: null, toolCount: 3 } }),
+      ).toEqual({ authorizeUrl: null, callback: null, result: { error: null, toolCount: 3 } });
+      expect(() => codec(path).response(200, { ...flow, callback: { ...flow.callback, port: -1 } })).toThrow();
+    }
+    expect(codec(SIGN_IN_RELAY_ROUTES.mcpStart).response(200, { flowId: "flow-1", expiresAt: 1 })).toEqual({
+      flowId: "flow-1",
+      expiresAt: 1,
+    });
+  });
+
+  it("is advertised only to a protocol 7 peer", () => {
+    expect(TEAM_CURRENT_CAPABILITIES).toContain(SIGN_IN_RELAY_CAPABILITY);
+    expect(TEAM_BOOTSTRAP_CAPABILITIES).not.toContain(SIGN_IN_RELAY_CAPABILITY);
   });
 });

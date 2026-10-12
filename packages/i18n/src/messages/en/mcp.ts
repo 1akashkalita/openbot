@@ -139,4 +139,17 @@ export const messages = defineMessages("mcp", {
   "mcp.panel.removeApp": "Remove app",
   "mcp.panel.appSaved": "App saved. Sign in to use it.",
   "mcp.panel.appRemoved": "App removed.",
+  "mcp.signIn.relayDescription":
+    "The sign-in page of {page} is open in your browser. When you finish, OpenBot sends the sign-in to {host}.",
+  "mcp.signIn.relayOpenDescription":
+    "Open the sign-in page of {page} in this browser. When you finish, paste the address that the browser shows here. OpenBot then sends the sign-in to {host}.",
+  "mcp.signIn.relayOpen": "Open sign-in page",
+  "mcp.signIn.relayPasteHint":
+    "If the browser does not come back to OpenBot, copy the address that it shows and paste it here.",
+  "mcp.signIn.relayPasteRequired":
+    "This browser cannot give the sign-in to OpenBot. When you finish, copy the address that the browser shows and paste it here.",
+  "mcp.signIn.relayAddress": "Browser address",
+  "mcp.signIn.relaySend": "Send",
+  "mcp.panel.callbackUrlRelayed":
+    "The sign-in page opens in your browser, and OpenBot on your computer sends the sign-in to {host}. Add this exact URL to the allowed redirect URLs of the app.",
 });

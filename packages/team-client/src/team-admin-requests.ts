@@ -49,6 +49,8 @@ import {
   decodeProviderCodeLoginStart,
   decodeProviderHostSignInStatus,
   decodeProviderRuntimeSnapshot,
+  decodeSignInRelayFlow,
+  decodeSignInRelayStatus,
   decodeStorageUsage,
   type GetStorageUsageInput,
   type HostedSiteList,
@@ -79,6 +81,7 @@ import {
   type SetMcpServerEnabledInput,
   type SetProviderApiKeyInput,
   type SharedTable,
+  type SignInRelayStatus,
   type SignOutMcpServerInput,
   type SubmitProviderCodeLoginInput,
   type TestMcpServerInput,
@@ -122,6 +125,7 @@ import type { PROVIDERS_RUNTIMES_V2_ROUTES } from "@openbot/contracts/team-proto
 import { PROVIDERS_SIGN_IN_V3_ROUTES } from "@openbot/contracts/team-protocol/providers-v3";
 import type { PROVIDERS_V4_ROUTES } from "@openbot/contracts/team-protocol/providers-v4";
 import { SHARED_TABLES_ROUTES } from "@openbot/contracts/team-protocol/shared-tables-v1";
+import { SIGN_IN_RELAY_ROUTES } from "@openbot/contracts/team-protocol/sign-in-relay-v1";
 import { SKILLS_ADMIN_ROUTES } from "@openbot/contracts/team-protocol/skills-admin-v1";
 import { STORAGE_ROUTES } from "@openbot/contracts/team-protocol/storage-v1";
 import type { TeamProtocolV2Json } from "@openbot/contracts/team-protocol/v2";
@@ -461,6 +465,39 @@ export function cancelMcpSignIn(
   input: CancelMcpSignInInput,
 ): Effect.Effect<void, TeamAdminRequestError> {
   return adminCall(() => request("POST", MCP_SIGN_IN_ROUTES.cancel, ignoreResponse, { url: input.url }));
+}
+
+/**
+ * A relayed sign-in (`sign-in-relay-v1`): the host starts it and opens no page. The client opens the
+ * page in the user's own browser and sends the query of the callback back with `completeSignInRelay`.
+ */
+export function startMcpSignInRelay(
+  request: TeamApiRequest,
+  input: TestMcpServerInput,
+): Effect.Effect<{ flowId: string }, TeamAdminRequestError> {
+  return adminCall(() =>
+    request("POST", SIGN_IN_RELAY_ROUTES.mcpStart, decodeSignInRelayFlow, { config: mcpConfig(input.config) }),
+  );
+}
+
+export function signInRelayStatus(
+  request: TeamApiRequest,
+  flowId: string,
+): Effect.Effect<SignInRelayStatus, TeamAdminRequestError> {
+  return adminCall(() => request("POST", SIGN_IN_RELAY_ROUTES.status, decodeSignInRelayStatus, { flowId }));
+}
+
+/** `query` holds a grant. It goes only to the host, on the encrypted Team channel. */
+export function completeSignInRelay(
+  request: TeamApiRequest,
+  flowId: string,
+  query: string,
+): Effect.Effect<SignInRelayStatus, TeamAdminRequestError> {
+  return adminCall(() => request("POST", SIGN_IN_RELAY_ROUTES.complete, decodeSignInRelayStatus, { flowId, query }));
+}
+
+export function cancelSignInRelay(request: TeamApiRequest, flowId: string): Effect.Effect<void, TeamAdminRequestError> {
+  return adminCall(() => request("POST", SIGN_IN_RELAY_ROUTES.cancel, ignoreResponse, { flowId }));
 }
 
 export function signOutMcpServer(

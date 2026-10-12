@@ -100,4 +100,8 @@ export const messages = {
   "error.team.agentSettingsUnsupported": "Это подключение не поддерживает настройки агентов.",
   "error.team.adminRequired": "Требуется доступ администратора.",
   "error.team.requestTooLarge": "Тело запроса слишком большое.",
+  "error.team.signInRelayUnsupported": "Этот сервер не может передавать входы. Обновите OpenBot на хосте.",
+  "error.team.signInRelayUnknown": "Этот вход завершён или не существует.",
+  "error.team.signInRelayUsed": "Этот вход уже отправлен.",
+  "error.team.signInRelayMismatch": "Этот адрес не относится к этому входу.",
 } as const satisfies PartialTranslation<typeof source>;

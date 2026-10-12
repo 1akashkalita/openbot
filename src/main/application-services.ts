@@ -158,7 +158,11 @@ import {
 } from "./main-window";
 import { ManagedSkillService } from "./managed-skill-service";
 import { McpHostSignIns } from "./mcp-host-sign-ins";
-import { MCP_OAUTH_REDIRECT_PORT, startMcpOAuthRedirectServer } from "./mcp-oauth-redirect-server";
+import {
+  MCP_OAUTH_REDIRECT_PATH,
+  MCP_OAUTH_REDIRECT_PORT,
+  startMcpOAuthRedirectServer,
+} from "./mcp-oauth-redirect-server";
 import { McpOAuthStore } from "./mcp-oauth-store";
 import { MessagingCredentialStore } from "./messaging-credential-store";
 import { NotificationPreferenceStore } from "./notification-preference-store";
@@ -195,6 +199,8 @@ import {
   configureServerLogoProtocols,
 } from "./session-configuration";
 import { readSetupState } from "./setup-store";
+import { SignInRelayClient } from "./sign-in-relay-client";
+import { SignInRelayHost } from "./sign-in-relay-host";
 import { SignalIngress } from "./signal-ingress";
 import { SkillMarketplaceService } from "./skill-marketplace-service";
 import { SLACK_DEV_CALLBACK_PATH, startSlackDevCallbackServer } from "./slack-dev-callback-server";
@@ -372,6 +378,8 @@ export interface ApplicationServices {
   messaging: MessagingService;
   /** Reached by the entry point for one thing only: handing a returning grant to its sign-in. */
   mcpOAuth: McpOAuth;
+  /** The sign-ins of joined servers that wait in this computer's browser, and the callbacks they take. */
+  signInRelayClient: SignInRelayClient;
   githubConnector: GitHubConnectorService;
   onePasswordConnector: OnePasswordConnectorService;
   bitwardenConnector: BitwardenConnectorService;
@@ -1019,12 +1027,23 @@ export async function createApplicationServices({
   // in between - a browser tab left open on a previous run reaches this port on its own. It is
   // held rather than closed over, so that request is refused instead of raising in the listener.
   let mcpOAuthAuthority: McpOAuth | null = null;
+  // A joined server's sign-in can send its callback to this same port: the host's own listener
+  // uses the same port number. A `state` that no local sign-in started goes to the relay.
+  const signInRelayClient = new SignInRelayClient({
+    openExternal: (url) => shell.openExternal(url),
+    language,
+    ownListener: () =>
+      mcpOAuthRedirect
+        ? { port: Number(new URL(mcpOAuthRedirect.redirectUrl).port), path: MCP_OAUTH_REDIRECT_PATH }
+        : null,
+  });
   const mcpOAuthRedirect = await startMcpOAuthRedirectServer({
     language,
     preferredPort: MCP_OAUTH_REDIRECT_PORT,
-    deliver: (state, code) => {
+    deliver: (state, code, query) => {
       const elsewhere = mcpOAuthAuthority?.openedElsewhere(state) ?? false;
-      if (!mcpOAuthAuthority?.receiveAuthorizationCode(state, code)) return false;
+      if (!mcpOAuthAuthority?.receiveAuthorizationCode(state, code))
+        return signInRelayClient.deliver(state, query) ? "relayed" : false;
       if (elsewhere) return true;
       const current = windows.getMainWindow();
       if (current && !current.isDestroyed()) showMainWindow(current);
@@ -1620,6 +1639,11 @@ export async function createApplicationServices({
     join(app.getPath("userData"), "agent-import-uploads"),
   );
   const mcpHostSignIns = new McpHostSignIns({ service, browser });
+  // The flows end with the sign-ins they relay, which `mcpHostSignIns` closes.
+  const signInRelayHost = new SignInRelayHost({
+    mcp: mcpHostSignIns,
+    receiveMcpGrant: (state, code) => mcpOAuth.receiveAuthorizationCode(state, code),
+  });
   teardown.push(TEARDOWN_ORDER.mcpHostSignIns, "MCP sign-ins of joined servers", () =>
     Effect.runPromise(mcpHostSignIns.close()),
   );
@@ -1646,6 +1670,8 @@ export async function createApplicationServices({
     mcpServers: service,
     // Present, so the host advertises `mcp-sign-in-v1`. The routes are admin-only.
     mcpSignIns: mcpHostSignIns,
+    // Present, so the host advertises `sign-in-relay-v1`. The routes are admin-only.
+    signInRelay: signInRelayHost,
     // Present on Linux, so the host advertises `provider-host-sign-in-v1`. The routes are admin-only.
     providerHostSignIns,
     // Present, so the host advertises `storage-v1`. Members read; only admins delete or clear.
@@ -2237,6 +2263,7 @@ export async function createApplicationServices({
     providerCredentials,
     messaging,
     mcpOAuth,
+    signInRelayClient,
     githubConnector,
     onePasswordConnector,
     bitwardenConnector,

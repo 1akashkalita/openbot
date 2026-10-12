@@ -151,4 +151,16 @@ export const messages = {
   "mcp.panel.removeApp": "Usuń aplikację",
   "mcp.panel.appSaved": "Aplikacja zapisana. Zaloguj się, aby jej użyć.",
   "mcp.panel.appRemoved": "Aplikacja usunięta.",
+  "mcp.signIn.relayDescription":
+    "Strona logowania {page} jest otwarta w Twojej przeglądarce. Gdy skończysz, OpenBot wyśle logowanie do {host}.",
+  "mcp.signIn.relayOpenDescription":
+    "Otwórz stronę logowania {page} w tej przeglądarce. Gdy skończysz, wklej tutaj wyświetlany adres. OpenBot wyśle wtedy logowanie do {host}.",
+  "mcp.signIn.relayOpen": "Otwórz stronę logowania",
+  "mcp.signIn.relayPasteHint": "Jeśli przeglądarka nie wróci do OpenBot, skopiuj wyświetlany adres i wklej go tutaj.",
+  "mcp.signIn.relayPasteRequired":
+    "Ta przeglądarka nie może przekazać logowania do OpenBot. Gdy skończysz, skopiuj wyświetlany adres i wklej go tutaj.",
+  "mcp.signIn.relayAddress": "Adres z przeglądarki",
+  "mcp.signIn.relaySend": "Wyślij",
+  "mcp.panel.callbackUrlRelayed":
+    "Strona logowania otwiera się w Twojej przeglądarce, a OpenBot na Twoim komputerze wysyła logowanie do {host}. Dodaj dokładnie ten adres URL do dozwolonych adresów przekierowania aplikacji.",
 } as const satisfies PartialTranslation<typeof source>;

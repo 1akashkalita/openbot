@@ -13,4 +13,8 @@ export const messages = {
   "error.mcp.unsupported": "Dieser Server unterstützt keine MCP-Server.",
   "error.mcp.signInOnHost": "Die Anmeldung bei einem MCP-Server funktioniert nur in OpenBot auf dem Host-Computer.",
   "error.mcp.signInAppUnsupported": "Dieser Server unterstützt keine Anmelde-Apps. Aktualisiere OpenBot auf dem Host.",
+  "error.mcp.redirectRelayed": "OpenBot hat die Anmeldung an den Server gesendet. Du kannst dieses Fenster schließen.",
+  "error.mcp.relayEnded": "Diese Anmeldung ist beendet. Starte sie erneut.",
+  "error.mcp.relayAddressInvalid":
+    "Das ist nicht die Adresse am Ende dieser Anmeldung. Kopiere die vollständige Adresse aus dem Browser.",
 } as const satisfies PartialTranslation<typeof source>;

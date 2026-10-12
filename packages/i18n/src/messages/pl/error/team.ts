@@ -99,4 +99,8 @@ export const messages = {
   "error.team.agentSettingsUnsupported": "To połączenie nie obsługuje ustawień agentów.",
   "error.team.adminRequired": "Wymagany jest dostęp administratora.",
   "error.team.requestTooLarge": "Treść żądania jest za duża.",
+  "error.team.signInRelayUnsupported": "Ten serwer nie może przekazywać logowań. Zaktualizuj OpenBot na hoście.",
+  "error.team.signInRelayUnknown": "To logowanie się zakończyło albo nie istnieje.",
+  "error.team.signInRelayUsed": "To logowanie zostało już wysłane.",
+  "error.team.signInRelayMismatch": "Ten adres nie pochodzi z tego logowania.",
 } as const satisfies PartialTranslation<typeof source>;

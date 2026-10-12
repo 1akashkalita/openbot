@@ -1264,6 +1264,8 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
         }),
       // The preview is this computer, which shows no host page.
       mcpSignInPage: async () => null,
+      mcpSignInRelay: async () => null,
+      completeMcpSignInRelay: async () => undefined,
       cancelMcpSignIn: async () => {
         cancelPendingMcpSignIn?.();
       },

@@ -7,6 +7,7 @@
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import type {
   CancelMcpSignInInput,
+  CompleteMcpSignInRelayInput,
   McpKeyValue,
   McpServerConfig,
   McpSignInAppInput,
@@ -38,6 +39,14 @@ export function parseRemoveMcpServer(value: unknown): RemoveMcpServerInput {
 export function parseCancelMcpSignIn(value: unknown): CancelMcpSignInInput {
   if (!isObject(value)) throw new Error("An MCP server is required.");
   return { url: requireString(value.url, "Address", INPUT_LIMITS.mcpUrl) };
+}
+
+export function parseCompleteMcpSignInRelay(value: unknown): CompleteMcpSignInRelayInput {
+  if (!isObject(value)) throw new Error("An MCP server is required.");
+  return {
+    url: requireString(value.url, "Address", INPUT_LIMITS.mcpUrl),
+    address: requireString(value.address, "Address", INPUT_LIMITS.signInRelayAddress),
+  };
 }
 
 export function parseMcpSignInApp(value: unknown): McpSignInAppInput {

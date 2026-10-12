@@ -98,4 +98,8 @@ export const messages = defineMessages("error.team", {
   "error.team.agentSettingsUnsupported": "Agent settings are not supported by this connection.",
   "error.team.adminRequired": "Administrator access is required.",
   "error.team.requestTooLarge": "Request body is too large.",
+  "error.team.signInRelayUnsupported": "This server cannot relay sign-ins. Update OpenBot on the host.",
+  "error.team.signInRelayUnknown": "This sign-in ended or does not exist.",
+  "error.team.signInRelayUsed": "This sign-in was already sent.",
+  "error.team.signInRelayMismatch": "This address is not from this sign-in.",
 });

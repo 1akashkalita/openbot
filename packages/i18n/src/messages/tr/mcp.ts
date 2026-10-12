@@ -140,4 +140,16 @@ export const messages = {
   "mcp.panel.removeApp": "Uygulamayı kaldır",
   "mcp.panel.appSaved": "Uygulama kaydedildi. Kullanmak için oturum açın.",
   "mcp.panel.appRemoved": "Uygulama kaldırıldı.",
+  "mcp.signIn.relayDescription":
+    "{page} oturum açma sayfası tarayıcınızda açık. Bitirdiğinizde OpenBot oturum açmayı {host} sunucusuna gönderir.",
+  "mcp.signIn.relayOpenDescription":
+    "{page} oturum açma sayfasını bu tarayıcıda açın. Bitirdiğinizde tarayıcının gösterdiği adresi buraya yapıştırın. OpenBot ardından oturum açmayı {host} sunucusuna gönderir.",
+  "mcp.signIn.relayOpen": "Oturum açma sayfasını aç",
+  "mcp.signIn.relayPasteHint": "Tarayıcı OpenBot'a geri dönmezse gösterdiği adresi kopyalayıp buraya yapıştırın.",
+  "mcp.signIn.relayPasteRequired":
+    "Bu tarayıcı oturum açmayı OpenBot'a iletemez. Bitirdiğinizde tarayıcının gösterdiği adresi kopyalayıp buraya yapıştırın.",
+  "mcp.signIn.relayAddress": "Tarayıcı adresi",
+  "mcp.signIn.relaySend": "Gönder",
+  "mcp.panel.callbackUrlRelayed":
+    "Oturum açma sayfası tarayıcınızda açılır ve bilgisayarınızdaki OpenBot oturum açmayı {host} sunucusuna gönderir. Bu URL'yi tam olarak uygulamanın izin verilen yönlendirme URL'lerine ekleyin.",
 } as const satisfies PartialTranslation<typeof source>;
