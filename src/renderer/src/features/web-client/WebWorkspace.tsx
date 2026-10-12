@@ -14,11 +14,13 @@ import {
 } from "@openbot/contracts/ipc";
 import { AGENT_HOST_SETTINGS_ROUTES } from "@openbot/contracts/team-protocol/agent-host-settings-v1";
 import { AGENT_IMPORT_CAPABILITY } from "@openbot/contracts/team-protocol/agent-import-v1";
+import { CONNECTORS_CAPABILITY } from "@openbot/contracts/team-protocol/connectors-v1";
 import { CONTEXT_RESET_CAPABILITY } from "@openbot/contracts/team-protocol/context-reset-v1";
 import { EVENTS_CAPABILITY } from "@openbot/contracts/team-protocol/events-v1";
 import { HOST_RELEASE_CAPABILITY } from "@openbot/contracts/team-protocol/host-release-v1";
 import { HOSTED_SITES_CAPABILITY } from "@openbot/contracts/team-protocol/hosted-sites-v1";
 import { MCP_SIGN_IN_CAPABILITY } from "@openbot/contracts/team-protocol/mcp-sign-in-v1";
+import { SIGN_IN_RELAY_CAPABILITY } from "@openbot/contracts/team-protocol/sign-in-relay-v1";
 import { runTeamEffect } from "@openbot/team-client";
 import {
   cancelHostUpdate,
@@ -76,6 +78,7 @@ import { readChannelSelection, writeChannelSelection } from "../channels/channel
 import { ChannelsControllerProvider } from "../channels/channels-context";
 import { createChannelsController } from "../channels/channels-controller";
 import { globalSearchChannels } from "../channels/global-search-channels";
+import { createGitHubConnector } from "../connectors/github-connector";
 import { Conversation, createConversationController } from "../conversation/Conversation";
 import { clearStoredQueueEdit } from "../conversation/composer-draft";
 import { ConversationControllerProvider } from "../conversation/conversation-controller-context";
@@ -103,6 +106,7 @@ import { createWebWorkspace, type WebRuntimeFactory } from "./web-client-context
 import { createWebConversationRuntime } from "./web-conversation-runtime";
 import { createWebConversationView } from "./web-conversation-view";
 import { createWebFileSaver } from "./web-file-download";
+import { webGitHubConnectorPort } from "./web-github-connector";
 import { createWebHostedServerCalls } from "./web-hosted-servers";
 import { createWebAgentTemplateCalls, createWebMarketplaceCalls } from "./web-marketplace";
 import { createWebServerNotifications } from "./web-notification-preferences";
@@ -531,6 +535,9 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     () =>
       workspace.state.capabilities.includes("agent-session-settings-v1") &&
       (workspace.state.host?.role === "owner" || workspace.state.host?.role === "admin"),
+    () =>
+      workspace.state.capabilities.includes(SIGN_IN_RELAY_CAPABILITY) &&
+      (workspace.state.host?.role === "owner" || workspace.state.host?.role === "admin"),
   );
   const remoteAgentAdmin = createRemoteAgentAdmin(
     () => {
@@ -571,8 +578,27 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     admin: () => workspace.runtime.admin,
     presence: () => workspace.state.presence,
     refreshHosts: () => workspace.refreshHosts(),
+    relaySupported: () => workspace.state.capabilities.includes(SIGN_IN_RELAY_CAPABILITY),
   });
   const marketplaceCalls = createWebMarketplaceCalls(props.accountFetch, hostRequest);
+  // The host's GitHub connection, for an owner or admin, when the host has a GitHub App.
+  const githubPort = webGitHubConnectorPort(() => hostRequest());
+  const githubController = createGitHubConnector(
+    () => githubPort,
+    () => server()?.name ?? null,
+  );
+  const githubEnabled = createMemo(
+    () =>
+      workspace.state.capabilities.includes(CONNECTORS_CAPABILITY) &&
+      (workspace.state.host?.role === "owner" || workspace.state.host?.role === "admin"),
+  );
+  createEffect(
+    () => githubEnabled() && server()?.id,
+    (id) => {
+      if (id) githubController.reload();
+    },
+  );
+  const githubConnector = () => (githubEnabled() && githubController.status().available ? githubController : undefined);
   const agentTemplateCalls = createWebAgentTemplateCalls(props.accountFetch, hostRequest);
   const [marketplaceOpen, setMarketplaceOpen] = createSignal(false);
   // A link opens its overlay once it has arrived, which can be after sign-in.
@@ -891,8 +917,9 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
   );
   /** The host opens an MCP sign-in page in its own browser, and the live view shows it here. */
   const mcpSignInSupported = () =>
-    workspace.state.capabilities.includes(MCP_SIGN_IN_CAPABILITY) &&
-    workspace.state.capabilities.includes("browser-view");
+    workspace.state.capabilities.includes(SIGN_IN_RELAY_CAPABILITY) ||
+    (workspace.state.capabilities.includes(MCP_SIGN_IN_CAPABILITY) &&
+      workspace.state.capabilities.includes("browser-view"));
   const browserTakeover = createMemo(() => {
     const agent = workspace.selected();
     if (!agent) return undefined;
@@ -1296,6 +1323,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                 open={marketplaceOpen()}
                 onOpenChange={setMarketplaceOpen}
                 calls={marketplaceCalls}
+                githubConnector={githubConnector()}
                 server={server()}
                 agents={workspace.state.agents}
                 activeAgentId={workspace.state.selectedId ?? ""}
@@ -1347,6 +1375,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                     remoteDesktopSupported={false}
                     server={target()}
                     hostStatus={null}
+                    githubConnector={githubConnector()}
                     members={serverSettings.state.members}
                     invites={serverSettings.state.invites}
                     loading={serverSettings.state.loading}
@@ -1378,7 +1407,8 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                     onRemoveMcpServer={serverSettings.removeMcpServer}
                     onSetMcpServerEnabled={serverSettings.setMcpServerEnabled}
                     onTestMcpServer={serverSettings.testMcpServer}
-                    // The host opens the sign-in page in its own browser, and the live view shows it here.
+                    // A host with `sign-in-relay-v1` signs in through this browser and a pasted address.
+                    // An older host opens the page in its own browser, and the live view shows it here.
                     mcpSignIn={
                       mcpSignInSupported()
                         ? {
@@ -1388,10 +1418,24 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                               runtime: workspace.runtime.browser,
                               clipboard: workspace.state.capabilities.includes("browser-view-clipboard"),
                               pages: serverSettings.state.mcpSignInPages,
+                              relay: workspace.state.capabilities.includes(SIGN_IN_RELAY_CAPABILITY)
+                                ? {
+                                    pages: serverSettings.state.mcpSignInRelays,
+                                    paste: serverSettings.pasteMcpSignInRelay,
+                                    open: serverSettings.openMcpSignInRelay,
+                                  }
+                                : undefined,
                             },
                             start: serverSettings.signInMcpServer,
                             cancel: serverSettings.cancelMcpSignIn,
                             signOut: serverSettings.signOutMcpServer,
+                            app: workspace.state.capabilities.includes("mcp-sign-in-app-v1")
+                              ? {
+                                  load: serverSettings.mcpSignInApp,
+                                  save: serverSettings.saveMcpSignInApp,
+                                  remove: serverSettings.removeMcpSignInApp,
+                                }
+                              : undefined,
                           }
                         : undefined
                     }

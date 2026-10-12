@@ -29,7 +29,9 @@ export interface ConversationRuntime {
     | "previewWorkspaceFile"
     | "respondToBrowserSecret"
     | "setMessageReaction"
-  >;
+  > &
+    // A joined server's sign-in link that the host relays. Absent, a link opens with `openUrl`.
+    Partial<Pick<OpenBotDesktopApi["agent"], "openMessageLink" | "pasteMessageLink" | "cancelMessageLink">>;
   browser: Pick<
     OpenBotDesktopApi["browser"],
     | "capturePreview"

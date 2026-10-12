@@ -251,4 +251,11 @@ export const messages = {
   "error.backend.mcpServerHttpCredentials": "Сервер ответил {status}. Проверьте API-ключ или другие учётные данные.",
   "error.backend.mcpServerHttpUrl":
     "Сервер ответил {status}. Проверьте URL. Ссылка может быть неверной, устаревшей или удалённой.",
+  "error.backend.mcpSignInAppUrl": "Для приложения входа нужен правильный URL сервера.",
+  "error.backend.mcpSignInAppClientId": "Введите ID клиента приложения входа.",
+  "error.backend.mcpSignInAppIssuerChanged":
+    "Сервер входа этого MCP-сервера изменился, поэтому OpenBot не отправил ему приложение входа. Если это изменение верно, удалите приложение входа и добавьте его снова.",
+  "error.backend.mcpSignInAppNoServer":
+    "Сохраните этот MCP-сервер как URL-сервер, прежде чем добавлять приложение входа.",
+  "error.backend.mcpSignInAppUnavailable": "Этот компьютер не может хранить приложение входа.",
 } as const satisfies PartialTranslation<typeof source>;

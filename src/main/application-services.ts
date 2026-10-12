@@ -158,7 +158,11 @@ import {
 } from "./main-window";
 import { ManagedSkillService } from "./managed-skill-service";
 import { McpHostSignIns } from "./mcp-host-sign-ins";
-import { startMcpOAuthRedirectServer } from "./mcp-oauth-redirect-server";
+import {
+  MCP_OAUTH_REDIRECT_PATH,
+  MCP_OAUTH_REDIRECT_PORT,
+  startMcpOAuthRedirectServer,
+} from "./mcp-oauth-redirect-server";
 import { McpOAuthStore } from "./mcp-oauth-store";
 import { MessagingCredentialStore } from "./messaging-credential-store";
 import { NotificationPreferenceStore } from "./notification-preference-store";
@@ -172,6 +176,7 @@ import { startProviderLog } from "./provider-log";
 import { toProviderRuntimeFailure } from "./provider-runtime-effects";
 import { ProviderRuntimeManager, providerRuntimeRoot, runtimeTarget } from "./provider-runtime-manager";
 import { ProviderUseSettingsStore } from "./provider-use-settings-store";
+import { RelayedMessagingInstalls } from "./relayed-messaging-installs";
 import { decodeQueuedMessageReceipt } from "./remote-agent-decoding";
 import { RemoteConnectTrace } from "./remote-connect-trace";
 import { RemoteDesktopManager } from "./remote-desktop-manager";
@@ -195,6 +200,8 @@ import {
   configureServerLogoProtocols,
 } from "./session-configuration";
 import { readSetupState } from "./setup-store";
+import { SignInRelayClient } from "./sign-in-relay-client";
+import { agentPrintedLink, SignInRelayHost } from "./sign-in-relay-host";
 import { SignalIngress } from "./signal-ingress";
 import { SkillMarketplaceService } from "./skill-marketplace-service";
 import { SLACK_DEV_CALLBACK_PATH, startSlackDevCallbackServer } from "./slack-dev-callback-server";
@@ -372,6 +379,10 @@ export interface ApplicationServices {
   messaging: MessagingService;
   /** Reached by the entry point for one thing only: handing a returning grant to its sign-in. */
   mcpOAuth: McpOAuth;
+  /** The sign-ins of joined servers that wait in this computer's browser, and the callbacks they take. */
+  signInRelayClient: SignInRelayClient;
+  /** The Slack and Discord installs that this computer opened for a joined server. */
+  relayedMessagingInstalls: RelayedMessagingInstalls;
   githubConnector: GitHubConnectorService;
   onePasswordConnector: OnePasswordConnectorService;
   bitwardenConnector: BitwardenConnectorService;
@@ -1019,15 +1030,30 @@ export async function createApplicationServices({
   // in between - a browser tab left open on a previous run reaches this port on its own. It is
   // held rather than closed over, so that request is refused instead of raising in the listener.
   let mcpOAuthAuthority: McpOAuth | null = null;
+  // A joined server's sign-in can send its callback to this same port: the host's own listener
+  // uses the same port number. A `state` that no local sign-in started goes to the relay.
+  const signInRelayClient = new SignInRelayClient({
+    openExternal: (url) => shell.openExternal(url),
+    language,
+    ownListener: () =>
+      mcpOAuthRedirect
+        ? { port: Number(new URL(mcpOAuthRedirect.redirectUrl).port), path: MCP_OAUTH_REDIRECT_PATH }
+        : null,
+  });
   const mcpOAuthRedirect = await startMcpOAuthRedirectServer({
     language,
-    deliver: (state, code) => {
+    preferredPort: MCP_OAUTH_REDIRECT_PORT,
+    deliver: (state, code, query) => {
       const elsewhere = mcpOAuthAuthority?.openedElsewhere(state) ?? false;
-      if (!mcpOAuthAuthority?.receiveAuthorizationCode(state, code)) return false;
+      if (!mcpOAuthAuthority?.receiveAuthorizationCode(state, code))
+        return signInRelayClient.deliver(state, query) ? "relayed" : false;
       if (elsewhere) return true;
       const current = windows.getMainWindow();
       if (current && !current.isDestroyed()) showMainWindow(current);
       return true;
+    },
+    relayRefusal: (state, query) => {
+      signInRelayClient.deliver(state, query);
     },
   }).catch((error: unknown) => {
     logger.warn(
@@ -1619,15 +1645,29 @@ export async function createApplicationServices({
     join(app.getPath("userData"), "agent-import-uploads"),
   );
   const mcpHostSignIns = new McpHostSignIns({ service, browser });
+  const providerSignIns = new ProviderHostSignIns({ service, browser });
+  // The flows end with the sign-ins they relay, which `mcpHostSignIns` and `providerSignIns` close.
+  const signInRelayHost = new SignInRelayHost({
+    mcp: mcpHostSignIns,
+    providers: providerSignIns,
+    receiveMcpGrant: (state, code) => mcpOAuth.receiveAuthorizationCode(state, code),
+    // The search ignores case, so the exact address is checked again on each agent message it finds.
+    printedLink: (agentId, url) =>
+      agentPrintedLink(
+        service.searchConversationMessages(url, agentId, undefined, 20).results.map(({ message }) => message),
+        url,
+        Date.now(),
+      ),
+  });
   teardown.push(TEARDOWN_ORDER.mcpHostSignIns, "MCP sign-ins of joined servers", () =>
     Effect.runPromise(mcpHostSignIns.close()),
   );
-  // Only on Linux does the Gemini CLI print its sign-in page for this host to open.
-  const providerHostSignIns = process.platform === "linux" ? new ProviderHostSignIns({ service, browser }) : undefined;
-  if (providerHostSignIns)
-    teardown.push(TEARDOWN_ORDER.providerHostSignIns, "Provider sign-ins of joined servers", () =>
-      Effect.runPromise(providerHostSignIns.close()),
-    );
+  teardown.push(TEARDOWN_ORDER.providerHostSignIns, "Provider sign-ins of joined servers", () =>
+    Effect.runPromise(providerSignIns.close()),
+  );
+  // The live view of a sign-in page in this host's browser: only on Linux, where the Gemini CLI has
+  // always printed its page. The relay takes the page on every platform.
+  const providerHostSignIns = process.platform === "linux" ? providerSignIns : undefined;
   const host = new HostService({
     appVersion: app.getVersion(),
     store: teamStore,
@@ -1645,6 +1685,11 @@ export async function createApplicationServices({
     mcpServers: service,
     // Present, so the host advertises `mcp-sign-in-v1`. The routes are admin-only.
     mcpSignIns: mcpHostSignIns,
+    // Present, so the host advertises `sign-in-relay-v1`. The routes are admin-only.
+    signInRelay: signInRelayHost,
+    // Present, so the host advertises `connectors-v1`. GitHub answers `available: false` when this
+    // build has no GitHub App. The routes are admin-only.
+    connectors: { github: githubConnector, messaging },
     // Present on Linux, so the host advertises `provider-host-sign-in-v1`. The routes are admin-only.
     providerHostSignIns,
     // Present, so the host advertises `storage-v1`. Members read; only admins delete or clear.
@@ -2236,6 +2281,8 @@ export async function createApplicationServices({
     providerCredentials,
     messaging,
     mcpOAuth,
+    signInRelayClient,
+    relayedMessagingInstalls: new RelayedMessagingInstalls(remoteServers),
     githubConnector,
     onePasswordConnector,
     bitwardenConnector,

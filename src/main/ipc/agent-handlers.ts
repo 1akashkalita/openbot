@@ -41,6 +41,7 @@ import type { AgentService } from "../../backend/agent-service";
 import { runCauseEffect } from "../../backend/effect-boundary";
 import type { SidebarLayoutStore } from "../../backend/sidebar-layout-store";
 import type { HostService } from "../host-service";
+import { type MessageLinkRelay, openHttpLink } from "../message-link-relay";
 import {
   decodeAccountUsageFromHost,
   decodeAgentAnalyticsFromHost,
@@ -63,13 +64,16 @@ import {
   parseAgentId,
   parseApprovalResponse,
   parseBrowserTakeoverResponse,
+  parseCancelMessageLink,
   parseCancelQueuedMessage,
   parseChannelId,
   parseCreateAgent,
   parseInterrupt,
   parseMarkConversationRead,
   parseMessageReaction,
+  parseOpenMessageLink,
   parseOptionalAgentId,
+  parsePasteMessageLink,
   parsePromptResponse,
   parseQueueEdit,
   parseReadConversationPage,
@@ -113,6 +117,8 @@ export interface AgentIpcDependencies {
   host: HostService;
   remoteServers: RemoteServerManager;
   skills: SkillMarketplaceService;
+  messageLinks: Pick<MessageLinkRelay, "open" | "paste" | "cancel">;
+  openExternal: (url: string) => Promise<void>;
 }
 
 export function agentIpcHandlers({
@@ -121,6 +127,8 @@ export function agentIpcHandlers({
   host,
   remoteServers,
   skills,
+  messageLinks,
+  openExternal,
 }: AgentIpcDependencies): Pick<IpcGroupHandlers, "agent"> {
   return {
     agent: {
@@ -366,6 +374,21 @@ export function agentIpcHandlers({
           runCauseEffect(
             remoteServers.readAgentConversationPage(parsed.agentId, parsed.anchor, parsed.limit, serverId),
           ),
+      }),
+      openMessageLink: scopedHandler(parseOpenMessageLink, {
+        local: async ({ url }) => {
+          await openHttpLink(url, openExternal);
+          return null;
+        },
+        remote: ({ agentId, url }, serverId) => messageLinks.open(serverId, agentId, url),
+      }),
+      pasteMessageLink: scopedHandler(parsePasteMessageLink, {
+        local: () => Promise.reject(new Error(sourceText("error.mcp.relayEnded"))),
+        remote: ({ url, address }, serverId) => messageLinks.paste(serverId, url, address),
+      }),
+      cancelMessageLink: scopedHandler(parseCancelMessageLink, {
+        local: async () => undefined,
+        remote: ({ url }, serverId) => messageLinks.cancel(serverId, url),
       }),
       searchConversationMessages: scopedHandler(parseSearchConversationMessages, {
         local: (parsed) =>

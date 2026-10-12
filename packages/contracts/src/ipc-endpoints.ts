@@ -67,9 +67,11 @@ import type {
   AccountUsage,
   AgentProviderId,
   AgentStatus,
+  PasteProviderRelaySignInInput,
   ProviderApiKeyState,
   ProviderCodeLoginStart,
   ProviderHostSignInStatus,
+  ProviderRelaySignInStatus,
   SetProviderApiKeyInput,
   SubmitProviderCodeLoginInput,
 } from "./ipc-agent-status";
@@ -160,12 +162,15 @@ import type {
 } from "./ipc-channel-routines";
 import type { Channel, ChannelCommand, ChannelPage, ChannelReadInput, ChannelSummary } from "./ipc-chat-channels";
 import type {
+  CancelMessageLinkInput,
   ConversationFileSearchPage,
   ConversationPage,
   ConversationReadState,
   ConversationSearchPage,
   ConversationWithReadState,
   MarkConversationReadInput,
+  OpenMessageLinkInput,
+  PasteMessageLinkInput,
   ReadConversationPageInput,
   RespondToPromptInput,
   SearchConversationFilesInput,
@@ -230,11 +235,16 @@ import type {
 } from "./ipc-marketplace-agents";
 import type {
   CancelMcpSignInInput,
+  CompleteMcpSignInRelayInput,
   McpServerConfig,
+  McpSignInAppInput,
+  McpSignInAppState,
+  McpSignInRelayPage,
   McpSignInState,
   McpTestResult,
   RemoveMcpServerInput,
   SaveMcpServerInput,
+  SaveMcpSignInAppInput,
   SetMcpServerEnabledInput,
   SignOutMcpServerInput,
   TestMcpServerInput,
@@ -246,6 +256,11 @@ import type {
   AddSlackOrchestratorResult,
   AddTelegramOrchestratorInput,
   ConnectTelegramChatInput,
+  HostAddMessagingOrchestratorInput,
+  HostMessagingConnectInput,
+  HostMessagingPlatformInput,
+  HostMessagingWorkspaceInput,
+  HostSetMessagingEnabledInput,
   MessagingOverview,
   MessagingWorkspaceInput,
   SetMessagingEnabledInput,
@@ -670,6 +685,19 @@ export const IPC_ENDPOINTS = {
       "provider-admin:host-sign-in-status",
     ),
     cancelHostSignIn: scopedRequest<AgentProviderId, AgentStatus, "required">()("provider-admin:cancel-host-sign-in"),
+    // A sign-in that a joined server's host starts and that opens in this computer's browser
+    // (`sign-in-relay-v1`). This computer takes the callback and sends its query to the host.
+    // `openRelaySignIn` opens the page when the user asks, and `pasteRelaySignIn` takes the address
+    // the browser shows when the callback cannot reach this computer.
+    startRelaySignIn: scopedRequest<AgentProviderId, void, "required">()("provider-admin:start-relay-sign-in"),
+    relaySignInStatus: scopedRequest<AgentProviderId, ProviderRelaySignInStatus, "required">()(
+      "provider-admin:relay-sign-in-status",
+    ),
+    openRelaySignIn: scopedRequest<AgentProviderId, void, "required">()("provider-admin:open-relay-sign-in"),
+    pasteRelaySignIn: scopedRequest<PasteProviderRelaySignInInput, void, "required">()(
+      "provider-admin:paste-relay-sign-in",
+    ),
+    cancelRelaySignIn: scopedRequest<AgentProviderId, AgentStatus, "required">()("provider-admin:cancel-relay-sign-in"),
     getApiKeyState: scopedRequest<AgentProviderId, ProviderApiKeyState, "required">()(
       "provider-admin:get-api-key-state",
     ),
@@ -722,6 +750,17 @@ export const IPC_ENDPOINTS = {
     addTelegramOrchestrator: request<AddTelegramOrchestratorInput, AddMessagingOrchestratorResult>()(
       "messaging:add-telegram-orchestrator",
     ),
+    // The same for a joined server with `connectors-v1`, which an owner or admin manages from here.
+    // The host opens no page: main opens it in this computer's browser. A Slack or Discord install
+    // returns to this computer's `openbot://` link, and main sends the sealed grant on to the host.
+    hostOverview: scopedRequest<HostMessagingPlatformInput, MessagingOverview, "required">()("messaging:host-overview"),
+    hostConnect: scopedRequest<HostMessagingConnectInput, void, "required">()("messaging:host-connect"),
+    hostDisconnect: scopedRequest<HostMessagingWorkspaceInput, void, "required">()("messaging:host-disconnect"),
+    hostReconnect: scopedRequest<HostMessagingWorkspaceInput, void, "required">()("messaging:host-reconnect"),
+    hostSetEnabled: scopedRequest<HostSetMessagingEnabledInput, void, "required">()("messaging:host-set-enabled"),
+    hostAddOrchestrator: scopedRequest<HostAddMessagingOrchestratorInput, AddMessagingOrchestratorResult, "required">()(
+      "messaging:host-add-orchestrator",
+    ),
   },
   // The server name, logo and app update of one server's host. `host.updateIdentity` and `update`
   // reach this computer only; these take the server, so a remote admin reaches the host. The
@@ -738,8 +777,9 @@ export const IPC_ENDPOINTS = {
       "host-admin:set-update-settings",
     ),
   },
-  // The built-in GitHub connection of this computer. Local only: a remote client connects GitHub on
-  // the computer that runs OpenBot. The token stays in main; every answer is the status only.
+  // The built-in GitHub connection of this computer. The token stays in main; every answer is the
+  // status only. The `host*` endpoints reach the connection of a joined server (`connectors-v1`): the
+  // host runs the device flow, and main opens its GitHub pages in this computer's browser.
   githubConnector: {
     status: request<undefined, GitHubConnectorStatus>()("github-connector:status"),
     connect: request<undefined, GitHubConnectorStatus>()("github-connector:connect"),
@@ -749,6 +789,13 @@ export const IPC_ENDPOINTS = {
     openVerification: request<undefined, void>()("github-connector:open-verification"),
     openInstall: request<undefined, void>()("github-connector:open-install"),
     changed: event<GitHubConnectorStatus>()("github-connector:changed"),
+    hostStatus: scopedQuery<GitHubConnectorStatus, "required">()("github-connector:host-status"),
+    hostConnect: scopedQuery<GitHubConnectorStatus, "required">()("github-connector:host-connect"),
+    hostCancel: scopedQuery<GitHubConnectorStatus, "required">()("github-connector:host-cancel"),
+    hostDisconnect: scopedQuery<GitHubConnectorStatus, "required">()("github-connector:host-disconnect"),
+    hostRepositories: scopedQuery<GitHubConnectorRepositories, "required">()("github-connector:host-repositories"),
+    hostOpenVerification: scopedQuery<void, "required">()("github-connector:host-open-verification"),
+    hostOpenInstall: scopedQuery<void, "required">()("github-connector:host-open-install"),
   },
   // The 1Password connection of this computer. Local only, like `githubConnector`. The token goes
   // from the renderer to main once, in `connectWithToken`; every answer is the status only.
@@ -897,6 +944,12 @@ export const IPC_ENDPOINTS = {
     searchConversationMessages: scopedRequest<SearchConversationMessagesInput, ConversationSearchPage>()(
       "agent:search-conversation-messages",
     ),
+    // On a joined server, a sign-in page that the agent printed goes through `sign-in-relay-v1`. The
+    // page is answered when this computer cannot take the callback, so the user pastes the address.
+    openMessageLink: scopedRequest<OpenMessageLinkInput, McpSignInRelayPage | null>()("agent:open-message-link"),
+    // Resolves when the sign-in ended, and rejects with its error.
+    pasteMessageLink: scopedRequest<PasteMessageLinkInput, void>()("agent:paste-message-link"),
+    cancelMessageLink: scopedRequest<CancelMessageLinkInput, void>()("agent:cancel-message-link"),
     // Local only: a joined server has no file search route, so the renderer asks only this computer.
     searchConversationFiles: request<SearchConversationFilesInput, ConversationFileSearchPage>()(
       "agent:search-conversation-files",
@@ -1109,9 +1162,29 @@ export const IPC_ENDPOINTS = {
     // shows that tab: `mcpSignInPage` names it while the sign-in waits.
     signInMcpServer: scopedRequest<TestMcpServerInput, McpTestResult, "required">()("servers:mcp:sign-in"),
     mcpSignInPage: scopedRequest<CancelMcpSignInInput, string | null, "required">()("servers:mcp:sign-in-page"),
+    // A host with `sign-in-relay-v1` opens no tab: the page opens in this computer's browser, and the
+    // callback comes back here. `mcpSignInRelay` names the page while it waits, `openMcpSignInRelay`
+    // opens it when the user asks, and `completeMcpSignInRelay` takes the address the user pastes when
+    // no listener took the callback.
+    mcpSignInRelay: scopedRequest<CancelMcpSignInInput, McpSignInRelayPage | null, "required">()(
+      "servers:mcp:sign-in-relay",
+    ),
+    openMcpSignInRelay: scopedRequest<CancelMcpSignInInput, void, "required">()("servers:mcp:open-sign-in-relay"),
+    completeMcpSignInRelay: scopedRequest<CompleteMcpSignInRelayInput, void, "required">()(
+      "servers:mcp:complete-sign-in-relay",
+    ),
     cancelMcpSignIn: scopedRequest<CancelMcpSignInInput, void, "required">()("servers:mcp:cancel-sign-in"),
     signOutMcpServer: scopedRequest<SignOutMcpServerInput, McpSignInState[], "required">()("servers:mcp:sign-out"),
     listMcpSignIns: scopedQuery<McpSignInState[], "required">()("servers:mcp:list-sign-ins"),
+    // The OAuth app an administrator registered for a saved http row, and the exact callback address.
+    // The client secret goes in and never comes back.
+    mcpSignInApp: scopedRequest<McpSignInAppInput, McpSignInAppState, "required">()("servers:mcp:sign-in-app"),
+    saveMcpSignInApp: scopedRequest<SaveMcpSignInAppInput, McpSignInAppState, "required">()(
+      "servers:mcp:save-sign-in-app",
+    ),
+    removeMcpSignInApp: scopedRequest<McpSignInAppInput, McpSignInAppState, "required">()(
+      "servers:mcp:remove-sign-in-app",
+    ),
   },
   // Bound against the storage service, not `AgentService`, so it is its own group.
   storage: {

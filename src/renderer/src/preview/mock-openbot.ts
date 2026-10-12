@@ -1,5 +1,5 @@
 import { AGENT_MEMORY_CONTEXT_BUDGET_BYTES, essentialMemoryBytes } from "@openbot/contracts/agent-memory-context";
-import type { AcpRegistryEntry, AgentSessionSettings } from "@openbot/contracts/ipc";
+import type { AcpRegistryEntry, AgentSessionSettings, McpSignInApp, McpSignInAppState } from "@openbot/contracts/ipc";
 import {
   type AccountUsage,
   type AgentEvent,
@@ -299,6 +299,11 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
     mcpServers
       .filter((server) => server.transport === "http")
       .map((server) => ({ mcpServerId: server.id, signedIn: mcpSignedIn.has(server.id) }));
+  let mcpSignInApps: Record<string, McpSignInApp> = {};
+  const mcpSignInAppState = (mcpServerId: string): McpSignInAppState => ({
+    redirectUrl: "http://127.0.0.1:28417/mcp-auth",
+    app: mcpSignInApps[mcpServerId] ?? null,
+  });
   let sidebarLayout: SidebarLayoutSnapshot = {
     revision: 0,
     sections: [],
@@ -908,6 +913,11 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
       startHostSignIn: async () => undefined,
       hostSignInStatus: async () => ({ tabId: null, result: null }),
       cancelHostSignIn: async () => clone(agentStatus),
+      startRelaySignIn: async () => undefined,
+      relaySignInStatus: async () => ({ page: null, result: null }),
+      openRelaySignIn: async () => undefined,
+      pasteRelaySignIn: async () => undefined,
+      cancelRelaySignIn: async () => clone(agentStatus),
       getApiKeyState: (provider) => api.getProviderApiKeyState(provider),
       setApiKey: (input) => api.setProviderApiKey(input),
       clearApiKey: (provider) => api.clearProviderApiKey(provider),
@@ -1259,6 +1269,9 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
         }),
       // The preview is this computer, which shows no host page.
       mcpSignInPage: async () => null,
+      mcpSignInRelay: async () => null,
+      openMcpSignInRelay: async () => undefined,
+      completeMcpSignInRelay: async () => undefined,
       cancelMcpSignIn: async () => {
         cancelPendingMcpSignIn?.();
       },
@@ -1267,6 +1280,21 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
         return mcpSignInStates();
       },
       listMcpSignIns: async () => mcpSignInStates(),
+      // The preview keeps no secret: it remembers only that one was given.
+      mcpSignInApp: async ({ mcpServerId }) => mcpSignInAppState(mcpServerId),
+      saveMcpSignInApp: async ({ mcpServerId, clientId, clientSecret, scope }) => {
+        const secretSaved =
+          clientSecret === null ? (mcpSignInApps[mcpServerId]?.secretSaved ?? false) : clientSecret !== "";
+        mcpSignInApps = { ...mcpSignInApps, [mcpServerId]: { clientId, secretSaved, scope } };
+        mcpSignedIn = new Set([...mcpSignedIn].filter((id) => id !== mcpServerId));
+        return mcpSignInAppState(mcpServerId);
+      },
+      removeMcpSignInApp: async ({ mcpServerId }) => {
+        const { [mcpServerId]: _removed, ...rest } = mcpSignInApps;
+        mcpSignInApps = rest;
+        mcpSignedIn = new Set([...mcpSignedIn].filter((id) => id !== mcpServerId));
+        return mcpSignInAppState(mcpServerId);
+      },
       getSidebarLayout: async () => clone(sidebarLayout),
       mutateSidebarLayout: async (action) => {
         sidebarLayout = applySidebarLayoutAction(sidebarLayout, action);
@@ -1600,6 +1628,9 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
           readState: { unreadCount: 0, firstUnreadMessageId: null, throughMessageId: null },
         };
       },
+      openMessageLink: async () => null,
+      pasteMessageLink: async () => undefined,
+      cancelMessageLink: async () => undefined,
       searchConversationMessages: async (input) => {
         const query = input.query.trim().replace(/\s+/g, " ").toLocaleLowerCase();
         const results = agents.flatMap((agent) =>

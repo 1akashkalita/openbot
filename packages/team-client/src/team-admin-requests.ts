@@ -37,10 +37,13 @@ import {
   decodeHostAddedAgent,
   decodeHostAgentTemplatePreview,
   decodeHostAgentTemplatePublication,
+  decodeHostGitHubConnectorRepositories,
+  decodeHostGitHubConnectorStatus,
   decodeHostReleaseStatus,
   decodeHostUpdateStatus,
   decodeInstalledSkills,
   decodeMcpServerConfigs,
+  decodeMcpSignInAppState,
   decodeMcpSignInStates,
   decodeMcpSignInStatus,
   decodeMcpTestResult,
@@ -48,9 +51,13 @@ import {
   decodeProviderCodeLoginStart,
   decodeProviderHostSignInStatus,
   decodeProviderRuntimeSnapshot,
+  decodeSignInRelayFlow,
+  decodeSignInRelayStatus,
   decodeStorageUsage,
   type GetStorageUsageInput,
+  type GitHubConnectorRepositories,
   type HostedSiteList,
+  type HostGitHubConnectorStatus,
   type HostReleaseStatus,
   type HostUpdateSettingsChange,
   type HostUpdateStatus,
@@ -61,6 +68,8 @@ import {
   isAgentStatus,
   isSharedTable,
   type McpServerConfig,
+  type McpSignInAppInput,
+  type McpSignInAppState,
   type McpSignInState,
   type McpSignInStatus,
   type McpTestResult,
@@ -71,10 +80,12 @@ import {
   type RemoveMcpServerInput,
   type SaveCustomProviderInput,
   type SaveMcpServerInput,
+  type SaveMcpSignInAppInput,
   type SetEnabledSkillInput,
   type SetMcpServerEnabledInput,
   type SetProviderApiKeyInput,
   type SharedTable,
+  type SignInRelayStatus,
   type SignOutMcpServerInput,
   type SubmitProviderCodeLoginInput,
   type TestMcpServerInput,
@@ -105,10 +116,12 @@ import { AGENT_ADMIN_ROUTES } from "@openbot/contracts/team-protocol/agent-admin
 import { AGENT_INSTALL_ROUTES } from "@openbot/contracts/team-protocol/agent-install-v1";
 import { AGENT_PUBLISH_IMAGE_BYTES, AGENT_PUBLISH_ROUTES } from "@openbot/contracts/team-protocol/agent-publish-v1";
 import { AGENT_UPDATE_ROUTES } from "@openbot/contracts/team-protocol/agent-update-v1";
+import { CONNECTORS_ROUTES } from "@openbot/contracts/team-protocol/connectors-v1";
 import { EVENTS_ROUTES } from "@openbot/contracts/team-protocol/events-v1";
 import { HOST_ADMIN_ROUTES } from "@openbot/contracts/team-protocol/host-admin-v1";
 import { HOST_UPDATE_ROUTES } from "@openbot/contracts/team-protocol/host-update-v1";
 import { HOSTED_SITES_ROUTES } from "@openbot/contracts/team-protocol/hosted-sites-v1";
+import { MCP_SIGN_IN_APP_ROUTES } from "@openbot/contracts/team-protocol/mcp-sign-in-app-v1";
 import { MCP_SIGN_IN_ROUTES } from "@openbot/contracts/team-protocol/mcp-sign-in-v1";
 import { MCP_ROUTES } from "@openbot/contracts/team-protocol/mcp-v1";
 import { PROVIDER_HOST_SIGN_IN_ROUTES } from "@openbot/contracts/team-protocol/provider-host-sign-in-v1";
@@ -117,6 +130,7 @@ import type { PROVIDERS_RUNTIMES_V2_ROUTES } from "@openbot/contracts/team-proto
 import { PROVIDERS_SIGN_IN_V3_ROUTES } from "@openbot/contracts/team-protocol/providers-v3";
 import type { PROVIDERS_V4_ROUTES } from "@openbot/contracts/team-protocol/providers-v4";
 import { SHARED_TABLES_ROUTES } from "@openbot/contracts/team-protocol/shared-tables-v1";
+import { type SIGN_IN_RELAY_PROVIDERS, SIGN_IN_RELAY_ROUTES } from "@openbot/contracts/team-protocol/sign-in-relay-v1";
 import { SKILLS_ADMIN_ROUTES } from "@openbot/contracts/team-protocol/skills-admin-v1";
 import { STORAGE_ROUTES } from "@openbot/contracts/team-protocol/storage-v1";
 import type { TeamProtocolV2Json } from "@openbot/contracts/team-protocol/v2";
@@ -458,6 +472,55 @@ export function cancelMcpSignIn(
   return adminCall(() => request("POST", MCP_SIGN_IN_ROUTES.cancel, ignoreResponse, { url: input.url }));
 }
 
+/**
+ * A relayed sign-in (`sign-in-relay-v1`): the host starts it and opens no page. The client opens the
+ * page in the user's own browser and sends the query of the callback back with `completeSignInRelay`.
+ */
+export function startMcpSignInRelay(
+  request: TeamApiRequest,
+  input: TestMcpServerInput,
+): Effect.Effect<{ flowId: string }, TeamAdminRequestError> {
+  return adminCall(() =>
+    request("POST", SIGN_IN_RELAY_ROUTES.mcpStart, decodeSignInRelayFlow, { config: mcpConfig(input.config) }),
+  );
+}
+
+/** A relayed sign-in of a provider's CLI on the host (`sign-in-relay-v1`). */
+export function startProviderSignInRelay(
+  request: TeamApiRequest,
+  provider: (typeof SIGN_IN_RELAY_PROVIDERS)[number],
+): Effect.Effect<{ flowId: string }, TeamAdminRequestError> {
+  return adminCall(() => request("POST", SIGN_IN_RELAY_ROUTES.providerStart, decodeSignInRelayFlow, { provider }));
+}
+
+/** A relayed sign-in of a link that an agent of the host printed (`sign-in-relay-v1`). */
+export function startLinkSignInRelay(
+  request: TeamApiRequest,
+  input: { agentId: string; url: string },
+): Effect.Effect<{ flowId: string }, TeamAdminRequestError> {
+  return adminCall(() => request("POST", SIGN_IN_RELAY_ROUTES.linkStart, decodeSignInRelayFlow, input));
+}
+
+export function signInRelayStatus(
+  request: TeamApiRequest,
+  flowId: string,
+): Effect.Effect<SignInRelayStatus, TeamAdminRequestError> {
+  return adminCall(() => request("POST", SIGN_IN_RELAY_ROUTES.status, decodeSignInRelayStatus, { flowId }));
+}
+
+/** `query` holds a grant. It goes only to the host, on the encrypted Team channel. */
+export function completeSignInRelay(
+  request: TeamApiRequest,
+  flowId: string,
+  query: string,
+): Effect.Effect<SignInRelayStatus, TeamAdminRequestError> {
+  return adminCall(() => request("POST", SIGN_IN_RELAY_ROUTES.complete, decodeSignInRelayStatus, { flowId, query }));
+}
+
+export function cancelSignInRelay(request: TeamApiRequest, flowId: string): Effect.Effect<void, TeamAdminRequestError> {
+  return adminCall(() => request("POST", SIGN_IN_RELAY_ROUTES.cancel, ignoreResponse, { flowId }));
+}
+
 export function signOutMcpServer(
   request: TeamApiRequest,
   input: SignOutMcpServerInput,
@@ -469,6 +532,39 @@ export function signOutMcpServer(
 
 export function listMcpSignIns(request: TeamApiRequest): Effect.Effect<McpSignInState[], TeamAdminRequestError> {
   return adminCall(() => request("POST", MCP_SIGN_IN_ROUTES.list, decodeMcpSignInStates, {}));
+}
+
+export function mcpSignInApp(
+  request: TeamApiRequest,
+  input: McpSignInAppInput,
+): Effect.Effect<McpSignInAppState, TeamAdminRequestError> {
+  return adminCall(() =>
+    request("POST", MCP_SIGN_IN_APP_ROUTES.get, decodeMcpSignInAppState, { mcpServerId: input.mcpServerId }),
+  );
+}
+
+/** The client secret goes to the host once; the answer says only whether one is saved. */
+export function saveMcpSignInApp(
+  request: TeamApiRequest,
+  input: SaveMcpSignInAppInput,
+): Effect.Effect<McpSignInAppState, TeamAdminRequestError> {
+  return adminCall(() =>
+    request("POST", MCP_SIGN_IN_APP_ROUTES.save, decodeMcpSignInAppState, {
+      mcpServerId: input.mcpServerId,
+      clientId: input.clientId,
+      clientSecret: input.clientSecret,
+      scope: input.scope,
+    }),
+  );
+}
+
+export function removeMcpSignInApp(
+  request: TeamApiRequest,
+  input: McpSignInAppInput,
+): Effect.Effect<McpSignInAppState, TeamAdminRequestError> {
+  return adminCall(() =>
+    request("POST", MCP_SIGN_IN_APP_ROUTES.remove, decodeMcpSignInAppState, { mcpServerId: input.mcpServerId }),
+  );
 }
 
 export const getStorageUsage = Effect.fn("TeamAdmin.getStorageUsage")(function* (
@@ -576,6 +672,14 @@ export function cancelProviderHostSignIn(
   provider: AgentProviderId,
 ): Effect.Effect<AgentStatus, TeamAdminRequestError> {
   return providerChange(request, PROVIDER_HOST_SIGN_IN_ROUTES.cancel, { provider });
+}
+
+/** Ends a relayed provider sign-in on the host, and answers the host's status after it. */
+export function cancelProviderSignInRelay(
+  request: TeamApiRequest,
+  flowId: string,
+): Effect.Effect<AgentStatus, TeamAdminRequestError> {
+  return providerChange(request, SIGN_IN_RELAY_ROUTES.cancel, { flowId });
 }
 export type ProviderKeyRoutes = typeof PROVIDERS_ADMIN_ROUTES | typeof PROVIDERS_V5_ROUTES;
 
@@ -701,4 +805,25 @@ export function resetAgentSessionSetting(
   input: ResetAgentSessionSettingInput,
 ): Effect.Effect<AgentSessionSettings, TeamAdminRequestError> {
   return adminCall(() => request("POST", AGENT_SESSION_SETTINGS_ROUTES.reset, decodeSessionSettings, { ...input }));
+}
+
+type GitHubConnectorStatusRoute = Exclude<keyof typeof CONNECTORS_ROUTES, "githubRepositories">;
+
+/**
+ * The host's GitHub connection (`connectors-v1`): read it, connect, cancel or disconnect. The host
+ * opens no page; the answer names the pages that the client opens.
+ */
+export function githubConnectorRequest(
+  request: TeamApiRequest,
+  route: GitHubConnectorStatusRoute,
+): Effect.Effect<HostGitHubConnectorStatus, TeamAdminRequestError> {
+  return adminCall(() => request("POST", CONNECTORS_ROUTES[route], decodeHostGitHubConnectorStatus, {}));
+}
+
+export function githubConnectorRepositories(
+  request: TeamApiRequest,
+): Effect.Effect<GitHubConnectorRepositories, TeamAdminRequestError> {
+  return adminCall(() =>
+    request("POST", CONNECTORS_ROUTES.githubRepositories, decodeHostGitHubConnectorRepositories, {}),
+  );
 }

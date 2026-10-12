@@ -262,4 +262,11 @@ export const messages = {
     "El servidor respondió {status}. Comprueba la clave API u otras credenciales.",
   "error.backend.mcpServerHttpUrl":
     "El servidor respondió {status}. Comprueba la URL. El enlace puede ser incorrecto, haber caducado o haberse eliminado.",
+  "error.backend.mcpSignInAppUrl": "La app de inicio de sesión necesita una URL de servidor válida.",
+  "error.backend.mcpSignInAppClientId": "Introduce el ID de cliente de la app de inicio de sesión.",
+  "error.backend.mcpSignInAppIssuerChanged":
+    "El servidor de inicio de sesión de este servidor MCP cambió, así que OpenBot no le envió la app de inicio de sesión. Si el cambio es correcto, quita la app de inicio de sesión y agrégala de nuevo.",
+  "error.backend.mcpSignInAppNoServer":
+    "Guarda este servidor MCP como servidor de URL antes de añadir una app de inicio de sesión.",
+  "error.backend.mcpSignInAppUnavailable": "Este ordenador no puede guardar una app de inicio de sesión.",
 } as const satisfies PartialTranslation<typeof source>;

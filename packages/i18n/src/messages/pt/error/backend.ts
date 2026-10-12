@@ -262,4 +262,11 @@ export const messages = {
     "O servidor respondeu com {status}. Verifique a chave de API ou outras credenciais.",
   "error.backend.mcpServerHttpUrl":
     "O servidor respondeu com {status}. Verifique a URL. O link pode estar incorreto, expirado ou excluído.",
+  "error.backend.mcpSignInAppUrl": "O app de autenticação precisa de uma URL de servidor válida.",
+  "error.backend.mcpSignInAppClientId": "Digite o ID do cliente do app de autenticação.",
+  "error.backend.mcpSignInAppIssuerChanged":
+    "O servidor de autenticação deste servidor MCP mudou, então o OpenBot não enviou o app de autenticação a ele. Se a mudança estiver correta, remova o app de autenticação e adicione-o de novo.",
+  "error.backend.mcpSignInAppNoServer":
+    "Salve este servidor MCP como servidor de URL antes de adicionar um app de autenticação.",
+  "error.backend.mcpSignInAppUnavailable": "Este computador não consegue guardar um app de autenticação.",
 } as const satisfies PartialTranslation<typeof source>;
