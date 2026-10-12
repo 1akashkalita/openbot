@@ -43,6 +43,7 @@ import {
   LIVE_ACTIVITY_PUSH_CAPABILITY,
   legacyTeamCapabilities,
   MCP_SERVERS_CAPABILITY,
+  MCP_SIGN_IN_APP_CAPABILITY,
   MCP_SIGN_IN_CAPABILITY,
   PROVIDER_HOST_SIGN_IN_CAPABILITY,
   PROVIDERS_ADMIN_CAPABILITY,
@@ -142,6 +143,7 @@ import { routeHostedSites } from "./team-api/route-hosted-sites";
 import { routeLiveActivityPush } from "./team-api/route-live-activity-push";
 import { routeMcpServers } from "./team-api/route-mcp";
 import { routeMcpSignIn } from "./team-api/route-mcp-sign-in";
+import { routeMcpSignInApp } from "./team-api/route-mcp-sign-in-app";
 import { routeProviderHostSignIn } from "./team-api/route-provider-host-sign-in";
 import { routeProviders } from "./team-api/route-providers";
 import { routeRemoteScreen } from "./team-api/route-remote-screen";
@@ -704,6 +706,8 @@ export class TeamApiServer {
       )
         return;
       if ((await routeMcpSignIn(context, this.#options.mcpServers && this.#options.mcpSignIns)) === "handled") return;
+      if ((await routeMcpSignInApp(context, this.#options.mcpServers && this.#options.mcpSignIns)) === "handled")
+        return;
       if ((await routeProviderHostSignIn(context, this.#options.providerHostSignIns)) === "handled") return;
       if ((await routeStorage(context, this.#options.storage)) === "handled") return;
       if ((await routeHostedSites(context, this.#options.hostedSites)) === "handled") return;
@@ -1475,6 +1479,8 @@ export class TeamApiServer {
           return this.#options.remoteScreen?.checkSetup !== undefined && this.#options.remoteScreen?.test !== undefined;
         if (capability === MCP_SERVERS_CAPABILITY) return this.#options.mcpServers !== undefined;
         if (capability === MCP_SIGN_IN_CAPABILITY)
+          return this.#options.mcpServers !== undefined && this.#options.mcpSignIns !== undefined;
+        if (capability === MCP_SIGN_IN_APP_CAPABILITY)
           return this.#options.mcpServers !== undefined && this.#options.mcpSignIns !== undefined;
         if (capability === PROVIDER_HOST_SIGN_IN_CAPABILITY) return this.#options.providerHostSignIns !== undefined;
         if (capability === STORAGE_CAPABILITY) return this.#options.storage !== undefined;

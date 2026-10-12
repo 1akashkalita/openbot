@@ -267,4 +267,9 @@ export const messages = {
     "Le serveur a répondu {status}. Vérifiez la clé d’API ou les autres identifiants.",
   "error.backend.mcpServerHttpUrl":
     "Le serveur a répondu {status}. Vérifiez l’URL. Le lien est peut-être erroné, expiré ou supprimé.",
+  "error.backend.mcpSignInAppUrl": "L’app de connexion nécessite une URL de serveur valide.",
+  "error.backend.mcpSignInAppClientId": "Saisissez l’ID client de l’app de connexion.",
+  "error.backend.mcpSignInAppNoServer":
+    "Enregistrez ce serveur MCP comme serveur URL avant d’ajouter une app de connexion.",
+  "error.backend.mcpSignInAppUnavailable": "Cet ordinateur ne peut pas conserver d’app de connexion.",
 } as const satisfies PartialTranslation<typeof source>;

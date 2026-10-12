@@ -32,6 +32,7 @@ import { McpSignInPageDialog } from "@openbot/ui/features/settings/McpSignInPage
 import { useText } from "@openbot/ui/text";
 import type { JSX } from "@solidjs/web";
 import { createEffect, createMemo, createStore, For, onCleanup, Show } from "solid-js";
+import { type McpPanelSignInApp, McpSignInAppSection } from "./McpSignInAppSection";
 import {
   emptyMcpConfig,
   isMcpSignInCancelled,
@@ -115,6 +116,8 @@ export interface McpPanelSignIn {
   /** Stops the wait for the browser; the pending `start` then answers that it was cancelled. */
   cancel: (url: string) => Promise<void>;
   signOut: (id: string) => Promise<void>;
+  /** A pre-registered OAuth app for a server without client registration. Absent when the host has none. */
+  app?: McpPanelSignInApp | undefined;
 }
 
 interface McpPanelRemoteSignIn {
@@ -984,6 +987,18 @@ export function ServerMcpPanel(props: ServerMcpPanelProps) {
                 </For>
               </McpRowList>
             </SettingsSection>
+
+            <Show when={props.signIn?.app}>
+              {(app) => (
+                <McpSignInAppSection
+                  api={app()}
+                  mcpServerId={state.editingId}
+                  urlChanged={state.draft.url.trim() !== state.baseline.url.trim()}
+                  hostName={props.signIn?.remote?.hostName}
+                  disabled={disabled()}
+                />
+              )}
+            </Show>
           </SlidingTabs.Content>
         </SlidingTabs.ContentSlot>
 

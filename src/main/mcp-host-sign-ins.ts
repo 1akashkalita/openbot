@@ -1,9 +1,12 @@
 // MCP sign-ins that an administrator starts on this host from another computer (`mcp-sign-in-v1`).
 
 import type {
+  McpSignInAppInput,
+  McpSignInAppState,
   McpSignInState,
   McpSignInStatus,
   McpTestResult,
+  SaveMcpSignInAppInput,
   SignOutMcpServerInput,
   TestMcpServerInput,
 } from "@openbot/contracts/ipc";
@@ -18,7 +21,16 @@ import { HostSignInPages } from "./host-sign-in-pages";
 const ERROR_LIMIT = 2_000;
 
 export interface McpHostSignInDependencies {
-  service: Pick<AgentService, "signInMcpServer" | "cancelMcpSignIn" | "signOutMcpServer" | "listMcpSignIns">;
+  service: Pick<
+    AgentService,
+    | "signInMcpServer"
+    | "cancelMcpSignIn"
+    | "signOutMcpServer"
+    | "listMcpSignIns"
+    | "mcpSignInApp"
+    | "saveMcpSignInApp"
+    | "removeMcpSignInApp"
+  >;
   browser: Pick<BrowserHost, "openPrivate" | "privateTab" | "close">;
 }
 
@@ -66,6 +78,19 @@ export class McpHostSignIns {
 
   list(): McpSignInState[] {
     return this.#dependencies.service.listMcpSignIns();
+  }
+
+  /** The sign-in app of one row (`mcp-sign-in-app-v1`). The next `start` uses it. */
+  app(input: McpSignInAppInput): McpSignInAppState {
+    return this.#dependencies.service.mcpSignInApp(input);
+  }
+
+  saveApp(input: SaveMcpSignInAppInput) {
+    return this.#dependencies.service.saveMcpSignInApp(input);
+  }
+
+  removeApp(input: McpSignInAppInput) {
+    return this.#dependencies.service.removeMcpSignInApp(input);
   }
 
   close() {

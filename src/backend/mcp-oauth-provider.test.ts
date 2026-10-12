@@ -455,6 +455,11 @@ describe("signing in to an http MCP server", () => {
       cancelSignIn: () => false,
       signedIn: () => false,
       forget: (url) => oauth.forget(url),
+      signOut: (url) => oauth.signOut(url),
+      redirectUrl: oauth.redirectUrl,
+      signInApp: (url) => oauth.signInApp(url),
+      saveSignInApp: (url, app) => oauth.saveSignInApp(url, app),
+      removeSignInApp: (url) => oauth.removeSignInApp(url),
     };
 
     expect(await runMcp(testMcpServer(config(server.url), 10_000, undefined, silent))).toEqual({
@@ -583,6 +588,11 @@ describe("signing in to an http MCP server", () => {
       cancelSignIn: () => false,
       signedIn: () => false,
       forget: (url) => oauth.forget(url),
+      signOut: (url) => oauth.signOut(url),
+      redirectUrl: oauth.redirectUrl,
+      signInApp: (url) => oauth.signInApp(url),
+      saveSignInApp: (url, app) => oauth.saveSignInApp(url, app),
+      removeSignInApp: (url) => oauth.removeSignInApp(url),
     };
     expect(await runMcp(testMcpServer(config(server.url), 10_000, undefined, silent))).toEqual({
       toolCount: 1,
@@ -631,6 +641,11 @@ describe("signing in to an http MCP server", () => {
       cancelSignIn: () => false,
       signedIn: () => false,
       forget: (url) => restarted.forget(url),
+      signOut: (url) => restarted.signOut(url),
+      redirectUrl: restarted.redirectUrl,
+      signInApp: (url) => restarted.signInApp(url),
+      saveSignInApp: (url, app) => restarted.saveSignInApp(url, app),
+      removeSignInApp: (url) => restarted.removeSignInApp(url),
     };
     expect(await runMcp(testMcpServer(config(server.url), 10_000, undefined, silent))).toEqual({
       toolCount: 1,
@@ -1038,6 +1053,50 @@ describe("signing in to an http MCP server", () => {
       toolCount: 0,
       error: "This server asks you to sign in. Choose Sign in to continue in your browser.",
     });
+  });
+
+  // Issue #1872: a server with no client registration signs in with an app the administrator registered.
+  it("signs in with a saved app, never registers, and keeps the secret out of every answer", async () => {
+    const server = await fakeServer({ refuseRegistration: "empty" });
+    const storage = memoryStorage();
+    const opened: string[] = [];
+    const oauth = createOAuth({
+      storage,
+      redirectUrl: "openbot://mcp-auth",
+      openExternal: async (url) => {
+        opened.push(url);
+        oauth.receiveAuthorizationCode(new URL(url).searchParams.get("state") ?? "", GRANT);
+      },
+      signInTimeoutMs: 10_000,
+    });
+    const app = { clientId: "admin-client", clientSecret: "admin-secret", scope: "read offline_access" };
+    expect(await runMcp(oauth.saveSignInApp(server.url, app))).toBe(false);
+
+    expect(await runMcp(testMcpServer(config(server.url), 10_000, undefined, oauth, "here"))).toEqual({
+      toolCount: 1,
+      error: null,
+    });
+    expect(server.registrations).toBe(0);
+    const authorize = new URL(opened[0] ?? "");
+    expect(authorize.searchParams.get("client_id")).toBe("admin-client");
+    expect(authorize.searchParams.get("scope")).toBe("read offline_access");
+    expect(authorize.searchParams.get("code_challenge_method")).toBe("S256");
+    expect(storage.read(server.url)?.app).toEqual(app);
+
+    const summary = oauth.signInApp(server.url);
+    expect(summary).toEqual({ clientId: "admin-client", secretSaved: true, scope: "read offline_access" });
+    expect(JSON.stringify(summary)).not.toContain("admin-secret");
+
+    // Sign out drops the session and keeps the app; a save without a secret keeps the stored one.
+    await runMcp(oauth.signOut(server.url));
+    expect(oauth.signedIn(server.url)).toBe(false);
+    expect(storage.read(server.url)?.app).toEqual(app);
+    expect(await runMcp(oauth.saveSignInApp(server.url, { ...app, clientSecret: null, scope: "read" }))).toBe(false);
+    expect(storage.read(server.url)?.app).toEqual({ ...app, scope: "read" });
+
+    // Removing the row removes the app and its secret.
+    await runMcp(oauth.forget(server.url));
+    expect(storage.read(server.url)).toBeNull();
   });
 
   it("ends a sign-in the user cancels and keeps no token", async () => {

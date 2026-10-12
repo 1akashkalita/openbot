@@ -13,4 +13,6 @@ export const messages = {
   "error.mcp.signInFileTooLarge": "Le fichier de connexion MCP est trop volumineux.",
   "error.mcp.unsupported": "Ce serveur ne prend pas en charge les serveurs MCP.",
   "error.mcp.signInOnHost": "La connexion à un serveur MCP ne fonctionne que dans OpenBot sur l’ordinateur hôte.",
+  "error.mcp.signInAppUnsupported":
+    "Ce serveur ne prend pas en charge les apps de connexion. Mettez à jour OpenBot sur l’hôte.",
 } as const satisfies PartialTranslation<typeof source>;

@@ -142,6 +142,39 @@ export interface McpSignInState {
   signedIn: boolean;
 }
 
+/**
+ * An OAuth app the administrator registered with a server's authorization server themselves, for a
+ * server that offers no dynamic registration. The secret never comes back: `secretSaved` says only
+ * whether one is on file.
+ */
+export interface McpSignInApp {
+  clientId: string;
+  secretSaved: boolean;
+  /** Space-separated. Empty: the scope the server asks for. */
+  scope: string;
+}
+
+/**
+ * One saved http row's sign-in app, and the exact address the authorization server must send the
+ * grant back to. `redirectUrl` is `null` when the computer has no sign-in store.
+ */
+export interface McpSignInAppState {
+  redirectUrl: string | null;
+  app: McpSignInApp | null;
+}
+
+export interface McpSignInAppInput {
+  mcpServerId: string;
+}
+
+export interface SaveMcpSignInAppInput {
+  mcpServerId: string;
+  clientId: string;
+  /** `null` keeps the secret on file; an empty string removes it. */
+  clientSecret: string | null;
+  scope: string;
+}
+
 export function createMcpServerId(): string {
   return `mcp-${crypto.randomUUID()}`;
 }
@@ -261,6 +294,26 @@ export function decodeMcpSignInStatus(value: unknown): McpSignInStatus {
 export function decodeMcpSignInPage(value: unknown): string | null {
   if (value !== null && !isBounded(value, INPUT_LIMITS.identifier)) throw new Error("Invalid MCP server response.");
   return value;
+}
+
+export function decodeMcpSignInAppState(value: unknown): McpSignInAppState {
+  if (
+    !isDynamicRecord(value) ||
+    (value.redirectUrl !== null && !isBounded(value.redirectUrl, INPUT_LIMITS.mcpUrl)) ||
+    (value.app !== null && !isMcpSignInApp(value.app))
+  )
+    throw new Error("Invalid MCP server response.");
+  return { redirectUrl: value.redirectUrl, app: value.app };
+}
+
+function isMcpSignInApp(value: unknown): value is McpSignInApp {
+  return (
+    isDynamicRecord(value) &&
+    isBounded(value.clientId, INPUT_LIMITS.mcpClientId) &&
+    value.clientId.length > 0 &&
+    isBoolean(value.secretSaved) &&
+    isBounded(value.scope, INPUT_LIMITS.mcpScope)
+  );
 }
 
 function isMcpSignInState(value: unknown): value is McpSignInState {

@@ -231,10 +231,13 @@ import type {
 import type {
   CancelMcpSignInInput,
   McpServerConfig,
+  McpSignInAppInput,
+  McpSignInAppState,
   McpSignInState,
   McpTestResult,
   RemoveMcpServerInput,
   SaveMcpServerInput,
+  SaveMcpSignInAppInput,
   SetMcpServerEnabledInput,
   SignOutMcpServerInput,
   TestMcpServerInput,
@@ -1112,6 +1115,15 @@ export const IPC_ENDPOINTS = {
     cancelMcpSignIn: scopedRequest<CancelMcpSignInInput, void, "required">()("servers:mcp:cancel-sign-in"),
     signOutMcpServer: scopedRequest<SignOutMcpServerInput, McpSignInState[], "required">()("servers:mcp:sign-out"),
     listMcpSignIns: scopedQuery<McpSignInState[], "required">()("servers:mcp:list-sign-ins"),
+    // The OAuth app an administrator registered for a saved http row, and the exact callback address.
+    // The client secret goes in and never comes back.
+    mcpSignInApp: scopedRequest<McpSignInAppInput, McpSignInAppState, "required">()("servers:mcp:sign-in-app"),
+    saveMcpSignInApp: scopedRequest<SaveMcpSignInAppInput, McpSignInAppState, "required">()(
+      "servers:mcp:save-sign-in-app",
+    ),
+    removeMcpSignInApp: scopedRequest<McpSignInAppInput, McpSignInAppState, "required">()(
+      "servers:mcp:remove-sign-in-app",
+    ),
   },
   // Bound against the storage service, not `AgentService`, so it is its own group.
   storage: {

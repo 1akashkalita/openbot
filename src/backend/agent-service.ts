@@ -48,6 +48,8 @@ import type {
   ListChannelRoutineRunsInput,
   ListRoutineRunsInput,
   McpServerConfig,
+  McpSignInAppInput,
+  McpSignInAppState,
   McpSignInState,
   McpTestResult,
   ProviderCodeLoginStart,
@@ -65,6 +67,7 @@ import type {
   SaveAgentProfileInput,
   SaveAgentProfileResult,
   SaveMcpServerInput,
+  SaveMcpSignInAppInput,
   SendMessageInput,
   SetAgentMemoryInclusionInput,
   SetAgentSessionSettingInput,
@@ -1463,6 +1466,28 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
 
   listMcpSignIns(): McpSignInState[] {
     return this.#mcp.signIns();
+  }
+
+  mcpSignInApp(input: McpSignInAppInput): McpSignInAppState {
+    return this.#mcp.signInApp(input);
+  }
+
+  saveMcpSignInApp(input: SaveMcpSignInAppInput): Effect.Effect<McpSignInAppState, AgentLifecycleFailed> {
+    return this.#mcp
+      .saveSignInApp(input)
+      .pipe(
+        Effect.mapError((failure) => new AgentLifecycleFailed({ operation: "saveMcpSignInApp", cause: failure.cause })),
+      );
+  }
+
+  removeMcpSignInApp(input: McpSignInAppInput): Effect.Effect<McpSignInAppState, AgentLifecycleFailed> {
+    return this.#mcp
+      .removeSignInApp(input)
+      .pipe(
+        Effect.mapError(
+          (failure) => new AgentLifecycleFailed({ operation: "removeMcpSignInApp", cause: failure.cause }),
+        ),
+      );
   }
 
   enabledMcpServers(): McpServerConfig[] {

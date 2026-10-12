@@ -138,7 +138,10 @@ export type TeamApiMcpServers = Pick<
 >;
 
 /** Its presence, beside `mcpServers`, is what `#protocolSupport` advertises `mcp-sign-in-v1` on. */
-export type TeamApiMcpSignIns = Pick<McpHostSignIns, "start" | "status" | "cancel" | "signOut" | "list">;
+export type TeamApiMcpSignIns = Pick<
+  McpHostSignIns,
+  "start" | "status" | "cancel" | "signOut" | "list" | "app" | "saveApp" | "removeApp"
+>;
 
 /**
  * Its presence is what `#protocolSupport` advertises `provider-host-sign-in-v1` on. Only a Linux host

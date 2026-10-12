@@ -19,6 +19,7 @@ import { HOST_RELEASE_CODECS } from "./host-release-v1";
 import { HOST_UPDATE_CODECS } from "./host-update-v1";
 import { HOSTED_SITES_CODECS } from "./hosted-sites-v1";
 import { LIVE_ACTIVITY_PUSH_CODECS } from "./live-activity-push-v1";
+import { MCP_SIGN_IN_APP_CODECS } from "./mcp-sign-in-app-v1";
 import { MCP_SIGN_IN_CODECS } from "./mcp-sign-in-v1";
 import { PROVIDER_HOST_SIGN_IN_CODECS } from "./provider-host-sign-in-v1";
 import { PROVIDERS_ADMIN_CODECS } from "./providers-v1";
@@ -60,6 +61,7 @@ const CODECS: ReadonlyMap<string, OptionalRouteCodec> = new Map([
   ...AGENT_HOST_SETTINGS_CODECS,
   ...MCP_SIGN_IN_CODECS,
   ...PROVIDER_HOST_SIGN_IN_CODECS,
+  ...MCP_SIGN_IN_APP_CODECS,
 ]);
 
 export function optionalRouteCodec(path: string): OptionalRouteCodec | undefined {

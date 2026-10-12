@@ -41,6 +41,7 @@ import {
   decodeHostUpdateStatus,
   decodeInstalledSkills,
   decodeMcpServerConfigs,
+  decodeMcpSignInAppState,
   decodeMcpSignInStates,
   decodeMcpSignInStatus,
   decodeMcpTestResult,
@@ -61,6 +62,8 @@ import {
   isAgentStatus,
   isSharedTable,
   type McpServerConfig,
+  type McpSignInAppInput,
+  type McpSignInAppState,
   type McpSignInState,
   type McpSignInStatus,
   type McpTestResult,
@@ -71,6 +74,7 @@ import {
   type RemoveMcpServerInput,
   type SaveCustomProviderInput,
   type SaveMcpServerInput,
+  type SaveMcpSignInAppInput,
   type SetEnabledSkillInput,
   type SetMcpServerEnabledInput,
   type SetProviderApiKeyInput,
@@ -109,6 +113,7 @@ import { EVENTS_ROUTES } from "@openbot/contracts/team-protocol/events-v1";
 import { HOST_ADMIN_ROUTES } from "@openbot/contracts/team-protocol/host-admin-v1";
 import { HOST_UPDATE_ROUTES } from "@openbot/contracts/team-protocol/host-update-v1";
 import { HOSTED_SITES_ROUTES } from "@openbot/contracts/team-protocol/hosted-sites-v1";
+import { MCP_SIGN_IN_APP_ROUTES } from "@openbot/contracts/team-protocol/mcp-sign-in-app-v1";
 import { MCP_SIGN_IN_ROUTES } from "@openbot/contracts/team-protocol/mcp-sign-in-v1";
 import { MCP_ROUTES } from "@openbot/contracts/team-protocol/mcp-v1";
 import { PROVIDER_HOST_SIGN_IN_ROUTES } from "@openbot/contracts/team-protocol/provider-host-sign-in-v1";
@@ -469,6 +474,39 @@ export function signOutMcpServer(
 
 export function listMcpSignIns(request: TeamApiRequest): Effect.Effect<McpSignInState[], TeamAdminRequestError> {
   return adminCall(() => request("POST", MCP_SIGN_IN_ROUTES.list, decodeMcpSignInStates, {}));
+}
+
+export function mcpSignInApp(
+  request: TeamApiRequest,
+  input: McpSignInAppInput,
+): Effect.Effect<McpSignInAppState, TeamAdminRequestError> {
+  return adminCall(() =>
+    request("POST", MCP_SIGN_IN_APP_ROUTES.get, decodeMcpSignInAppState, { mcpServerId: input.mcpServerId }),
+  );
+}
+
+/** The client secret goes to the host once; the answer says only whether one is saved. */
+export function saveMcpSignInApp(
+  request: TeamApiRequest,
+  input: SaveMcpSignInAppInput,
+): Effect.Effect<McpSignInAppState, TeamAdminRequestError> {
+  return adminCall(() =>
+    request("POST", MCP_SIGN_IN_APP_ROUTES.save, decodeMcpSignInAppState, {
+      mcpServerId: input.mcpServerId,
+      clientId: input.clientId,
+      clientSecret: input.clientSecret,
+      scope: input.scope,
+    }),
+  );
+}
+
+export function removeMcpSignInApp(
+  request: TeamApiRequest,
+  input: McpSignInAppInput,
+): Effect.Effect<McpSignInAppState, TeamAdminRequestError> {
+  return adminCall(() =>
+    request("POST", MCP_SIGN_IN_APP_ROUTES.remove, decodeMcpSignInAppState, { mcpServerId: input.mcpServerId }),
+  );
 }
 
 export const getStorageUsage = Effect.fn("TeamAdmin.getStorageUsage")(function* (

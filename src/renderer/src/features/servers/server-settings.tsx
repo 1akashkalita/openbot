@@ -2,7 +2,9 @@ import type {
   AvatarImageInput,
   InviteSummary,
   McpServerConfig,
+  McpSignInAppState,
   McpTestResult,
+  SaveMcpSignInAppInput,
   ServerSummary,
   TeamInviteSummary,
   TeamPresenceMember,
@@ -499,6 +501,33 @@ const ServerSettings = createSimpleContext({
       if (serverSettingsTargetId() === server.id) setServerSettingsMcpSignIns(mcpSignInRecord(states));
     }
 
+    /** The OAuth app of a saved http row. The answer says only whether a secret is saved. */
+    async function mcpSignInApp(mcpServerId: string): Promise<McpSignInAppState> {
+      const server = serverSettingsTarget();
+      if (!server) throw new Error(currentText().t("server.settings.unavailable"));
+      return serversPort().agent.mcpSignInApp({ mcpServerId }, server.id);
+    }
+
+    async function saveMcpSignInApp(input: SaveMcpSignInAppInput): Promise<McpSignInAppState> {
+      return changeMcpSignInApp((serverId) => serversPort().agent.saveMcpSignInApp(input, serverId));
+    }
+
+    async function removeMcpSignInApp(mcpServerId: string): Promise<McpSignInAppState> {
+      return changeMcpSignInApp((serverId) => serversPort().agent.removeMcpSignInApp({ mcpServerId }, serverId));
+    }
+
+    /** A changed or removed app drops the sign-in that the old client held, so the badges are read again. */
+    async function changeMcpSignInApp(
+      change: (serverId: string) => Promise<McpSignInAppState>,
+    ): Promise<McpSignInAppState> {
+      const server = serverSettingsTarget();
+      if (!server) throw new Error(currentText().t("server.settings.unavailable"));
+      const state = await change(server.id);
+      const signIns = await listMcpSignIns(server);
+      if (serverSettingsTargetId() === server.id) setServerSettingsMcpSignIns(signIns);
+      return state;
+    }
+
     async function saveMcpServer(config: McpServerConfig): Promise<void> {
       await runMcpMutation("mcp_server_saved", "mcp_server_save_failed", (serverId) =>
         serversPort().agent.saveMcpServer({ config }, serverId),
@@ -592,6 +621,9 @@ const ServerSettings = createSimpleContext({
       signInMcpServer,
       cancelMcpSignIn,
       signOutMcpServer,
+      mcpSignInApp,
+      saveMcpSignInApp,
+      removeMcpSignInApp,
       refreshMcpServers,
       saveMcpServer,
       removeMcpServer,

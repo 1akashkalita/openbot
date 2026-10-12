@@ -13,4 +13,6 @@ export const messages = {
   "error.mcp.signInFileTooLarge": "MCP oturum açma dosyası çok büyük.",
   "error.mcp.unsupported": "MCP sunucuları bu sunucu tarafından desteklenmiyor.",
   "error.mcp.signInOnHost": "Bir MCP sunucusunda oturum açma yalnızca ana bilgisayardaki OpenBot'ta çalışır.",
+  "error.mcp.signInAppUnsupported":
+    "Bu sunucu oturum açma uygulamalarını desteklemiyor. Ana bilgisayardaki OpenBot'u güncelleyin.",
 } as const satisfies PartialTranslation<typeof source>;

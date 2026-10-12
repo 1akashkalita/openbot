@@ -17,6 +17,7 @@ import {
   decodeChannelSummaries,
   decodeHostUpdateStatus,
   decodeMcpServerConfigs,
+  decodeMcpSignInAppState,
   decodeMcpSignInPage,
   decodeMcpSignInStates,
   decodeMcpTestResult,
@@ -799,6 +800,9 @@ const openbotApi: OpenBotDesktopApi = {
       cancelMcpSignIn: decodeVoid,
       signOutMcpServer: decodeMcpSignInStates,
       listMcpSignIns: decodeMcpSignInStates,
+      mcpSignInApp: decodeMcpSignInAppState,
+      saveMcpSignInApp: decodeMcpSignInAppState,
+      removeMcpSignInApp: decodeMcpSignInAppState,
     }),
     ...bridgeGroup(IPC_ENDPOINTS.agentAdmin, {
       getAgentAdminSettings: decodeAgentAdminSettings,

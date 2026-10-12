@@ -18,6 +18,7 @@ import { HOST_RELEASE_ROUTES } from "./host-release-v1";
 import { HOST_UPDATE_ROUTES, hostRestartEvent } from "./host-update-v1";
 import { HOSTED_SITES_ROUTES } from "./hosted-sites-v1";
 import { LIVE_ACTIVITY_PUSH_ROUTES } from "./live-activity-push-v1";
+import { MCP_SIGN_IN_APP_CAPABILITY, MCP_SIGN_IN_APP_ROUTES } from "./mcp-sign-in-app-v1";
 import { optionalRouteCodec } from "./optional-routes";
 import { PROVIDERS_ADMIN_ROUTES } from "./providers-v1";
 import { PROVIDERS_SIGN_IN_V3_ROUTES } from "./providers-v3";
@@ -612,5 +613,45 @@ describe("host-release-v1", () => {
       expect(() => codec(path).response(200, { ...snapshot, phase: "restart" })).toThrow();
       expect(() => codec(path).response(200, { ...snapshot, currentVersion: "x".repeat(65) })).toThrow();
     }
+  });
+});
+
+describe("mcp-sign-in-app-v1", () => {
+  const app = { clientId: "openbot-client", secretSaved: true, scope: "read offline_access" };
+  const state = { redirectUrl: "http://127.0.0.1:28417/mcp-auth", app };
+
+  // The secret goes to the host once, in a save. No answer may carry it back to a client.
+  it("sends the secret only towards the host and drops it from every answer", () => {
+    const save = { mcpServerId: "mcp-1", clientId: "openbot-client", clientSecret: "s3cret", scope: "read" };
+    expect(codec(MCP_SIGN_IN_APP_ROUTES.save).request(save)).toEqual(save);
+    expect(codec(MCP_SIGN_IN_APP_ROUTES.save).request({ ...save, clientSecret: null })).toEqual({
+      ...save,
+      clientSecret: null,
+    });
+    for (const path of Object.values(MCP_SIGN_IN_APP_ROUTES)) {
+      expect(
+        codec(path).response(200, { ...state, clientSecret: "s3cret", app: { ...app, clientSecret: "s3cret" } }),
+      ).toEqual(state);
+      expect(codec(path).response(200, { redirectUrl: null, app: null })).toEqual({ redirectUrl: null, app: null });
+    }
+    expect(codec(MCP_SIGN_IN_APP_ROUTES.get).request({ mcpServerId: "mcp-1", clientSecret: "s3cret" })).toEqual({
+      mcpServerId: "mcp-1",
+    });
+  });
+
+  it("rejects malformed payloads", () => {
+    expect(() => codec(MCP_SIGN_IN_APP_ROUTES.remove).request({ mcpServerId: "" })).toThrow();
+    expect(() =>
+      codec(MCP_SIGN_IN_APP_ROUTES.save).request({ mcpServerId: "mcp-1", clientId: "x", scope: "" }),
+    ).toThrow();
+    expect(() =>
+      codec(MCP_SIGN_IN_APP_ROUTES.get).response(200, { ...state, app: { ...app, secretSaved: "yes" } }),
+    ).toThrow();
+  });
+
+  // A protocol 6 peer reads at most 64 capabilities.
+  it("is advertised only to a protocol 7 peer", () => {
+    expect(TEAM_CURRENT_CAPABILITIES).toContain(MCP_SIGN_IN_APP_CAPABILITY);
+    expect(TEAM_BOOTSTRAP_CAPABILITIES).not.toContain(MCP_SIGN_IN_APP_CAPABILITY);
   });
 });

@@ -1392,6 +1392,13 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                             start: serverSettings.signInMcpServer,
                             cancel: serverSettings.cancelMcpSignIn,
                             signOut: serverSettings.signOutMcpServer,
+                            app: workspace.state.capabilities.includes("mcp-sign-in-app-v1")
+                              ? {
+                                  load: serverSettings.mcpSignInApp,
+                                  save: serverSettings.saveMcpSignInApp,
+                                  remove: serverSettings.removeMcpSignInApp,
+                                }
+                              : undefined,
                           }
                         : undefined
                     }

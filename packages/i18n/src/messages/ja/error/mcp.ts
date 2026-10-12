@@ -13,4 +13,6 @@ export const messages = {
   "error.mcp.signInFileTooLarge": "MCP のサインインファイルが大きすぎます。",
   "error.mcp.unsupported": "このサーバーは MCP サーバーに対応していません。",
   "error.mcp.signInOnHost": "MCP サーバーへのサインインは、ホストコンピューターの OpenBot でのみ行えます。",
+  "error.mcp.signInAppUnsupported":
+    "このサーバーはサインインアプリに対応していません。ホストの OpenBot をアップデートしてください。",
 } as const satisfies PartialTranslation<typeof source>;

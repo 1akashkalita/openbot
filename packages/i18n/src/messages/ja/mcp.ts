@@ -114,4 +114,28 @@ export const messages = {
   "mcp.panel.signInWaitingOn": {
     other: "{host} でサインインページを開いています。OpenBot は {count} 分後に待機をやめます。",
   },
+  "mcp.panel.appTitle": "サインインアプリ",
+  "mcp.panel.appDescription":
+    "サーバーのプロバイダーに登録した OAuth アプリを使います。サーバーが OpenBot を自動で登録できない場合に OpenBot がこのアプリを使います。OpenBot に自動で登録させる場合は空のままにしてください。",
+  "mcp.panel.appSaveFirst": "まずこのサーバーを保存してください。その後でサインインアプリを追加できます。",
+  "mcp.panel.appUrlChanged": "まず新しいサーバー URL を保存してください。サインインアプリは保存済みの URL に属します。",
+  "mcp.panel.appLoadFailed": "サインインアプリを読み込めませんでした。",
+  "mcp.panel.callbackUrl": "コールバック URL",
+  "mcp.panel.callbackUrlDescription": "この URL をそのまま、アプリで許可するリダイレクト URL に追加してください。",
+  "mcp.panel.callbackUrlOnHost":
+    "{host} は自身のブラウザーでサインインするため、この URL は {host} 上にあります。この URL をそのまま、アプリで許可するリダイレクト URL に追加してください。",
+  "mcp.panel.callbackUrlUnavailable": "使用できるコールバック URL がありません。",
+  "mcp.panel.copyCallbackUrl": "コールバック URL をコピー",
+  "mcp.panel.clientId": "クライアント ID",
+  "mcp.panel.clientSecret": "クライアントシークレット",
+  "mcp.panel.clientSecretDescription": "任意。シークレットがあるアプリの場合のみ入力します。",
+  "mcp.panel.clientSecretSaved": "シークレットは保存済みです。置き換えるには新しいシークレットを入力してください。",
+  "mcp.panel.clientSecretRemoved": "アプリを保存するとシークレットが削除されます。",
+  "mcp.panel.removeClientSecret": "シークレットを削除",
+  "mcp.panel.scopes": "スコープ",
+  "mcp.panel.scopesDescription": "任意。スコープはスペースで区切ってください。",
+  "mcp.panel.saveApp": "アプリを保存",
+  "mcp.panel.removeApp": "アプリを削除",
+  "mcp.panel.appSaved": "アプリを保存しました。使用するにはサインインしてください。",
+  "mcp.panel.appRemoved": "アプリを削除しました。",
 } as const satisfies PartialTranslation<typeof source>;

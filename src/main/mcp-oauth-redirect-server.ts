@@ -10,9 +10,11 @@
  * wants, and it is accepted by every other signed-in listing OpenBot ships.
  *
  * So the deep link stays as the fallback for the rare machine where no loopback port can be bound,
- * and this is what a sign-in registers and sends when it is running. The port is whichever one the
- * operating system gives: RFC 8252 says an authorization server must ignore the port of a loopback
- * redirect, and the registration is remade anyway when the stored one names another address.
+ * and this is what a sign-in registers and sends when it is running. The port is
+ * `MCP_OAUTH_REDIRECT_PORT` when it is free, so an administrator can register one exact callback
+ * for a sign-in app: many authorization servers compare the port, although RFC 8252 says they must
+ * not. When another program holds that port, the operating system gives one, and the registration
+ * is remade when the stored one names another address.
  *
  * The grant travels no further than this process. The page the browser is left on says only that
  * the window can be closed - the code is in the request line, and a page that repeated it would
@@ -27,6 +29,9 @@ import { listenLoopback } from "./listen-loopback";
 
 /** The one path this listener answers. Everything else is a 404, including `/`. */
 const REDIRECT_PATH = "/mcp-auth";
+
+/** The port tried first. Not assigned by IANA as far as this was checked; any other works the same. */
+export const MCP_OAUTH_REDIRECT_PORT = 28_417;
 
 /** The names a request may claim to have reached. Anything else is a page rebinding a name here. */
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost"]);
@@ -46,6 +51,8 @@ export interface McpOAuthRedirectServerOptions {
   deliver: (state: string, code: string) => boolean;
   /** Read on each request, so the page uses the language that is set at that time. */
   language: Pick<LanguageService, "locale" | "translate">;
+  /** Tried first; any free port is used when it cannot be bound. */
+  preferredPort?: number;
 }
 
 /**
@@ -58,6 +65,7 @@ export interface McpOAuthRedirectServerOptions {
 export async function startMcpOAuthRedirectServer({
   deliver,
   language,
+  preferredPort,
 }: McpOAuthRedirectServerOptions): Promise<McpOAuthRedirectServer> {
   // A browser keeps its connection open after the page is served, and `server.close` waits for
   // every one of them - so shutdown would sit on a socket nobody is using. They are ended by hand.
@@ -78,7 +86,11 @@ export async function startMcpOAuthRedirectServer({
     socket.on("close", () => sockets.delete(socket));
   });
 
-  const port = await listenLoopback(server, () => new Error("The MCP sign-in listener was given no port."));
+  const port = await listenLoopback(
+    server,
+    () => new Error("The MCP sign-in listener was given no port."),
+    preferredPort,
+  );
   return {
     redirectUrl: `http://127.0.0.1:${port}${REDIRECT_PATH}`,
     close: async () => {

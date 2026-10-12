@@ -262,4 +262,9 @@ export const messages = {
     "O servidor respondeu com {status}. Verifique a chave de API ou outras credenciais.",
   "error.backend.mcpServerHttpUrl":
     "O servidor respondeu com {status}. Verifique a URL. O link pode estar incorreto, expirado ou excluído.",
+  "error.backend.mcpSignInAppUrl": "O app de autenticação precisa de uma URL de servidor válida.",
+  "error.backend.mcpSignInAppClientId": "Digite o ID do cliente do app de autenticação.",
+  "error.backend.mcpSignInAppNoServer":
+    "Salve este servidor MCP como servidor de URL antes de adicionar um app de autenticação.",
+  "error.backend.mcpSignInAppUnavailable": "Este computador não consegue guardar um app de autenticação.",
 } as const satisfies PartialTranslation<typeof source>;

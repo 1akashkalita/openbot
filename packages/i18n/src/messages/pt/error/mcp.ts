@@ -12,4 +12,6 @@ export const messages = {
   "error.mcp.signInFileTooLarge": "O arquivo de autenticação MCP é muito grande.",
   "error.mcp.unsupported": "Este servidor não oferece suporte a servidores MCP.",
   "error.mcp.signInOnHost": "A autenticação em um servidor MCP só funciona no OpenBot do computador anfitrião.",
+  "error.mcp.signInAppUnsupported":
+    "Este servidor não é compatível com apps de autenticação. Atualize o OpenBot no host.",
 } as const satisfies PartialTranslation<typeof source>;

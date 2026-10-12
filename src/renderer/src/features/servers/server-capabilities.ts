@@ -30,6 +30,7 @@ export function serverSupportsCapability(
       capability === "browser-view-clipboard" ||
       capability === "mcp-servers-v1" ||
       capability === "mcp-sign-in-v1" ||
+      capability === "mcp-sign-in-app-v1" ||
       capability === "provider-host-sign-in-v1" ||
       capability === "storage-v1" ||
       capability === "hosted-sites-v1" ||

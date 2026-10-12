@@ -344,6 +344,9 @@ function ServerSettings(props: {
     signInMcpServer,
     cancelMcpSignIn,
     signOutMcpServer,
+    mcpSignInApp,
+    saveMcpSignInApp,
+    removeMcpSignInApp,
     refreshMcpServers,
     saveMcpServer,
     removeMcpServer,
@@ -580,6 +583,9 @@ function ServerSettings(props: {
                   start: signInMcpServer,
                   cancel: cancelMcpSignIn,
                   signOut: signOutMcpServer,
+                  app: serverSupportsCapability(server(), "mcp-sign-in-app-v1")
+                    ? { load: mcpSignInApp, save: saveMcpSignInApp, remove: removeMcpSignInApp }
+                    : undefined,
                 }
               : undefined
           }

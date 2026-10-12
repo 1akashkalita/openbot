@@ -55,6 +55,7 @@
     "./team-protocol": "./src/team-protocol/index.ts",
     "./team-protocol/queue-edit-v1": "./src/team-protocol/queue-edit-v1.ts",
     "./team-protocol/browser-view-v1": "./src/team-protocol/browser-view-v1.ts",
+    "./team-protocol/mcp-sign-in-app-v1": "./src/team-protocol/mcp-sign-in-app-v1.ts",
     "./team-protocol/mcp-sign-in-v1": "./src/team-protocol/mcp-sign-in-v1.ts",
     "./team-protocol/provider-host-sign-in-v1": "./src/team-protocol/provider-host-sign-in-v1.ts",
     "./team-protocol/current": "./src/team-protocol/current.ts",

@@ -12,4 +12,5 @@ export const messages = {
   "error.mcp.signInFileTooLarge": "Die MCP-Anmeldedatei ist zu groß.",
   "error.mcp.unsupported": "Dieser Server unterstützt keine MCP-Server.",
   "error.mcp.signInOnHost": "Die Anmeldung bei einem MCP-Server funktioniert nur in OpenBot auf dem Host-Computer.",
+  "error.mcp.signInAppUnsupported": "Dieser Server unterstützt keine Anmelde-Apps. Aktualisiere OpenBot auf dem Host.",
 } as const satisfies PartialTranslation<typeof source>;

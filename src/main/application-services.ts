@@ -158,7 +158,7 @@ import {
 } from "./main-window";
 import { ManagedSkillService } from "./managed-skill-service";
 import { McpHostSignIns } from "./mcp-host-sign-ins";
-import { startMcpOAuthRedirectServer } from "./mcp-oauth-redirect-server";
+import { MCP_OAUTH_REDIRECT_PORT, startMcpOAuthRedirectServer } from "./mcp-oauth-redirect-server";
 import { McpOAuthStore } from "./mcp-oauth-store";
 import { MessagingCredentialStore } from "./messaging-credential-store";
 import { NotificationPreferenceStore } from "./notification-preference-store";
@@ -1021,6 +1021,7 @@ export async function createApplicationServices({
   let mcpOAuthAuthority: McpOAuth | null = null;
   const mcpOAuthRedirect = await startMcpOAuthRedirectServer({
     language,
+    preferredPort: MCP_OAUTH_REDIRECT_PORT,
     deliver: (state, code) => {
       const elsewhere = mcpOAuthAuthority?.openedElsewhere(state) ?? false;
       if (!mcpOAuthAuthority?.receiveAuthorizationCode(state, code)) return false;

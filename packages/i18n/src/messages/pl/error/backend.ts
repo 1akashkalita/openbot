@@ -256,4 +256,8 @@ export const messages = {
     "Serwer odpowiedział {status}. Sprawdź klucz API lub inne dane uwierzytelniające.",
   "error.backend.mcpServerHttpUrl":
     "Serwer odpowiedział {status}. Sprawdź URL. Link może być błędny, wygasły lub usunięty.",
+  "error.backend.mcpSignInAppUrl": "Aplikacja logowania wymaga prawidłowego adresu URL serwera.",
+  "error.backend.mcpSignInAppClientId": "Wpisz identyfikator klienta aplikacji logowania.",
+  "error.backend.mcpSignInAppNoServer": "Zapisz ten serwer MCP jako serwer URL, zanim dodasz aplikację logowania.",
+  "error.backend.mcpSignInAppUnavailable": "Ten komputer nie może przechować aplikacji logowania.",
 } as const satisfies PartialTranslation<typeof source>;

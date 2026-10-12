@@ -2,7 +2,9 @@ import type {
   AvatarImageInput,
   InviteSummary,
   McpServerConfig,
+  McpSignInAppState,
   McpTestResult,
+  SaveMcpSignInAppInput,
   ServerSummary,
   TeamInviteSummary,
   TeamPresenceMember,
@@ -14,9 +16,12 @@ import {
   cancelMcpSignIn as cancelMcpSignInRequest,
   listMcpServers,
   listMcpSignIns as listMcpSignInsRequest,
+  mcpSignInApp as mcpSignInAppRequest,
   mcpSignInStatus,
   removeMcpServer as removeMcpServerRequest,
+  removeMcpSignInApp as removeMcpSignInAppRequest,
   saveMcpServer as saveMcpServerRequest,
+  saveMcpSignInApp as saveMcpSignInAppRequest,
   setMcpServerEnabled as setMcpServerEnabledRequest,
   signOutMcpServer as signOutMcpServerRequest,
   startMcpSignIn,
@@ -261,6 +266,15 @@ export function createWebServerSettings(options: {
     });
   }
 
+  /** A changed or removed app drops the sign-in that the old client held, so the badges are read again. */
+  async function changeMcpSignInApp(
+    change: (admin: WebAdminRuntime) => Effect.Effect<McpSignInAppState, { cause: unknown }>,
+  ): Promise<McpSignInAppState> {
+    const result = await runTeamEffect(change(requireAdmin().admin).pipe(Effect.mapError((error) => error.cause)));
+    void refreshMcpSignIns().catch(() => undefined);
+    return result;
+  }
+
   return {
     state,
     restoreTarget: () => restoreTarget,
@@ -311,6 +325,16 @@ export function createWebServerSettings(options: {
         draft.mcpSignIns = mcpSignInRecord(states);
       });
     },
+    mcpSignInApp: (mcpServerId: string): Promise<McpSignInAppState> =>
+      runTeamEffect(
+        mcpSignInAppRequest(requireAdmin().admin.request, { mcpServerId }).pipe(
+          Effect.mapError((error) => error.cause),
+        ),
+      ),
+    saveMcpSignInApp: (input: SaveMcpSignInAppInput) =>
+      changeMcpSignInApp((admin) => saveMcpSignInAppRequest(admin.request, input)),
+    removeMcpSignInApp: (mcpServerId: string) =>
+      changeMcpSignInApp((admin) => removeMcpSignInAppRequest(admin.request, { mcpServerId })),
     testMcpServer: (config: McpServerConfig): Promise<McpTestResult> =>
       runTeamEffect(
         testMcpServerRequest(requireAdmin().admin.request, { config }).pipe(Effect.mapError((error) => error.cause)),

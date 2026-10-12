@@ -93,6 +93,9 @@ function setup(options: {
     cancelMcpSignIn: () => undefined,
     signOutMcpServer: () => Effect.succeed([]),
     listMcpSignIns: () => [],
+    mcpSignInApp: () => ({ redirectUrl: null, app: null }),
+    saveMcpSignInApp: () => Effect.succeed({ redirectUrl: null, app: null }),
+    removeMcpSignInApp: () => Effect.succeed({ redirectUrl: null, app: null }),
   };
   const remoteCalls: RemoteRequestInit[] = [];
   const remoteServers = {

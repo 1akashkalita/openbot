@@ -77,6 +77,11 @@ export const INPUT_LIMITS = {
   mcpUrl: 2_048,
   mcpToolCount: 10_000,
   mcpErrorText: 2_000,
+  // A sign-in app (`mcp-sign-in-app-v1`). Generous for every provider checked; the wire codec keeps
+  // its own copies of these numbers.
+  mcpClientId: 1_024,
+  mcpClientSecret: 4_096,
+  mcpScope: 2_048,
   teamMembers: 100,
   activeInvites: 100,
   // Permanent links accept unlimited joins until revoked, so a leaked link is open
