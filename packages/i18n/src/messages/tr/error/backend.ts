@@ -253,6 +253,8 @@ export const messages = {
     "Sunucu {status} yanıtı verdi. URL'yi denetleyin. Bağlantı yanlış, süresi dolmuş veya silinmiş olabilir.",
   "error.backend.mcpSignInAppUrl": "Oturum açma uygulaması için geçerli bir sunucu URL'si gerekir.",
   "error.backend.mcpSignInAppClientId": "Oturum açma uygulamasının istemci kimliğini girin.",
+  "error.backend.mcpSignInAppIssuerChanged":
+    "Bu MCP sunucusunun oturum açma sunucusu değişti, bu yüzden OpenBot oturum açma uygulamasını ona göndermedi. Değişiklik doğruysa oturum açma uygulamasını kaldırıp yeniden ekleyin.",
   "error.backend.mcpSignInAppNoServer":
     "Oturum açma uygulaması eklemeden önce bu MCP sunucusunu URL sunucusu olarak kaydedin.",
   "error.backend.mcpSignInAppUnavailable": "Bu bilgisayar oturum açma uygulaması saklayamaz.",

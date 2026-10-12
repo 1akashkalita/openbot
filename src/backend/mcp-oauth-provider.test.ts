@@ -1081,7 +1081,8 @@ describe("signing in to an http MCP server", () => {
     expect(authorize.searchParams.get("client_id")).toBe("admin-client");
     expect(authorize.searchParams.get("scope")).toBe("read offline_access");
     expect(authorize.searchParams.get("code_challenge_method")).toBe("S256");
-    expect(storage.read(server.url)?.app).toEqual(app);
+    // The first authorization server that accepted the app binds it.
+    expect(storage.read(server.url)?.app).toEqual({ ...app, issuer: server.base });
 
     const summary = oauth.signInApp(server.url);
     expect(summary).toEqual({ clientId: "admin-client", secretSaved: true, scope: "read offline_access" });
@@ -1090,13 +1091,32 @@ describe("signing in to an http MCP server", () => {
     // Sign out drops the session and keeps the app; a save without a secret keeps the stored one.
     await runMcp(oauth.signOut(server.url));
     expect(oauth.signedIn(server.url)).toBe(false);
-    expect(storage.read(server.url)?.app).toEqual(app);
+    expect(storage.read(server.url)?.app).toEqual({ ...app, issuer: server.base });
     expect(await runMcp(oauth.saveSignInApp(server.url, { ...app, clientSecret: null, scope: "read" }))).toBe(false);
-    expect(storage.read(server.url)?.app).toEqual({ ...app, scope: "read" });
+    expect(storage.read(server.url)?.app).toEqual({ ...app, scope: "read", issuer: server.base });
 
     // Removing the row removes the app and its secret.
     await runMcp(oauth.forget(server.url));
     expect(storage.read(server.url)).toBeNull();
+  });
+
+  it("never sends a sign-in app to an authorization server it is not bound to", async () => {
+    const server = await fakeServer({ refuseRegistration: "empty" });
+    const storage = memoryStorage();
+    // The app was bound to another server, and the resource now names this one.
+    storage.records.set(server.url, {
+      app: { clientId: "admin-client", clientSecret: "admin-secret", issuer: "https://auth.example.com" },
+    });
+    const openExternal = vi.fn(async () => undefined);
+    const oauth = createOAuth({ storage, redirectUrl: "openbot://mcp-auth", openExternal, signInTimeoutMs: 10_000 });
+
+    const result = await runMcp(testMcpServer(config(server.url), 10_000, undefined, oauth, "here"));
+    expect(result.error).toBe(
+      "The sign-in server of this MCP server changed, so OpenBot did not send it the sign-in app. If the change is correct, remove the sign-in app and add it again.",
+    );
+    expect(openExternal).not.toHaveBeenCalled();
+    expect(server.registrations).toBe(0);
+    expect(server.tokenRequests).toHaveLength(0);
   });
 
   it("ends a sign-in the user cancels and keeps no token", async () => {

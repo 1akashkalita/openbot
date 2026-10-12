@@ -46,6 +46,11 @@ export const mcpOAuthRecordSchema = z.object({
       clientId: z.string().min(1),
       clientSecret: z.string().min(1).optional(),
       scope: z.string().min(1).optional(),
+      /**
+       * The authorization server that first accepted the app. Its secret is sent to no other one, so
+       * a resource that later names another server cannot collect it. Unset until the first sign-in.
+       */
+      issuer: z.string().optional(),
     })
     .optional(),
   /** This installation's registration with that authorization server, from RFC 7591. */
@@ -482,7 +487,9 @@ export class McpOAuth implements McpOAuthAuthority {
     const sameClient =
       record.app !== undefined && record.app.clientId === app.clientId && record.app.clientSecret === app.clientSecret;
     if (sameClient) {
-      yield* this.#options.storage.write(resource, { ...record, app });
+      // The same client keeps the authorization server it is bound to.
+      const issuer = record.app?.issuer;
+      yield* this.#options.storage.write(resource, { ...record, app: { ...app, ...(issuer ? { issuer } : {}) } });
       return false;
     }
     this.#invalidate(resource);
@@ -660,14 +667,19 @@ class McpOAuthClientProvider implements OAuthClientProvider {
   clientInformation(): OAuthClientInformationFull | undefined {
     const record = this.#record();
     // A sign-in app is the client, always: the administrator registered it for this server, and
-    // the server offers no registration to fall back on. It carries no issuer, so the SDK sends it
-    // to whichever authorization server this resource names.
+    // the server offers no registration to fall back on. The first authorization server that accepts
+    // it binds it, as the SDK binds a registration; until then it carries no issuer. Another server
+    // is refused here, before the SDK can register with it or send it the secret.
     if (record.app) {
+      const { issuer } = record.app;
+      if (issuer && this.#activeIssuer && !issuersMatch(issuer, this.#activeIssuer))
+        throw new Error(sourceText("error.backend.mcpSignInAppIssuerChanged"));
       this.recordSecret(record.app.clientSecret);
       return {
         client_id: record.app.clientId,
         ...(record.app.clientSecret ? { client_secret: record.app.clientSecret } : {}),
         redirect_uris: [this.#options.redirectUrl],
+        ...(issuer ? { issuer } : {}),
       };
     }
     const client = this.#credential(record.client);
@@ -703,9 +715,14 @@ class McpOAuthClientProvider implements OAuthClientProvider {
       Effect.gen({ self: this }, function* () {
         this.#registrationPending = false;
         this.recordSecret(information.client_secret);
-        // The SDK binds an unstamped client to its issuer after an exchange. A sign-in app is not
-        // a registration, so nothing is written for it.
-        if (this.#record().app) return;
+        // The SDK binds an unstamped client to its issuer after an exchange. For a sign-in app that
+        // binding is all that is written: the app is not a registration.
+        const { app } = this.#record();
+        if (app) {
+          if (!app.issuer && typeof information.issuer === "string" && information.client_id === app.clientId)
+            yield* this.#save({ app: { ...app, issuer: information.issuer } });
+          return;
+        }
         yield* this.#save({ client: information });
       }),
     );

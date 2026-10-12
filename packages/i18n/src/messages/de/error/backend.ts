@@ -274,6 +274,8 @@ export const messages = {
     "Der Server hat mit {status} geantwortet. Prüfe die URL. Der Link ist möglicherweise falsch, abgelaufen oder gelöscht.",
   "error.backend.mcpSignInAppUrl": "Die Anmelde-App braucht eine gültige Server-URL.",
   "error.backend.mcpSignInAppClientId": "Gib die Client-ID der Anmelde-App ein.",
+  "error.backend.mcpSignInAppIssuerChanged":
+    "Der Anmeldeserver dieses MCP-Servers hat sich geändert, daher hat OpenBot ihm die Anmelde-App nicht gesendet. Wenn die Änderung korrekt ist, entferne die Anmelde-App und füge sie erneut hinzu.",
   "error.backend.mcpSignInAppNoServer":
     "Speichere diesen MCP-Server als URL-Server, bevor du eine Anmelde-App hinzufügst.",
   "error.backend.mcpSignInAppUnavailable": "Dieser Computer kann keine Anmelde-App speichern.",

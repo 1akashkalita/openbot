@@ -264,6 +264,8 @@ export const messages = {
     "サーバーは {status} を返しました。URL を確認してください。リンクが間違っているか、期限切れか、削除されている可能性があります。",
   "error.backend.mcpSignInAppUrl": "サインインアプリには有効なサーバー URL が必要です。",
   "error.backend.mcpSignInAppClientId": "サインインアプリのクライアント ID を入力してください。",
+  "error.backend.mcpSignInAppIssuerChanged":
+    "この MCP サーバーのサインインサーバーが変わったため、OpenBot はサインインアプリを送信しませんでした。この変更が正しい場合は、サインインアプリを削除してからもう一度追加してください。",
   "error.backend.mcpSignInAppNoServer":
     "サインインアプリを追加する前に、この MCP サーバーを URL サーバーとして保存してください。",
   "error.backend.mcpSignInAppUnavailable": "このコンピューターではサインインアプリを保存できません。",

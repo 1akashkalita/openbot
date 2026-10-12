@@ -4,7 +4,7 @@
 
 ### Security
 
-- OpenBot keeps the client secret of a sign-in app in the encrypted sign-in store, shows only "Secret saved" after you save it, and removes it when you remove the server. Only an owner or admin can change a sign-in app on a joined server.
+- OpenBot keeps the client secret of a sign-in app in the encrypted sign-in store, shows only "Secret saved" after you save it, and removes it when you remove the server. Only an owner or admin can change a sign-in app on a joined server. A sign-in app is bound to the first sign-in server that accepts it, and OpenBot never sends it to a different one.
 
 ### Changed
 

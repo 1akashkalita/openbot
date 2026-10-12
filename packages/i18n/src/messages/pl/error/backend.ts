@@ -258,6 +258,8 @@ export const messages = {
     "Serwer odpowiedział {status}. Sprawdź URL. Link może być błędny, wygasły lub usunięty.",
   "error.backend.mcpSignInAppUrl": "Aplikacja logowania wymaga prawidłowego adresu URL serwera.",
   "error.backend.mcpSignInAppClientId": "Wpisz identyfikator klienta aplikacji logowania.",
+  "error.backend.mcpSignInAppIssuerChanged":
+    "Serwer logowania tego serwera MCP zmienił się, więc OpenBot nie wysłał mu aplikacji logowania. Jeśli ta zmiana jest poprawna, usuń aplikację logowania i dodaj ją ponownie.",
   "error.backend.mcpSignInAppNoServer": "Zapisz ten serwer MCP jako serwer URL, zanim dodasz aplikację logowania.",
   "error.backend.mcpSignInAppUnavailable": "Ten komputer nie może przechować aplikacji logowania.",
 } as const satisfies PartialTranslation<typeof source>;
