@@ -116,7 +116,8 @@ export const messages = defineMessages("settings", {
   "settings.tab.notifications.title": "Notifications",
   "settings.tab.notifications.description": "Choose how OpenBot alerts you.",
   "settings.tab.voice.title": "Voice",
-  "settings.tab.voice.description": "Dictation in the message box. It runs on this computer.",
+  "settings.tab.voice.description":
+    "Dictation in the message box. Local models run on this computer; ElevenLabs runs in the cloud.",
   "settings.tab.computerUse.title": "Computer Use",
   "settings.tab.computerUse.description": "Allow OpenBot to see and interact with apps on this computer.",
   "settings.tab.profile.title": "Profile",
@@ -384,10 +385,21 @@ export const messages = defineMessages("settings", {
   "settings.voice.language.section": "Language",
   "settings.voice.language.title": "Dictation language",
   "settings.voice.language.description": "The language that you speak. Automatic finds it from the recording.",
-  "settings.voice.language.modelDetects": "Parakeet finds the spoken language itself. To set a language, use Whisper.",
+  "settings.voice.language.modelDetects":
+    "Parakeet finds the spoken language itself. To set a language, use Whisper or ElevenLabs.",
   "settings.voice.language.automatic": "Automatic",
   "settings.voice.loadFailed": "Could not read the voice models.",
   "settings.voice.saveFailed": "Could not save the voice setting. Try again.",
   "settings.voice.downloadFailed": "Could not start the download. Try again.",
   "settings.voice.cancelFailed": "Could not stop the download.",
+  "settings.voice.model.elevenlabs.description":
+    "Streams your voice to ElevenLabs. Text shows while you speak and stays fixed. Uses your own API key, and ElevenLabs bills each use.",
+  "settings.voice.model.keySaved": "API key saved",
+  "settings.voice.model.keyMissing": "Needs an ElevenLabs API key",
+  "settings.voice.apiKey.label": "ElevenLabs API key",
+  "settings.voice.apiKey.placeholder": "Paste the key",
+  "settings.voice.apiKey.save": "Save key",
+  "settings.voice.apiKey.remove": "Remove key",
+  "settings.voice.apiKey.saveFailed": "Could not save the API key. Try again.",
+  "settings.voice.apiKey.removeFailed": "Could not remove the API key. Try again.",
 });

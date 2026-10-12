@@ -285,6 +285,7 @@ const {
   forwardUpdateStatus,
   forwardUpdatePreference,
   forwardVoiceModelStatus,
+  forwardVoiceStreamTranscript,
   forwardProviderRuntimeStatus,
   forwardGitHubConnectorStatus,
   forwardRoutineFlowsChanged,
@@ -945,6 +946,7 @@ if (!hasSingleInstanceLock) {
         forwardBrowserDisplayState,
         forwardProviderRuntimeStatus,
         forwardVoiceModelStatus,
+        forwardVoiceStreamTranscript,
         prepareForUpdateInstall,
       });
       services = built;

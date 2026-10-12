@@ -58,6 +58,7 @@ import type {
   ProviderRuntimeSnapshot,
   RoutineFlowsChanged,
   VoiceModelStatus,
+  VoiceStreamTranscript,
 } from "@openbot/contracts/ipc";
 import { IPC_ENDPOINTS, isManagedToolRuntime, isUpdateBusyPhase, latestTurnAnswer } from "@openbot/contracts/ipc";
 import { decodeRecord, requiredString } from "@openbot/contracts/ipc-decoding";
@@ -221,6 +222,8 @@ import {
   UpdateService,
 } from "./update-service";
 import { listSiblingOpenBotInstances } from "./update-sibling-instances";
+import { VoiceApiKeyStore } from "./voice-api-key-store";
+import { openScribeSocket } from "./voice-cloud-stream";
 import {
   PARAKEET_MODEL_DIRECTORY,
   removeLegacyWhisperCache,
@@ -363,6 +366,7 @@ export interface ApplicationServiceContext {
   forwardBrowserDisplayState: (state: BrowserDisplayState) => void;
   forwardProviderRuntimeStatus: (snapshot: ProviderRuntimeSnapshot) => void;
   forwardVoiceModelStatus: (status: VoiceModelStatus) => void;
+  forwardVoiceStreamTranscript: (transcript: VoiceStreamTranscript) => void;
   prepareForUpdateInstall: () => Promise<void>;
 }
 
@@ -680,6 +684,7 @@ export async function createApplicationServices({
   forwardBrowserDisplayState,
   forwardProviderRuntimeStatus,
   forwardVoiceModelStatus,
+  forwardVoiceStreamTranscript,
   prepareForUpdateInstall,
 }: ApplicationServiceContext): Promise<ApplicationServices> {
   // First, so the provider lines of the whole startup reach the file.
@@ -2019,6 +2024,11 @@ export async function createApplicationServices({
   teardown.push(TEARDOWN_ORDER.remoteDesktop, "remote desktop", () => Effect.runPromise(remoteDesktop.stop()));
   const voicePreferences = new VoicePreferenceStore(join(app.getPath("userData"), "voice-preference.json"));
   await runCauseEffect(voicePreferences.load());
+  const voiceApiKeys = new VoiceApiKeyStore({
+    path: join(app.getPath("userData"), "voice-api-key.json"),
+    cipher: secretCipher,
+  });
+  await runCauseEffect(voiceApiKeys.load());
   const voice = new VoiceTranscriptionService({
     resourcesRoot: app.isPackaged ? join(process.resourcesPath, "voice") : resolve(".openbot-build/voice"),
     // `voice:prepare` puts Parakeet in `.openbot-build/voice/model` for development.
@@ -2031,7 +2041,9 @@ export async function createApplicationServices({
         : resolve(".openbot-build/voice", WHISPER_TURBO_MODEL_DIRECTORY),
     },
     preferences: voicePreferences,
+    apiKeys: voiceApiKeys,
     spawnHost: spawnVoiceTranscriptionHost,
+    openStreamSocket: openScribeSocket,
   });
   if (app.isPackaged) {
     // Parakeet replaced Whisper. The Whisper model is an application download, not user data.
@@ -2041,6 +2053,7 @@ export async function createApplicationServices({
   }
   teardown.push(TEARDOWN_ORDER.voice, "voice transcription", () => Effect.runPromise(voice.shutdown()));
   voice.on("modelStatus", forwardVoiceModelStatus);
+  voice.on("streamTranscript", forwardVoiceStreamTranscript);
   const currentVersion = app.getVersion();
   // Skip the file check in dev: unpacked runs never enable updates, so avoid touching resourcesPath.
   const updateMetadataAvailable = app.isPackaged && existsSync(join(process.resourcesPath, "app-update.yml"));

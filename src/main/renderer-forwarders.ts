@@ -21,6 +21,7 @@ import {
   LOCAL_SERVER_ID,
   latestTurnAnswer,
   type VoiceModelStatus,
+  type VoiceStreamTranscript,
 } from "@openbot/contracts/ipc";
 import { TEAM_API_ROUTES } from "@openbot/contracts/team-api-routes";
 import type { AppFormat, AppTranslate } from "@openbot/i18n";
@@ -194,6 +195,12 @@ export function createRendererForwarders({
     sendToRenderer(window, IPC_ENDPOINTS.voice.modelStatus, status);
   }
 
+  function forwardVoiceStreamTranscript(transcript: VoiceStreamTranscript): void {
+    const window = getMainWindow();
+    if (!window || window.isDestroyed()) return;
+    sendToRenderer(window, IPC_ENDPOINTS.voice.streamTranscript, transcript);
+  }
+
   function forwardProviderRuntimeStatus(snapshot: import("@openbot/contracts/ipc").ProviderRuntimeSnapshot): void {
     const window = getMainWindow();
     if (!window || window.isDestroyed()) return;
@@ -286,6 +293,7 @@ export function createRendererForwarders({
     forwardUpdateStatus,
     forwardUpdatePreference,
     forwardVoiceModelStatus,
+    forwardVoiceStreamTranscript,
     forwardProviderRuntimeStatus,
     forwardGitHubConnectorStatus,
     forwardRoutineFlowsChanged,
