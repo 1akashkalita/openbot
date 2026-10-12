@@ -66,6 +66,7 @@ export const messages = {
   "error.team.agentUpdateUnsupported": "Diese Verbindung unterstützt das Aktualisieren von Agenten nicht.",
   "error.team.contextResetUnsupported": "Diese Verbindung unterstützt das Starten eines neuen Chats nicht.",
   "error.team.workspaceDirectoryUnsupported": "Diese Verbindung unterstützt das Anzeigen von Ordnern nicht.",
+  "error.team.conversationFileSearchUnsupported": "Diese Verbindung unterstützt das Suchen von Dateien nicht.",
   "error.team.routineFlowsUnsupported":
     "Dieser Server unterstützt keine Routinenabläufe. Aktualisiere OpenBot auf dem Computer, auf dem er läuft.",
   "error.team.routineCanvasTooLarge":

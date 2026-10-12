@@ -67,6 +67,8 @@ export const messages = {
   "error.team.contextResetUnsupported":
     "Commencer une nouvelle discussion n’est pas pris en charge par cette connexion.",
   "error.team.workspaceDirectoryUnsupported": "L’affichage des dossiers n’est pas pris en charge par cette connexion.",
+  "error.team.conversationFileSearchUnsupported":
+    "La recherche de fichiers n’est pas prise en charge par cette connexion.",
   "error.team.routineFlowsUnsupported":
     "Ce serveur ne prend pas en charge les flux de routines. Mettez à jour OpenBot sur l’ordinateur qui l’exécute.",
   "error.team.routineCanvasTooLarge":

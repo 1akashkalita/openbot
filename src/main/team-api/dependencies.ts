@@ -103,6 +103,7 @@ type TeamApiAgentMethods = Pick<
   | "readConversationFor"
   | "readConversationPageFor"
   | "searchConversationMessages"
+  | "searchConversationFiles"
   | "markConversationRead"
   | "markConversationUnread"
   | "prepareImportedAttachments"

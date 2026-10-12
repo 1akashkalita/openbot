@@ -22,6 +22,7 @@ import {
 } from "./browser-view-v1";
 import { CONNECTORS_CAPABILITY } from "./connectors-v1";
 import { CONTEXT_RESET_CAPABILITY } from "./context-reset-v1";
+import { CONVERSATION_FILE_SEARCH_CAPABILITY } from "./conversation-file-search-v1";
 import { EVENTS_CAPABILITY } from "./events-v1";
 import { TEAM_HISTORY_EXTENT_CAPABILITY } from "./history-extent-v1";
 import { HOST_ADMIN_CAPABILITY } from "./host-admin-v1";
@@ -82,6 +83,7 @@ export {
   CHANNEL_DELETE_CAPABILITY,
   CONNECTORS_CAPABILITY,
   CONTEXT_RESET_CAPABILITY,
+  CONVERSATION_FILE_SEARCH_CAPABILITY,
   EVENTS_CAPABILITY,
   HOST_ADMIN_CAPABILITY,
   HOST_MEMBER_UPDATE_CAPABILITY,
@@ -177,6 +179,7 @@ export const TEAM_CURRENT_CAPABILITIES = [
   MCP_SIGN_IN_APP_CAPABILITY,
   SIGN_IN_RELAY_CAPABILITY,
   CONNECTORS_CAPABILITY,
+  CONVERSATION_FILE_SEARCH_CAPABILITY,
   ROUTINE_FLOWS_CAPABILITY,
   TEAM_HISTORY_EXTENT_CAPABILITY,
 ] as const;
@@ -256,6 +259,7 @@ export const TEAM_BOOTSTRAP_CAPABILITIES = TEAM_CURRENT_CAPABILITIES.filter(
     capability !== MCP_SIGN_IN_APP_CAPABILITY &&
     capability !== SIGN_IN_RELAY_CAPABILITY &&
     capability !== CONNECTORS_CAPABILITY &&
+    capability !== CONVERSATION_FILE_SEARCH_CAPABILITY &&
     capability !== ROUTINE_FLOWS_CAPABILITY &&
     capability !== TEAM_HISTORY_EXTENT_CAPABILITY,
 );
@@ -276,6 +280,7 @@ export function legacyTeamCapabilities(capabilities: readonly string[]): string[
       capability !== MCP_SIGN_IN_APP_CAPABILITY &&
       capability !== SIGN_IN_RELAY_CAPABILITY &&
       capability !== CONNECTORS_CAPABILITY &&
+      capability !== CONVERSATION_FILE_SEARCH_CAPABILITY &&
       capability !== ROUTINE_FLOWS_CAPABILITY &&
       capability !== TEAM_HISTORY_EXTENT_CAPABILITY,
   );

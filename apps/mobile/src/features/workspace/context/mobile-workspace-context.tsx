@@ -716,7 +716,7 @@ export function MobileWorkspaceProvider({ children }: PropsWithChildren) {
   }, [hold, activeServerId]);
 
   const loadConversation = useCallback(
-    async (agentId: string, serverId = activeServerIdRef.current, refresh = false) => {
+    async (agentId: string, serverId = activeServerIdRef.current, refresh = false, attach = false) => {
       const generation = loadGeneration.current;
       return conversationStore.loadLatest(
         agentId,
@@ -730,7 +730,36 @@ export function MobileWorkspaceProvider({ children }: PropsWithChildren) {
           ),
         () => generation === loadGeneration.current && Boolean(serverId) && !removedServers.current.has(serverId ?? ""),
         refresh,
+        attach,
       );
+    },
+    [request, conversationStore],
+  );
+  // A stable function: an open chat reloads its history when this changes.
+  const loadLatestMessages = useCallback(
+    async (agentId: string, serverId?: string) => {
+      await loadConversation(agentId, serverId, true, true);
+    },
+    [loadConversation],
+  );
+  const loadConversationAround = useCallback(
+    async (agentId: string, messageId: string, serverId = activeServerIdRef.current) => {
+      const generation = loadGeneration.current;
+      // A query parameter never reaches the JSON adapters. A host that does not know `around` sends the
+      // latest page, which does not hold an older message, so the chat then opens at the latest message.
+      const page = await request(
+        "GET",
+        `${TEAM_API_ROUTES.agent.conversationPage(agentId)}?limit=50&around=${encodeURIComponent(messageId)}`,
+        decodeConversationPage,
+        undefined,
+        serverId,
+      );
+      if (page.agentId !== agentId) throw new Error("The server returned a page for another conversation.");
+      const current =
+        generation === loadGeneration.current && Boolean(serverId) && !removedServers.current.has(serverId ?? "");
+      if (!current || !page.messages.some((message) => message.id === messageId)) return false;
+      conversationStore.applyAround(page);
+      return true;
     },
     [request, conversationStore],
   );
@@ -972,10 +1001,14 @@ export function MobileWorkspaceProvider({ children }: PropsWithChildren) {
       const write = (readWrites.current.get(agentId) ?? Promise.resolve())
         .then(async () => {
           if (generation !== loadGeneration.current) return;
+          const cached = conversationStore.get(agentId);
+          // A window around a searched message does not hold the latest message.
           const snapshot =
             visibleMessageId !== undefined
               ? null
-              : (conversationStore.get(agentId) ?? (await loadConversation(agentId, serverId)));
+              : cached && !cached.detached
+                ? cached
+                : await loadConversation(agentId, serverId);
           if (generation !== loadGeneration.current) return;
           const throughMessageId = visibleMessageId !== undefined ? visibleMessageId : snapshot?.messages.at(-1)?.id;
           if (throughMessageId === undefined) return;
@@ -1444,6 +1477,8 @@ export function MobileWorkspaceProvider({ children }: PropsWithChildren) {
           interruptAgentTurn(teamApi(serverId), agentId, turnId).pipe(Effect.mapError((error) => error.cause)),
         ),
       loadConversation,
+      loadConversationAround,
+      loadLatestMessages,
       loadOlderMessages,
       uploadAttachment: async (agentId, input, targetServerId, onProgress) => {
         const serverId = targetServerId ?? agents.find((candidate) => candidate.id === agentId)?.serverId;
@@ -1578,6 +1613,8 @@ export function MobileWorkspaceProvider({ children }: PropsWithChildren) {
     directoryRefresh,
     hiddenAgentIds,
     loadConversation,
+    loadConversationAround,
+    loadLatestMessages,
     loadOlderMessages,
     markAgentRead,
     markAllRead,
