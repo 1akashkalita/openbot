@@ -304,7 +304,6 @@ import type {
   RemoveRoutineFlowPositionInput,
   RoutineFlowCanvas,
   RoutineFlowLink,
-  RoutineFlowsChanged,
   SaveRoutineFlowPositionInput,
   UpdateRoutineFlowLinkInput,
 } from "./ipc-routine-flows";
@@ -1041,7 +1040,8 @@ export const IPC_ENDPOINTS = {
   },
   /**
    * Routine flows: an agent routine's answer handed on from agent to agent, and the canvas that shows
-   * it. Only this computer's host keeps them; a remote server answers that it cannot.
+   * it. A joined server answers through `routine-flows-v1` when it supports it. The agent event
+   * `routine-flows-changed` says which canvas changed.
    */
   routineFlows: {
     canvas: scopedRequest<string, RoutineFlowCanvas>()("routine-flows:canvas"),
@@ -1050,8 +1050,6 @@ export const IPC_ENDPOINTS = {
     connect: scopedRequest<ConnectRoutineFlowInput, RoutineFlowLink>()("routine-flows:connect"),
     disconnect: scopedRequest<DisconnectRoutineFlowInput, void>()("routine-flows:disconnect"),
     updateLink: scopedRequest<UpdateRoutineFlowLinkInput, RoutineFlowLink>()("routine-flows:update-link"),
-    /** The local agents whose canvases changed. */
-    changed: event<RoutineFlowsChanged>()("routine-flows:changed"),
   },
   agentAttachments: {
     chooseAttachments: scopedRequest<ChooseAttachmentsInput, DraftAttachment[]>()("agent:choose-attachments"),

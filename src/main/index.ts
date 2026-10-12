@@ -288,7 +288,6 @@ const {
   forwardVoiceStreamTranscript,
   forwardProviderRuntimeStatus,
   forwardGitHubConnectorStatus,
-  forwardRoutineFlowsChanged,
   forwardOnePasswordConnectorStatus,
   forwardBitwardenConnectorStatus,
   forwardHostStatus,
@@ -571,7 +570,7 @@ function registerIpcHandlers({
     ...memoryIpcHandlers({ service, remoteServers }),
     ...sharedTableIpcHandlers({ service, remoteServers }),
     ...routineIpcHandlers({ service, remoteServers }),
-    ...routineFlowIpcHandlers({ routineFlows }),
+    ...routineFlowIpcHandlers({ routineFlows, remoteServers }),
     ...channelMemoryIpcHandlers({ service, remoteServers }),
     ...channelRoutineIpcHandlers({ service, remoteServers }),
     ...agentAdminIpcHandlers({
@@ -1048,7 +1047,6 @@ if (!hasSingleInstanceLock) {
       host.on("directTyping", (event) => forwardDirectTyping("local", event));
       remoteDesktop.on("changed", forwardRemoteDesktopSessions);
       built.githubConnector.onChanged(forwardGitHubConnectorStatus);
-      built.routineFlows.onChanged(forwardRoutineFlowsChanged);
       built.onePasswordConnector.onChanged(forwardOnePasswordConnectorStatus);
       built.bitwardenConnector.onChanged(forwardBitwardenConnectorStatus);
       remoteServers.on("changed", forwardServers);

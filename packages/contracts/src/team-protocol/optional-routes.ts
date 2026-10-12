@@ -28,6 +28,7 @@ import { PROVIDERS_RUNTIMES_V2_CODECS } from "./providers-v2";
 import { PROVIDERS_SIGN_IN_V3_CODECS } from "./providers-v3";
 import { PROVIDERS_V4_CODECS } from "./providers-v4";
 import { PROVIDERS_V5_CODECS } from "./providers-v5";
+import { ROUTINE_FLOWS_CODECS } from "./routine-flows-v1";
 import { SHARED_TABLES_CODECS } from "./shared-tables-v1";
 import { SIGN_IN_RELAY_CODECS } from "./sign-in-relay-v1";
 import { SKILLS_ADMIN_CODECS } from "./skills-admin-v1";
@@ -66,6 +67,7 @@ const CODECS: ReadonlyMap<string, OptionalRouteCodec> = new Map([
   ...MCP_SIGN_IN_APP_CODECS,
   ...SIGN_IN_RELAY_CODECS,
   ...CONNECTORS_CODECS,
+  ...ROUTINE_FLOWS_CODECS,
 ]);
 
 export function optionalRouteCodec(path: string): OptionalRouteCodec | undefined {
