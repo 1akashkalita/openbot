@@ -72,17 +72,17 @@ for (const provider of providers) {
         ].join("\n"),
       );
       if (provider === "codex") {
-        for (let permission = 0; permission < 2; permission += 1) {
+        // Codex asks before an MCP call. "Allow once" is only an MCP decision, and the model sets the count.
+        await expect(async () => {
           const allow = app.page.getByRole("radio", { name: /^Allow once/ }).first();
-          await expect(allow).toBeVisible({ timeout: 120_000 });
-          await allow.click();
-          await expect
-            .poll(
-              async () =>
-                endpoint.receipts.length + (await readFile(receipt, "utf8")).split("\n").filter(Boolean).length,
-            )
-            .toBe(permission + 1);
-        }
+          if (await allow.isVisible()) await allow.click({ timeout: 5_000 });
+          expect(endpoint.receipts, "Codex must call the HTTP MCP tool.").not.toHaveLength(0);
+          expect(
+            (await readFile(receipt, "utf8")).split("\n").filter(Boolean),
+            "Codex must call the STDIO MCP tool.",
+          ).not.toHaveLength(0);
+          expect((await conversation(app, agent.id)).activeTurnId, "Codex must finish its turn.").toBeNull();
+        }).toPass({ timeout: 240_000 });
       }
       await expect
         .poll(() => endpoint.receipts, {
@@ -98,13 +98,17 @@ for (const provider of providers) {
         .toEqual([`stdio-${marker}`]);
       await expect.poll(async () => (await conversation(app, agent.id)).activeTurnId).toBeNull();
       const history = await conversation(app, agent.id);
+      // Commentary can repeat a tool result while the turn runs. Only an answer must report it.
       for (const transport of ["http", "stdio"]) {
         expect(
           history.messages.filter(
             (message) =>
-              message.author === "assistant" && message.text.includes(`MCP recorded: ${transport}-${marker}`),
-          ),
-        ).toHaveLength(1);
+              message.author === "assistant" &&
+              message.itemType !== "commentary" &&
+              message.text.includes(`MCP recorded: ${transport}-${marker}`),
+          ).length,
+          `${provider} must report the ${transport} tool result in an answer.`,
+        ).toBeGreaterThanOrEqual(1);
       }
       expect(endpoint.receipts).toEqual([`http-${marker}`]);
       expect((await readFile(receipt, "utf8")).split("\n").filter(Boolean)).toEqual([`stdio-${marker}`]);

@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { LOCAL_SERVER_ID } from "@openbot/contracts/ipc";
-import { assertHost, joinHost } from "./support/app";
+import { assertHost, joinHost, type TestApp } from "./support/app";
 import { expect, test } from "./support/fixtures";
 import { prompt } from "./support/scenario";
 import { completed, conversation, newAgent, openAgent, selectServer, send, t, upload } from "./support/ui";
@@ -91,14 +91,24 @@ test("host-reconnect reconnects through the UI without losing the conversation",
   await owner.page.evaluate(() => window.openbot.host.stop());
   try {
     const retry = app.page.getByRole("button", { name: t("server.connection.retry"), exact: true });
-    await expect(retry).toBeVisible();
+    await expect(retry).toBeEnabled();
+    // This case is the one that always uses Retry, so use it while the host is still stopped: an
+    // automatic reconnect (#1809) cannot remove the control first. The attempt ends and Retry stays.
+    const attempt = await nextAttempt(app, serverId);
+    await retry.focus();
+    await expect(retry).toBeFocused();
+    await retry.press("Enter");
+    const states = await attempt.evaluate((value) => value.states);
+    expect(states.at(-1)).toBe("error");
+    await expect(retry).toBeEnabled();
     await owner.page.evaluate(() => window.openbot.host.start());
     await expect
       .poll(() => owner.page.evaluate(() => window.openbot.host.getStatus().then((status) => status.apiOnline)))
       .toBe(true);
-    await retry.focus();
-    await expect(retry).toBeFocused();
-    await retry.press("Enter");
+    // The client can now reconnect by itself (#1809). Press Retry only if it has not. If that reconnect
+    // removes Retry before the press, the press fails and the client must be online.
+    if ((await serverState(app, serverId)) !== "online")
+      await retry.press("Enter", { timeout: 15_000 }).catch(() => assertHost(app, serverId));
     await assertHost(app, serverId);
     await openAgent(app, agent.name);
     expect((await conversation(app, agent.id)).threadId).toBe(before.threadId);
@@ -146,15 +156,30 @@ test("host-revoke blocks stale message and file requests after membership remova
     { file, serverId },
   );
   expect(preview).toBe(marker);
-  const before = await conversation(owner, agent.id);
   const member = (await owner.page.evaluate(() => window.openbot.host.listMembers())).find(
     (item) => item.email === app.email,
   );
   if (!member) throw new Error("The client membership is missing.");
+  // The host holds the member's session now, so its absence after the removal is a result.
+  expect(await memberSessions(owner, member.id)).not.toEqual([]);
+  const host = (await app.page.evaluate(() => window.openbot.servers.list())).find((item) => item.id === serverId);
+  if (!host) throw new Error("The client server is missing.");
+  const hostButton = app.page
+    .getByRole("complementary", { name: t("server.rail.label") })
+    .getByRole("button", { name: t("server.rail.buttonLabel", { name: host.name }), exact: true });
+  await expect(hostButton).toBeVisible();
   const local = (await owner.page.evaluate(() => window.openbot.servers.list())).find(
     (item) => item.id === LOCAL_SERVER_ID,
   );
   if (!local) throw new Error("The owner server is missing.");
+  // Every owner host status from the removal until the member joins again.
+  const statuses = await owner.page.evaluateHandle(() => {
+    const seen: { phase: string; apiOnline: boolean }[] = [];
+    const stop = window.openbot.host.onEvent((status) =>
+      seen.push({ phase: status.phase, apiOnline: status.apiOnline }),
+    );
+    return { seen, stop };
+  });
   await owner.page
     .getByRole("complementary", { name: t("server.rail.label") })
     .getByRole("button", { name: t("server.rail.buttonLabel", { name: local.name }), exact: true })
@@ -169,6 +194,7 @@ test("host-revoke blocks stale message and file requests after membership remova
     .click();
   await owner.page.getByRole("menuitem", { name: t("server.members.remove"), exact: true }).click();
   await owner.page.getByRole("button", { name: t("server.members.remove"), exact: true }).click();
+  let rejoined = false;
   try {
     await expect
       .poll(async () =>
@@ -177,32 +203,81 @@ test("host-revoke blocks stale message and file requests after membership remova
         ),
       )
       .toBe(false);
+    // The host closed the removed member's session: a stale token no longer authenticates there.
+    await expect.poll(() => memberSessions(owner, member.id)).toEqual([]);
     await expect
       .poll(async () =>
         (await app.page.evaluate(() => window.openbot.servers.list())).some((item) => item.id === serverId),
       )
       .toBe(false);
+    await expect(hostButton).toHaveCount(0);
+    // The client dropped the host, so a stale scoped request stops before it leaves the client.
     await expect(
       app.page.evaluate(({ file, serverId }) => window.openbot.agent.previewWorkspaceFile(file, serverId), {
         file,
         serverId,
       }),
-    ).rejects.toThrow();
+    ).rejects.toThrow(t("error.remote.serverNotFound"));
     await expect(
       app.page.evaluate(
         ({ agentId, serverId }) =>
           window.openbot.agent.sendMessage({ agentId, text: "Unauthorized message" }, serverId),
         { agentId: agent.id, serverId },
       ),
-    ).rejects.toThrow();
-    expect((await conversation(owner, agent.id)).messages.map((item) => item.id)).toEqual(
-      before.messages.map((item) => item.id),
-    );
-    expect(await readFile(join(owner.profile, "workspace-home/OpenBot/Agents", agent.id, filename), "utf8")).toBe(
-      marker,
-    );
-  } finally {
+    ).rejects.toThrow(t("error.remote.serverNotFound"));
     await owner.page.keyboard.press("Escape");
-    await joinHost(owner, app);
+    // Regression from #1777: the removal revokes the owner host's Signal session, and the host waited
+    // the 60 s rate window before it connected again, so nobody could reach it.
+    const started = Date.now();
+    expect(await joinHost(owner, app)).toBe(serverId);
+    rejoined = true;
+    const rejoinMs = Date.now() - started;
+    expect(rejoinMs).toBeLessThan(20_000);
+    const seen = await statuses.evaluate((value) => value.seen);
+    expect(seen.filter((status) => status.phase === "error" || !status.apiOnline)).toEqual([]);
+    expect(await owner.page.evaluate(() => window.openbot.host.getStatus())).toMatchObject({
+      phase: "online",
+      apiOnline: true,
+    });
+  } finally {
+    await statuses.evaluate((value) => value.stop());
+    if (!rejoined) {
+      await owner.page.keyboard.press("Escape");
+      await joinHost(owner, app);
+    }
   }
 });
+
+function memberSessions(owner: TestApp, memberId: string) {
+  return owner.page.evaluate(
+    (id) => window.openbot.host.listSessions().then((sessions) => sessions.filter((item) => item.memberId === id)),
+    memberId,
+  );
+}
+
+function serverState(app: TestApp, id: string) {
+  return app.page.evaluate(
+    (serverId) => window.openbot.servers.list().then((servers) => servers.find((item) => item.id === serverId)?.state),
+    id,
+  );
+}
+
+/** Records one server's connection states from now until the next connection attempt ends. */
+function nextAttempt(app: TestApp, id: string) {
+  return app.page.evaluateHandle((serverId) => {
+    const states: string[] = [];
+    return {
+      states: new Promise<string[]>((resolve) => {
+        const stop = window.openbot.servers.onEvent((servers) => {
+          const state = servers.find((item) => item.id === serverId)?.state;
+          if (!state || state === states.at(-1)) return;
+          states.push(state);
+          if (state !== "connecting" && states.includes("connecting")) {
+            stop();
+            resolve(states);
+          }
+        });
+      }),
+    };
+  }, id);
+}

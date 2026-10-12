@@ -1,8 +1,35 @@
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { test as base, expect } from "@playwright/test";
+import { createOpenBotLogger } from "@openbot/logging";
+import { test as base, expect, type TestInfo } from "@playwright/test";
 import { assertHost, joinHost, TestApp, testEmail } from "./app";
 import { output, providers, settings } from "./settings";
+
+const logger = createOpenBotLogger("e2e-fixtures");
+
+// The composer stays disabled until the selected server's agent runtime is ready.
+async function agentReady(app: TestApp, serverId: string | null) {
+  await expect
+    .poll(
+      () => app.page.evaluate((id) => window.openbot.agent.getStatus(id ?? undefined).then((s) => s.phase), serverId),
+      {
+        timeout: 60_000,
+        message: "The agent runtime must become ready.",
+      },
+    )
+    .toBe("ready");
+}
+
+// App UI only: traces stay disabled because Electron launch metadata contains the environment.
+async function screenshot(app: TestApp, name: string, testInfo: TestInfo) {
+  const path = testInfo.outputPath(name);
+  try {
+    await app.page.screenshot({ path });
+    await testInfo.attach(name, { path, contentType: "image/png" });
+  } catch (error) {
+    logger.warn(`Could not save ${name}.`, error);
+  }
+}
 
 interface Stack {
   owner: TestApp;
@@ -33,6 +60,8 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
           client = await TestApp.start(join(directory, "client"), realProviders, testEmail());
           serverId = await joinHost(owner, client);
         }
+        await agentReady(owner, null);
+        if (serverId) await agentReady(client, serverId);
         // No provider fallback: each requested model must be available before the first test.
         if (realProviders) {
           const agents = await client.page.evaluate(() => window.openbot.agent.listAgents());
@@ -80,9 +109,8 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
       await use(stack.client);
     } finally {
       if (testInfo.status !== testInfo.expectedStatus) {
-        const artifactRoot = join(output, "report", testInfo.testId.replaceAll(/[^a-zA-Z0-9_-]/g, "_"));
-        await mkdir(artifactRoot, { recursive: true });
-        await stack.client.page.screenshot({ path: join(artifactRoot, "failure.png") }).catch(() => undefined);
+        await screenshot(stack.client, "failure.png", testInfo);
+        if (stack.client !== stack.owner) await screenshot(stack.owner, "owner-failure.png", testInfo);
       }
     }
   },

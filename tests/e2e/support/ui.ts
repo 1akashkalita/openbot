@@ -1,8 +1,11 @@
 import { randomUUID } from "node:crypto";
+import { readdir, readFile } from "node:fs/promises";
+import { join } from "node:path";
 import type { AgentSummary, CreateAgentInput } from "@openbot/contracts/ipc";
 import { agentProviderName } from "@openbot/contracts/ipc";
 import { translateFor } from "@openbot/i18n";
 import { expect, type Page } from "@playwright/test";
+import { z } from "zod";
 import { assertHost, type TestApp } from "./app";
 import { prompt } from "./scenario";
 import { scriptedModel } from "./settings";
@@ -27,7 +30,10 @@ export async function newAgent(app: TestApp, name = `Test ${randomUUID().slice(0
 export async function openAgent(app: TestApp, name: string) {
   const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   await app.page.getByRole("button", { name: new RegExp(`^${escaped}(?:[,.]|$)`) }).click();
-  await expect(app.page.getByRole("textbox", { name: t("composer.placeholder.message", { name }) })).toBeVisible();
+  // The composer stays read-only until the agent runtime is ready.
+  await expect(app.page.getByRole("textbox", { name: t("composer.placeholder.message", { name }) })).toBeEditable({
+    timeout: 60_000,
+  });
 }
 
 export async function upload(app: TestApp, path: string) {
@@ -97,7 +103,12 @@ export async function completed(app: TestApp, id: string, text: string) {
     .poll(
       async () => {
         const snapshot = await conversation(app, id);
-        return snapshot.activeTurnId === null && snapshot.messages.some((message) => message.text.includes(text));
+        return (
+          snapshot.activeTurnId === null &&
+          snapshot.messages.some(
+            (message) => (message.author === "assistant" || message.author === "agent") && message.text.includes(text),
+          )
+        );
       },
       { timeout: 120_000, message: `The agent must finish with ${text}.` },
     )
@@ -128,3 +139,21 @@ export async function openRoutines(app: TestApp) {
 }
 
 export { t };
+
+const providerThread = z.object({ cwd: z.string(), turns: z.array(z.object({ status: z.string() })) });
+
+/** Turn statuses of each thread that the scripted provider saved for one agent, on the computer that runs it. */
+export async function providerThreads(owner: TestApp, agentId: string) {
+  const agent = (await owner.page.evaluate(() => window.openbot.agent.listAgents())).find(
+    (entry) => entry.id === agentId,
+  );
+  if (!agent) throw new Error(`The owner has no agent ${agentId}.`);
+  const directory = join(owner.profile, "protocol");
+  const threads: string[][] = [];
+  for (const name of await readdir(directory)) {
+    if (!name.endsWith(".json") || name === "codex-user-config.json") continue;
+    const saved = providerThread.parse(JSON.parse(await readFile(join(directory, name), "utf8")));
+    if (saved.cwd === agent.workspacePath) threads.push(saved.turns.map((turn) => turn.status));
+  }
+  return threads;
+}

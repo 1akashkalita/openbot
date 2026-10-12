@@ -4,9 +4,9 @@ import { join } from "node:path";
 import { generatedFiles, html } from "./support/files";
 import { expect, test } from "./support/fixtures";
 import { prompt } from "./support/scenario";
-import { completed, newAgent, openAgent, send, t } from "./support/ui";
+import { completed, conversation, newAgent, openAgent, send, t } from "./support/ui";
 
-test("files generates, previews, downloads, and uploads files", async ({ app, owner }) => {
+test("files generates, previews, downloads, and uploads files", async ({ app }) => {
   const agent = await newAgent(app);
   const files = generatedFiles();
   await openAgent(app, agent.name);
@@ -23,12 +23,14 @@ test("files generates, previews, downloads, and uploads files", async ({ app, ow
     }),
   );
   await completed(app, agent.id, "Files generated");
+  const attached = (await conversation(app, agent.id)).messages.flatMap((message) => message.attachments ?? []);
+  expect(attached.map((attachment) => ({ name: attachment.name, size: attachment.size }))).toEqual([
+    ...files.map((file) => ({ name: file.name, size: file.bytes.length })),
+    { name: "Release counter.html", size: Buffer.byteLength(html) },
+  ]);
   const downloads = join(app.profile, "downloads");
   await mkdir(downloads, { recursive: true });
   for (const file of files) {
-    await expect(readFile(join(owner.profile, "workspace-home/OpenBot/Agents", agent.id, file.name))).resolves.toEqual(
-      file.bytes,
-    );
     await app.page.getByRole("button", { name: t("attachment.preview", { name: file.name }), exact: true }).click();
     const image = file.name.endsWith(".png");
     const preview = image
@@ -66,8 +68,10 @@ test("files generates, previews, downloads, and uploads files", async ({ app, ow
       .toBe(true);
   }
   const frame = app.page.getByTitle("Release counter", { exact: true }).contentFrame();
-  await frame.getByRole("button", { name: "Count: 0" }).click();
-  await expect(frame.getByRole("button", { name: "Count: 1" })).toBeVisible();
+  const counter = frame.getByRole("button", { name: /^Count: \d+$/ });
+  const count = Number((await counter.textContent())?.slice("Count: ".length));
+  await counter.click();
+  await expect(counter).toHaveText(`Count: ${count + 1}`);
   const upload = join(app.profile, "upload.txt");
   const content = `Uploaded release input ${randomUUID()}`;
   await writeFile(upload, content);

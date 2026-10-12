@@ -20,26 +20,49 @@ const request = z.object({
   error: z.json().optional(),
 });
 type Json = z.infer<ReturnType<typeof z.json>>;
+const record = z.record(z.string(), z.json());
 const state = z.object({
   id: z.string(),
   cwd: z.string(),
-  assignedTasks: z.array(z.string()).default([]),
+  // Qualified names of the dynamic tools that thread/start gave the model. Codex keeps them with the session.
+  tools: z.array(z.string()).default([]),
+  // The expected result of each channel_assign, by the lead's channel task id.
+  assignments: z.record(z.string(), z.string()).default({}),
   turns: z.array(z.object({ id: z.string(), status: z.string(), items: z.array(z.json()) })),
 });
-const threads = new Map<string, z.infer<typeof state>>();
+type Thread = z.infer<typeof state>;
+const threads = new Map<string, Thread>();
 // Provider launch configuration can contain credentials. Keep it out of saved thread fixtures.
 const mcpByThread = new Map<string, Record<string, Json>>();
-const mcpConfig = z.object({ mcp_servers: z.record(z.string(), z.json()).default({}) });
+const mcpConfig = z.object({ mcp_servers: record.default({}) });
+const dynamicTools = z
+  .array(z.object({ name: z.string(), tools: z.array(z.object({ name: z.string() })) }))
+  .default([]);
 const pending = new Map<string, { resolve: (value: Json) => void; reject: (error: Error) => void }>();
 const interrupted = new Set<string>();
 const holds = new Map<string, AbortController>();
 const stateRoot = process.env.OPENBOT_E2E_PROTOCOL_STATE ?? "";
 const send = (value: Json) => process.stdout.write(`${JSON.stringify(value)}\n`);
+// Codex's user config layer, where OpenBot registers disabled placeholders for its MCP servers.
+const userConfigPath = join(stateRoot, "codex-user-config.json");
+const userLayer = z.object({ version: z.number().int(), config: record });
+let userConfig: z.infer<typeof userLayer> = { version: 0, config: {} };
+
+class RpcError extends Error {
+  constructor(
+    readonly code: number,
+    message: string,
+  ) {
+    super(message);
+  }
+}
 
 function thread(id: string) {
   const cached = threads.get(id);
   if (cached) return cached;
-  const loaded = state.parse(JSON.parse(readFileSync(join(stateRoot, `${basename(id)}.json`), "utf8")));
+  const path = join(stateRoot, `${basename(id)}.json`);
+  if (!existsSync(path)) throw new RpcError(-32600, `thread not found: ${id}`);
+  const loaded = state.parse(JSON.parse(readFileSync(path, "utf8")));
   threads.set(id, loaded);
   return loaded;
 }
@@ -54,20 +77,26 @@ function call(method: string, params: Record<string, Json>): Promise<Json> {
     send({ id, method, params });
   });
 }
+function savedValue(token: string, saved: Map<string, Json>): Json {
+  const [key = "", ...path] = token.slice(8).split(".");
+  let current = saved.get(key);
+  for (const part of path) current = Array.isArray(current) ? current[Number(part)] : record.parse(current)[part];
+  if (current === undefined) throw new Error(`Missing tool result ${token}`);
+  return current;
+}
 function resolveArgs(value: Json, saved: Map<string, Json>): Json {
-  if (typeof value === "string" && value.startsWith("$result:")) {
-    const [key = "", ...path] = value.slice(8).split(".");
-    let current = saved.get(key);
-    for (const part of path)
-      current = Array.isArray(current) ? current[Number(part)] : z.record(z.string(), z.json()).parse(current)[part];
-    if (current === undefined) throw new Error(`Missing tool result ${value}`);
-    return current;
-  }
+  if (typeof value === "string" && value.startsWith("$result:")) return savedValue(value, saved);
   if (Array.isArray(value)) return value.map((item) => resolveArgs(item, saved));
   if (value !== null && typeof value === "object") {
     return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, resolveArgs(item, saved)]));
   }
   return value;
+}
+function interpolate(text: string, saved: Map<string, Json>): string {
+  return text.replace(/\$result:[\w-]+(?:\.[\w-]+)*/gu, (token) => {
+    const value = savedValue(token, saved);
+    return typeof value === "string" ? value : JSON.stringify(value);
+  });
 }
 function toolValue(value: Json, name: string): Json {
   const result = z
@@ -81,21 +110,45 @@ function toolValue(value: Json, name: string): Json {
     return text;
   }
 }
-async function run(threadId: string, turnId: string, text: string, uploads: { name: string; path: string }[]) {
-  const current = thread(threadId);
+// Codex calls a tool it was given by name. Other catalog tools go through the visible bridge.
+async function callTool(current: Thread, turnId: string, namespace: string, name: string, args: Json) {
+  const qualified = `${namespace}.${name}`;
+  const direct = current.tools.includes(qualified);
+  if (!direct && !current.tools.includes("openbot.tool_call")) throw new Error(`Tool ${qualified} is not available.`);
+  const target = direct
+    ? { namespace, tool: name, arguments: args }
+    : { namespace: "openbot", tool: "tool_call", arguments: { name: qualified, arguments: args } };
+  return toolValue(
+    await call("item/tool/call", { threadId: current.id, turnId, callId: randomUUID(), ...target }),
+    qualified,
+  );
+}
+function mcpServers(config: Record<string, Json>) {
+  return record.parse(config.mcp_servers ?? {});
+}
+function saveUserConfig() {
+  writeFileSync(userConfigPath, JSON.stringify(userConfig), { mode: 0o600 });
+}
+async function run(
+  current: Thread,
+  turn: Thread["turns"][number],
+  text: string,
+  uploads: { name: string; path: string }[],
+) {
+  const threadId = current.id;
+  const turnId = turn.id;
   const base = { threadId, turnId };
   const itemId = randomUUID();
-  const turn = current.turns.find((entry) => entry.id === turnId);
-  if (!turn) throw new Error("Turn missing.");
-  send({ method: "item/agentMessage/delta", params: { ...base, itemId, delta: "Working on the test task." } });
   try {
     const assignment = text.split("Current assignment:\n").at(-1) ?? text;
+    const routingPrompt = text.startsWith("Select one responsible channel member.");
     // A refreshed provider session can include earlier chat messages before the current input.
-    const marker = [...assignment.matchAll(/E2E_SCENARIO:([A-Za-z0-9+/=]+)/gu)].at(-1)?.[1];
+    // A routing prompt quotes channel messages cut to a length limit, so it has no whole scenario.
+    const marker = routingPrompt ? undefined : [...assignment.matchAll(/E2E_SCENARIO:([A-Za-z0-9+/=]+)/gu)].at(-1)?.[1];
     let scenario = marker
       ? scenarioSchema.parse(JSON.parse(Buffer.from(marker, "base64").toString("utf8")))
       : scenarioSchema.parse({ reply: "Task received." });
-    if (text.startsWith("Select one responsible channel member.")) {
+    if (routingPrompt) {
       const routing = z
         .object({ members: z.array(z.object({ agentId: z.string() })).min(1) })
         .parse(JSON.parse(text.split("\n").at(-1) ?? "{}"));
@@ -103,39 +156,41 @@ async function run(threadId: string, turnId: string, text: string, uploads: { na
     }
     const saved = new Map<string, Json>();
     const channel = text.split("\n").find((line) => line.startsWith('{"channel":'));
-    if (channel) {
-      const context = z
-        .object({ task: z.object({ id: z.string() }) })
-        .passthrough()
-        .parse(JSON.parse(channel));
-      saved.set("context", z.json().parse(JSON.parse(channel)));
-      if (scenario.steps.some((step) => step.kind === "tool" && step.name === "channel_assign")) {
-        if (current.assignedTasks.includes(context.task.id)) {
-          scenario = scenarioSchema.parse({
-            steps: [{ kind: "tool", name: "channel_result", args: { text: "Group results received" } }],
-            reply: "Group complete",
-          });
-        } else {
-          current.assignedTasks.push(context.task.id);
-          save(threadId);
-        }
-      }
+    const taskId = channel
+      ? z
+          .object({ task: z.object({ id: z.string() }) })
+          .passthrough()
+          .parse(JSON.parse(channel)).task.id
+      : undefined;
+    if (channel) saved.set("context", z.json().parse(JSON.parse(channel)));
+    const expected = taskId === undefined ? undefined : current.assignments[taskId];
+    if (
+      expected !== undefined &&
+      scenario.steps.some((step) => step.kind === "tool" && step.name === "channel_assign")
+    ) {
+      // The lead re-enters its task when the assigned result arrives.
+      if (!text.includes(expected)) throw new Error("The lead resumed before the worker result arrived.");
+      scenario = scenarioSchema.parse({
+        steps: [{ kind: "tool", name: "channel_result", args: { text: "Group results received" } }],
+        reply: "Group complete",
+      });
     }
+    for (const delta of scenario.stream)
+      send({ method: "item/agentMessage/delta", params: { ...base, itemId, delta } });
     for (const step of scenario.steps) {
       if (interrupted.has(turnId)) return;
       if (step.kind === "tool") {
-        const value = toolValue(
-          await call("item/tool/call", {
-            ...base,
-            callId: randomUUID(),
-            namespace: step.namespace,
-            tool: step.name,
-            arguments: resolveArgs(step.args, saved),
-          }),
-          step.name,
-        );
+        const args = resolveArgs(step.args, saved);
+        if (step.name === "channel_assign" && taskId !== undefined) {
+          current.assignments[taskId] = z.object({ expectedResult: z.string() }).parse(args).expectedResult;
+          save(threadId);
+        }
+        const value = await callTool(current, turnId, step.namespace, step.name, args);
         if (step.save) saved.set(step.save, value);
       } else if (step.kind === "mcp") {
+        // Codex merges the user layer under the thread config. Thread fields win.
+        const fromUser = record.optional().parse(mcpServers(userConfig.config)[step.server]);
+        const fromThread = record.optional().parse(mcpByThread.get(threadId)?.[step.server]);
         const config = z
           .object({
             enabled: z.boolean().default(true),
@@ -146,7 +201,7 @@ async function run(threadId: string, turnId: string, text: string, uploads: { na
             env: z.record(z.string(), z.string()).default({}),
           })
           .optional()
-          .parse(mcpByThread.get(threadId)?.[step.server]);
+          .parse(fromUser || fromThread ? { ...fromUser, ...fromThread } : undefined);
         if (!config?.enabled) saved.set(step.save, `MCP unavailable: ${step.value}`);
         else {
           const client = new Client({ name: "release-provider", version: "1.0.0" });
@@ -199,19 +254,16 @@ async function run(threadId: string, turnId: string, text: string, uploads: { na
           holds.delete(turnId);
         }
       } else if (step.kind === "approval") {
-        const value = await call("item/commandExecution/requestApproval", {
-          ...base,
-          itemId: randomUUID(),
-          command: step.receipt ? `Write the test receipt ${step.receipt}` : "printf release-test",
-          cwd: current.cwd,
-          reason: "Run the release test command.",
-        });
-        saved.set("decision", value);
-        const decision = z.object({ decision: z.string() }).parse(value);
-        if (step.receipt && decision.decision === "accept") {
-          // The fixture is the CLI executor. This real file effect happens only after the app's decision.
-          appendFileSync(join(current.cwd, basename(step.receipt)), "approved\n");
-        }
+        saved.set(
+          "decision",
+          await call("item/commandExecution/requestApproval", {
+            ...base,
+            itemId: randomUUID(),
+            command: "printf release-test",
+            cwd: current.cwd,
+            reason: "Run the release test command.",
+          }),
+        );
       } else if (step.kind === "question") {
         saved.set(
           "answer",
@@ -235,25 +287,16 @@ async function run(threadId: string, turnId: string, text: string, uploads: { na
       else if (step.kind === "crash") process.exit(73);
     }
     if (interrupted.has(turnId)) return;
-    const reply = `${resolveArgs(scenario.reply, saved)}${saved.has("decision") ? ` ${JSON.stringify(saved.get("decision"))}` : ""}${saved.has("answer") ? ` ${JSON.stringify(saved.get("answer"))}` : ""}`;
-    // Replies use the exact routing instructions supplied by the application.
-    const recipient = /Use recipientAgentIds \["([^"]+)"\], replyToMessageId "([^"]+)"/u.exec(text);
+    const reply = `${interpolate(scenario.reply, saved)}${saved.has("decision") ? ` ${JSON.stringify(saved.get("decision"))}` : ""}${saved.has("answer") ? ` ${JSON.stringify(saved.get("answer"))}` : ""}`;
+    // Replies use the exact routing instructions supplied by the application. The last one is current.
+    const recipient = [...text.matchAll(/Use recipientAgentIds \["([^"]+)"\], replyToMessageId "([^"]+)"/gu)].at(-1);
     if (recipient?.[1] && recipient[2]) {
-      toolValue(
-        await call("item/tool/call", {
-          ...base,
-          callId: randomUUID(),
-          namespace: "openbot",
-          tool: "send_message",
-          arguments: {
-            recipientAgentIds: [recipient[1]],
-            replyToMessageId: recipient[2],
-            expectsReply: false,
-            text: `Status: done\nResult: ${reply}\nEvidence: release test`,
-          },
-        }),
-        "send_message",
-      );
+      await callTool(current, turnId, "openbot", "send_message", {
+        recipientAgentIds: [recipient[1]],
+        replyToMessageId: recipient[2],
+        expectsReply: false,
+        text: `Status: done\nResult: ${reply}\nEvidence: release test`,
+      });
     }
     const item = { type: "agentMessage", id: itemId, text: reply, phase: "final_answer" };
     turn.items.push(item);
@@ -286,8 +329,7 @@ async function run(threadId: string, turnId: string, text: string, uploads: { na
   }
 }
 
-async function handle(raw: string) {
-  const message = request.parse(JSON.parse(raw));
+async function handle(message: z.infer<typeof request>): Promise<Json | undefined> {
   if (!message.method) {
     const waiting = pending.get(String(message.id));
     pending.delete(String(message.id));
@@ -297,18 +339,15 @@ async function handle(raw: string) {
   }
   if (message.id === undefined) return;
   const p = message.params;
-  let result: Json = {};
   switch (message.method) {
     case "initialize":
-      break;
+      return {};
     case "account/read":
-      result = { account: { type: "chatgpt", email: "release@example.com" } };
-      break;
+      return { account: { type: "chatgpt", email: "release@example.com" } };
     case "account/rateLimits/read":
-      result = { rateLimits: null };
-      break;
+      return { rateLimits: null };
     case "model/list":
-      result = {
+      return {
         data: [
           {
             model: "gpt-6-luna",
@@ -316,59 +355,93 @@ async function handle(raw: string) {
             defaultReasoningEffort: "low",
             supportedReasoningEfforts: [{ reasoningEffort: "low" }],
           },
+          {
+            model: "gpt-6-luna-alt",
+            displayName: "Release fixture alt",
+            defaultReasoningEffort: "low",
+            supportedReasoningEfforts: [{ reasoningEffort: "low" }],
+          },
         ],
         nextCursor: null,
       };
-      break;
     case "config/read":
-      result = { config: {} };
-      break;
+      return p.includeLayers
+        ? {
+            config: userConfig.config,
+            layers: [
+              {
+                name: { type: "user", file: userConfigPath },
+                version: String(userConfig.version),
+                config: userConfig.config,
+              },
+            ],
+          }
+        : { config: userConfig.config };
+    case "config/batchWrite": {
+      const write = z
+        .object({
+          edits: z.array(z.object({ keyPath: z.string(), value: z.json() })),
+          filePath: z.string().nullish(),
+          expectedVersion: z.string().nullish(),
+        })
+        .parse(p);
+      if (write.filePath && write.filePath !== userConfigPath)
+        throw new RpcError(-32600, "Only the user config file can be written.");
+      if (write.expectedVersion && write.expectedVersion !== String(userConfig.version))
+        throw new RpcError(-32600, "Configuration was modified since last read.");
+      const servers = mcpServers(userConfig.config);
+      for (const edit of write.edits) {
+        const name = /^mcp_servers\.([^.]+)$/u.exec(edit.keyPath)?.[1];
+        if (!name) throw new RpcError(-32600, `Unsupported fixture config key path: ${edit.keyPath}`);
+        servers[name] = edit.value;
+      }
+      userConfig = { version: userConfig.version + 1, config: { ...userConfig.config, mcp_servers: servers } };
+      saveUserConfig();
+      return { status: "ok", version: String(userConfig.version), filePath: userConfigPath };
+    }
     case "plugin/list":
-      result = { marketplaces: [] };
-      break;
+      return { marketplaces: [] };
     case "thread/start": {
       const id = randomUUID();
       threads.set(id, {
         id,
         cwd: z.string().optional().parse(p.cwd) ?? stateRoot,
-        assignedTasks: [],
+        tools: dynamicTools
+          .parse(p.dynamicTools ?? [])
+          .flatMap((namespace) => namespace.tools.map((tool) => `${namespace.name}.${tool.name}`)),
+        assignments: {},
         turns: [],
       });
       mcpByThread.set(id, mcpConfig.parse(p.config ?? {}).mcp_servers);
       save(id);
-      result = { thread: thread(id) };
-      break;
+      return { thread: thread(id) };
     }
-    case "thread/resume":
-      mcpByThread.set(z.string().parse(p.threadId), mcpConfig.parse(p.config ?? {}).mcp_servers);
-      result = { thread: thread(z.string().parse(p.threadId)) };
-      break;
+    case "thread/resume": {
+      const id = z.string().parse(p.threadId);
+      const resumed = thread(id);
+      // Codex ignores config on resume for a loaded thread and reads a cold thread's config from its
+      // session file. This fixture keeps launch config out of its files, so a thread loaded after a
+      // fixture restart takes the resume config instead.
+      if (!mcpByThread.has(id)) mcpByThread.set(id, mcpConfig.parse(p.config ?? {}).mcp_servers);
+      return { thread: resumed };
+    }
     case "thread/read":
-      result = { thread: thread(z.string().parse(p.threadId)) };
-      break;
+      return { thread: thread(z.string().parse(p.threadId)) };
     case "thread/unsubscribe":
-      result = { status: "Unsubscribed" };
-      break;
+      return { status: "Unsubscribed" };
     case "thread/turns/list":
-      result = { data: thread(z.string().parse(p.threadId)).turns.toReversed(), nextCursor: null };
-      break;
+      return { data: thread(z.string().parse(p.threadId)).turns.toReversed(), nextCursor: null };
     case "thread/items/list":
-      result = {
+      return {
         data:
           thread(z.string().parse(p.threadId))
             .turns.find((turn) => turn.id === p.turnId)
             ?.items.map((item) => ({ turnId: p.turnId ?? null, item })) ?? [],
         nextCursor: null,
       };
-      break;
     case "turn/start": {
       const threadId = z.string().parse(p.threadId);
-      const id = randomUUID();
-      const turn = { id, status: "inProgress", items: [] };
-      thread(threadId).turns.push(turn);
-      save(threadId);
-      send({ id: message.id, result: { turn } });
-      send({ method: "turn/started", params: { threadId, turn } });
+      const current = thread(threadId);
       const input = z
         .array(
           z.object({
@@ -379,10 +452,15 @@ async function handle(raw: string) {
           }),
         )
         .parse(p.input);
+      const turn = { id: randomUUID(), status: "inProgress", items: [] };
+      current.turns.push(turn);
+      save(threadId);
+      send({ id: message.id, result: { turn } });
+      send({ method: "turn/started", params: { threadId, turn } });
       const uploads = input.flatMap((item) =>
         item.type === "mention" && item.name && item.path ? [{ name: item.name, path: item.path }] : [],
       );
-      await run(threadId, id, input.map((item) => item.text ?? "").join("\n"), uploads);
+      await run(current, turn, input.map((item) => item.text ?? "").join("\n"), uploads);
       return;
     }
     case "turn/interrupt": {
@@ -394,13 +472,11 @@ async function handle(raw: string) {
       if (turn) turn.status = "interrupted";
       save(threadId);
       send({ method: "turn/completed", params: { threadId, turn: { id, status: "interrupted" } } });
-      break;
+      return {};
     }
     default:
-      send({ id: message.id, error: { code: -32601, message: `Unsupported fixture request: ${message.method}` } });
-      return;
+      throw new RpcError(-32601, `Unsupported fixture request: ${message.method}`);
   }
-  send({ id: message.id, result });
 }
 
 if (process.argv.includes("--version")) {
@@ -408,10 +484,28 @@ if (process.argv.includes("--version")) {
 } else {
   if (!stateRoot) throw new Error("OPENBOT_E2E_PROTOCOL_STATE is required.");
   mkdirSync(stateRoot, { recursive: true });
-  createInterface({ input: process.stdin }).on("line", (line) => {
-    void handle(line).catch(() => {
-      process.exitCode = 1;
-      process.stdin.destroy();
+  if (existsSync(userConfigPath)) userConfig = userLayer.parse(JSON.parse(readFileSync(userConfigPath, "utf8")));
+  const lines = createInterface({ input: process.stdin });
+  lines.on("line", (line) => {
+    let id: string | number | undefined;
+    void (async () => {
+      const value = z.json().parse(JSON.parse(line));
+      const head = request.pick({ id: true, method: true }).safeParse(value);
+      if (head.success && head.data.method) id = head.data.id;
+      const message = request.parse(value);
+      const result = await handle(message);
+      if (result !== undefined && id !== undefined) send({ id, result });
+    })().catch((error: unknown) => {
+      if (id === undefined) return;
+      send({
+        id,
+        error: {
+          code: error instanceof RpcError ? error.code : -32603,
+          message: redactText(error instanceof Error ? error.message : "Scripted provider request failed."),
+        },
+      });
     });
   });
+  // The app owns this process. A held turn must not outlive the app's end of the pipe.
+  lines.on("close", () => process.exit(0));
 }

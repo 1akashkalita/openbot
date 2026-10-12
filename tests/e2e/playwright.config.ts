@@ -14,8 +14,12 @@ export default defineConfig({
   workers: process.env.CI ? (process.platform === "darwin" ? 3 : 2) : 1,
   timeout: 150_000,
   expect: { timeout: 15_000 },
-  // Service startup is measured separately by globalSetup.
-  globalTimeout: 900_000,
+  // Service startup is measured separately by globalSetup. Local runs on one worker have no limit.
+  globalTimeout: process.env.CI ? 900_000 : 0,
   reporter: [["./support/reporter.ts"]],
-  projects: [{ name: "local", testIgnore: "**/*.host.scripted.spec.ts" }, { name: "host" }],
+  // Host mode repeats scripted host MCP coverage, so real-provider MCP cases run only locally.
+  projects: [
+    { name: "local", testIgnore: "**/*.host.scripted.spec.ts" },
+    { name: "host", testIgnore: "**/mcp.live.spec.ts" },
+  ],
 });

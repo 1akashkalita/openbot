@@ -28,5 +28,5 @@ export default defineConfig({
     trace: "off",
     screenshot: "only-on-failure",
   },
-  expect: { timeout: 15_000, toHaveScreenshot: { animations: "disabled", caret: "hide", maxDiffPixelRatio: 0.001 } },
+  expect: { timeout: 15_000, toHaveScreenshot: { animations: "disabled", caret: "hide", maxDiffPixels: 20 } },
 });

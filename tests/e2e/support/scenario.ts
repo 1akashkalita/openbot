@@ -16,13 +16,15 @@ export const scenarioSchema = z.object({
         z.object({ kind: z.literal("write"), name: z.string(), base64: z.string(), append: z.boolean().optional() }),
         z.object({ kind: z.literal("read-upload"), name: z.string(), save: z.string() }),
         z.object({ kind: z.literal("hold"), key: z.string() }),
-        z.object({ kind: z.literal("approval"), receipt: z.string().optional() }),
+        z.object({ kind: z.literal("approval") }),
         z.object({ kind: z.literal("question") }),
         z.object({ kind: z.literal("fail"), message: z.string() }),
         z.object({ kind: z.literal("crash") }),
       ]),
     )
     .default([]),
+  // Each element is one streamed message delta.
+  stream: z.array(z.string()).default(["Working on the test task."]),
   reply: z.string(),
 });
 export type Scenario = z.input<typeof scenarioSchema>;

@@ -8,6 +8,9 @@
 - Add release checks for chat, routines, file previews, browser control, and agent delegation in local and remote-host modes.
 - Cover interrupted delegation, provider switches and failures, conversation and host isolation, attachment use, host access removal, setup, and long chat history.
 - Compare six fixed Storybook layouts against reviewed visual baselines before release.
+- Check on the host that a removed member has no session and that the host stays online for other members.
+- Run the live group and provider-switch cases with a comma-separated `OPENBOT_E2E_PROVIDER` list.
+- Check missed routine schedules (run once and skip), MCP edits, and that the Codex user file holds no MCP secrets.
 
 ### Fixed
 
@@ -20,3 +23,6 @@
 - Block release when required Linux UI cases are missing or skipped.
 - Build the current app and include visual comparisons in the single release test command, with a final result and failure status.
 - Require all six visual cases to pass; missing or skipped cases block the release command.
+- Make scripted release cases call hidden tools through the tool bridge and use the Codex user config layer, as real Codex does.
+- Remove release checks that could not fail, and run reconnect cases only in host mode.
+- Reconnect a host to Signal at once after a member is removed; only a Signal rate limit delays the reconnect.

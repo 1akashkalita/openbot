@@ -169,8 +169,10 @@ export class TestApp {
     );
   }
 
-  async restart() {
+  /** `whileStopped` runs after the app stops and before it starts again with the same profile. */
+  async restart(options: { whileStopped?: () => Promise<void> } = {}) {
     await this.stop();
+    await options.whileStopped?.();
     const next = await TestApp.launch(this.profile, this.live);
     this.application = next.application;
     this.page = next.page;

@@ -1,7 +1,7 @@
 import { strToU8, zipSync } from "fflate";
 
 export const html =
-  '<!doctype html><html lang="en"><title>Release counter</title><button onclick="this.textContent=\'Count: 1\'">Count: 0</button></html>';
+  '<!doctype html><html lang="en"><title>Release counter</title><button onclick="this.textContent=\'Count: \'+(Number(this.textContent.slice(7))+1)">Count: 0</button></html>';
 
 export function generatedFiles() {
   const stream = "BT /F1 12 Tf 20 100 Td (Release report 42) Tj ET";

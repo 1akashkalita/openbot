@@ -11,7 +11,7 @@ import {
   waitFor,
 } from "../src/backend/agent-service-test-harness";
 import { runCauseEffect } from "../src/backend/effect-boundary";
-import { hostCases, liveCases, releaseCoverage, scriptedCases } from "../tests/e2e/support/coverage";
+import { releaseCoverage, requiredCases } from "../tests/e2e/support/coverage";
 import { prompt } from "../tests/e2e/support/scenario";
 
 let fixtureRoot = "";
@@ -199,13 +199,10 @@ it("completes group delegation after the parent task resumes", async () => {
 });
 
 it.each(["release", "scripted"] as const)("rejects missing, skipped, failed, and slow %s coverage", (suite) => {
-  const complete = ["local", "host"].flatMap((mode) =>
-    [...scriptedCases, ...(suite === "release" ? liveCases : []), ...(mode === "host" ? hostCases : [])].map((id) => ({
-      mode,
-      id,
-      status: "passed",
-    })),
+  const complete = (["local", "host"] as const).flatMap((mode) =>
+    requiredCases(mode, suite).map((id) => ({ mode, id, status: "passed" })),
   );
+  expect(complete).toHaveLength(suite === "release" ? 68 : 49);
   expect(releaseCoverage(complete, 600_000, suite).passed).toBe(true);
   for (const required of complete) {
     const partial = releaseCoverage(
@@ -233,4 +230,6 @@ it.each(["release", "scripted"] as const)("rejects missing, skipped, failed, and
     ).toBe(false);
   }
   expect(releaseCoverage(complete, 600_001, suite).passed).toBe(false);
+  // Outside CI, a run on one worker has no time budget; required cases still apply.
+  expect(releaseCoverage(complete, 600_001, suite, null).passed).toBe(true);
 });

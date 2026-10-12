@@ -7,7 +7,7 @@ It does not run on pull requests.
 
 ## Coverage
 
-Each scenario runs in two modes:
+Most scenarios run in two modes:
 
 - `local`: actions run in the local Electron app and its workspace.
 - `host`: a second Electron app signs in with another development account, accepts an admin
@@ -17,9 +17,9 @@ Each scenario runs in two modes:
 The host is a separate process on the test machine. This checks the remote-client path but does
 not measure a network between two physical computers, TURN relay operation, or hosted deployment.
 
-| Area | Required behavior in both modes |
+| Area | Required behavior in both modes, unless the row names one mode |
 | --- | --- |
-| Chat | Send, stream, follow up, stop, send again, edit/delete queued input, retain history and identity after restart, reconnect without duplicate results |
+| Chat | Send, stream, follow up, stop, send again, edit/delete queued input, retain history and identity after restart; in host mode, reconnect without duplicate results |
 | Agents | Create a persistent child, inherit provider/model, deliver its initial task, delegate to two agents at once, route each reply once, expose failure, cancel delegated work, recover |
 | Groups | Create a group, delegate a subtask, return its result to the parent task, remove a member, continue with remaining members |
 | Routines | Create, edit, run manually, delegate child work, pause/resume, retain settings after restart, delete, execute a due schedule once |
@@ -27,19 +27,25 @@ not measure a network between two physical computers, TURN relay operation, or h
 | Browser | Agent opens a real local page, fills a form, submits it, and checks the result; user opens the live page, reloads it, and returns control |
 | User decisions | Accept/deny a command request and answer an agent question |
 | Real providers | Codex, Claude, OpenCode, Grok, and Gemini each create a child, delegate browser work, receive its reply, and generate an attached file and interactive HTML |
-| Real-provider MCP | Codex, Claude, OpenCode, Grok, and Gemini each discover and call custom HTTP and STDIO tools; one receipt per transport and both tool results in chat |
+| Real-provider MCP | Local mode only: Codex, Claude, OpenCode, Grok, and Gemini each discover and call custom HTTP and STDIO tools; one receipt per transport and both tool results in chat |
 | Custom MCP | HTTP headers and STDIO arguments/environment; failed connection and retry, tool discovery, save/reload, one real agent tool receipt, disable/re-enable, removal, and host configuration isolation |
 | Mixed providers | Codex assigns Claude, Claude assigns OpenCode, and results return through the group task chain |
 
 Assertions check saved messages, task owners and parent links, unique replies, exact file bytes,
 and HTTP form receipts. A provider's claim that it completed work is not sufficient. Live tasks
 use explicit browser targets and wait for completed output before preview interaction.
-Approval cases disable auto-approval for their test agent and check the exact provider decision;
-the fixture performs a real workspace receipt write only after acceptance and checks that denial leaves no file. PDF coverage checks opening/reopening the
+Approval cases disable auto-approval for their test agent and check the exact decision that the app
+returns to the provider. The takeover case checks the `completed` takeover result, a page reload, and
+a form value that the user edits during takeover. PDF coverage checks opening/reopening the
 viewer and exact downloaded bytes; it does not inspect Chromium's native PDF rendering.
 
-There are 24 scripted scenarios and 12 live scenarios per mode, plus three host-only scenarios:
-75 required macOS cases. Linux runs the 51 scripted cases. The scripted CLI implements the Codex subprocess protocol.
+There are 22 scripted and 7 live scenarios per mode, 5 live MCP scenarios in local mode only, and
+5 host-only scenarios: 68 required macOS cases. Linux runs the 49 scripted cases.
+The host-only scenarios are `host-isolation`, `host-reconnect`, `host-revoke`, `reconnect`, and
+`delegation-reconnect`. A local reconnect only reloads the page, so the two reconnect cases do not
+run in local mode. Their tests are in `*.host.scripted.spec.ts` files, which the `local` project ignores.
+The `host` project ignores `mcp.live.spec.ts`, because the scripted MCP cases already cover host mode.
+The scripted CLI implements the Codex subprocess protocol.
 It scripts model decisions; the app still executes tools, stores messages, schedules routines,
 transfers files, and controls the embedded browser. Authentication and agent seed data use
 supported application APIs. Host setup creates and accepts its invitation directly through the
@@ -50,7 +56,7 @@ to private test paths. Tests do not change IPC trust checks or disable the Elect
 Custom MCP cases use private local servers. Model decisions use the scripted provider, which
 connects with the MCP SDK using the configuration the app sends to it. This checks configuration
 delivery and real tool effects. Separate live cases check both transports with each real provider
-CLI in local and host modes. OAuth sign-in is not covered.
+CLI in local mode. OAuth sign-in is not covered.
 
 The PDF test checks that its preview opens and its downloaded bytes match. It does not inspect
 the native PDF viewer's rendered text. File fixtures are small and synthetic. The suite does not
@@ -115,6 +121,8 @@ The complete release command builds the current code, installs the pinned Chromi
 runs all required Electron cases, then runs all six visual comparisons. It stops at the first
 failed step and prints a final result. It removes inherited Electron runtime flags automatically.
 It does not accept test filters or baseline-update options.
+Outside CI, the run uses one worker and has no time limit. A full local release run takes longer
+than the ten-minute CI budget; the reporter does not apply that budget locally.
 Release runs also require each of the six named visual cases to pass. A missing or skipped case
 fails the command; `.openbot-build/visual/coverage.json` records the required-case result.
 
@@ -137,9 +145,12 @@ env -u ELECTRON_RUN_AS_NODE bun run test:e2e --grep='delegate delivers' --worker
 # Required real-provider cases only; uses provider quota.
 env -u ELECTRON_RUN_AS_NODE bun run test:e2e:live
 
-# One real provider's MCP case, in both modes, without other provider prerequisites.
+# One real provider's MCP case, in local mode, without other provider prerequisites.
 OPENBOT_E2E_PROVIDER=codex env -u ELECTRON_RUN_AS_NODE bun run test:e2e:live --grep='live-mcp-codex ' --workers=1
 # Use claude, opencode, grok, or antigravity for the other providers (Gemini case: live-mcp-gemini).
+
+# The live cases of some providers only. Cases that need a provider you did not select are skipped.
+OPENBOT_E2E_PROVIDER=codex,claude,opencode env -u ELECTRON_RUN_AS_NODE bun run test:e2e:live --workers=1
 # OPENBOT_E2E_PROVIDER is rejected outside the live suite, including release runs.
 
 # Discover tests without starting apps or services.
@@ -153,8 +164,9 @@ group task resumption, cancellation/restart, and release-gate failures without s
 CI uses three Playwright workers on macOS and two on Linux. Each worker owns its profiles and
 workspaces. Tests reuse the worker's app and use separate agents, group IDs, files, and browser
 case IDs. Tests wait for state and events. Retries are disabled. The release reporter fails for
-any missing, skipped, failed, or interrupted required case, or a test phase over ten minutes.
-The Linux job sets `OPENBOT_E2E_SUITE=scripted-release` to require all 51 scripted cases without
+any missing, skipped, failed, or interrupted required case. In CI only, it also fails for a test
+phase over ten minutes, and Playwright stops the run after 15 minutes. Local runs have no time limit.
+The Linux job sets `OPENBOT_E2E_SUITE=scripted-release` to require all 49 scripted cases without
 requiring live providers. Ordinary `test:e2e` runs still permit selection of individual cases.
 Dependency install, build, Chromium install, visual comparisons, provider preflight, and shared service startup are outside that budget.
 Worker app startup and teardown are inside it. This budget still needs measurement on the Mac mini.
@@ -171,10 +183,18 @@ The suite writes `.openbot-build/e2e/report/coverage.json` and `index.html`. Eac
 When reviewing cases separately, copy each report before starting the next case. A sequence of
 focused passes does not verify the full parallel release time budget. The JSON includes
 commit, platform, runtime versions, provider/model annotations, duration, and required coverage.
-The report also retains the last 300 redacted log chunks. Failures save a UI screenshot. Playwright traces are disabled because Electron launch metadata
-contains the inherited process environment. Text passes through the
-shared secret redactor. Only `report/` is uploaded, for 14 days. Never upload the private profiles,
-provider state, SQLite files, raw traces, or the entire `.openbot-build/e2e` directory.
+The report also retains the last 300 redacted log chunks. After each `failed:` line, the console
+shows the redacted error text. Errors are redacted line by line, so an assertion diff stays readable
+and secret values and credential patterns are still masked.
+
+A failed test saves a screenshot of the app window to
+`.openbot-build/e2e/results/<test>/failure.png`. In host mode, it also saves the owner window to
+`owner-failure.png`. Playwright attaches a copy of each screenshot under `<test>/attachments/`.
+Each result in `coverage.json` lists the paths of these copies in `screenshots`.
+Playwright traces are disabled because Electron launch metadata contains the inherited process
+environment. Text passes through the shared secret redactor. CI uploads `report/` and the attached
+screenshot copies under `results/`, for 14 days. Never upload the private profiles, provider state, SQLite files, raw
+traces, or the entire `.openbot-build/e2e` directory.
 
 Normal teardown stops owned processes and removes private state. If a worker exits before
 teardown, the workflow runs:
@@ -190,7 +210,7 @@ Do not use process-name kill commands. A failure must be fixed before the next r
 
 ## Additional core coverage
 
-- Delegation survives a client disconnect with one routed reply. Owner restart preserves delivery
+- In host mode, delegation survives a client disconnect with one routed reply. Owner restart preserves delivery
   identity, marks uncertain work interrupted, and requires explicit recovery without replaying effects.
 - Provider switches use the UI and keep the public agent/thread, message history, workspace and files.
 - Concurrent conversations and local/host switches retain separate drafts, attachments and file effects.
@@ -207,6 +227,8 @@ Do not use process-name kill commands. A failure must be fixed before the next r
 menu, Markdown preview, and narrow chat. It uses the installed Playwright Chromium version and
 starts or reuses only this worktree's registered Storybook instance. It stops an instance it starts.
 No live provider or external account is used. The macOS release job requires these checks.
+Each page gets a fixed `Math.random` sequence before its scripts run, so random labels do not change.
+A comparison permits a difference of 20 pixels at most.
 
 Expected screenshots are test fixtures under `src/renderer/stories/assets/visual-baselines/darwin`.
 Missing baselines fail ordinary runs. To review an intentional layout change, run

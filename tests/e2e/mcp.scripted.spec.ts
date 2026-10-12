@@ -2,12 +2,12 @@ import { randomUUID } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { LOCAL_SERVER_ID } from "@openbot/contracts/ipc";
-import { assertHost } from "./support/app";
+import { z } from "zod";
 import { expect, test } from "./support/fixtures";
 import { startMcpServer } from "./support/mcp-server";
 import { fillMcp, openMcp } from "./support/mcp-ui";
 import { prompt } from "./support/scenario";
-import { completed, conversation, newAgent, openAgent, send, t } from "./support/ui";
+import { completed, conversation, newAgent, openAgent, resumeHost, send, t } from "./support/ui";
 
 for (const transport of ["http", "stdio"] as const) {
   test(`mcp-${transport} connects, calls a tool, disables, reconnects, and removes a custom server`, async ({
@@ -18,15 +18,25 @@ for (const transport of ["http", "stdio"] as const) {
     const marker = randomUUID();
     const token = randomUUID();
     const name = `release_${transport}_${marker.replaceAll("-", "")}`;
-    const receipt = join(owner.profile, `mcp-${marker}.txt`);
+    const firstReceipt = join(owner.profile, `mcp-${marker}.txt`);
+    let receipt = firstReceipt;
     await writeFile(receipt, "");
     const agent = await newAgent(app);
-    const endpoint = transport === "http" ? await startMcpServer(token) : null;
+    const endpoints: Awaited<ReturnType<typeof startMcpServer>>[] = [];
+    const serve = async (value: string) => {
+      const server = await startMcpServer(value);
+      endpoints.push(server);
+      return server;
+    };
+    let endpoint = transport === "http" ? await serve(token) : null;
     const receipts = async () =>
       endpoint ? [...endpoint.receipts] : (await readFile(receipt, "utf8")).split("\n").filter(Boolean);
     const scope = serverId ?? LOCAL_SERVER_ID;
     const saved = () => app.page.evaluate((id) => window.openbot.agent.listMcpServers(id), scope);
     const close = () => app.page.getByRole("button", { name: t("server.settings.close"), exact: true }).click();
+    const status = (text: string) => app.page.getByRole("status").filter({ hasText: text });
+    const testConnection = () =>
+      app.page.getByRole("button", { name: t("mcp.panel.testConnection"), exact: true }).click();
     const actions = () =>
       app.page.getByRole("button", { name: t("mcp.panel.actionsFor", { name }), exact: true }).click();
     const useTool = async (value: string, available: boolean) => {
@@ -91,8 +101,8 @@ for (const transport of ["http", "stdio"] as const) {
           ),
         ).toBe(false);
       await close();
-      await app.page.reload();
-      if (serverId) await assertHost(app, serverId);
+      await owner.restart();
+      if (serverId) await resumeHost(app, owner, serverId);
       await openMcp(app);
       await actions();
       await app.page.getByRole("menuitem", { name: t("common.edit"), exact: true }).click();
@@ -107,6 +117,56 @@ for (const transport of ["http", "stdio"] as const) {
       await close();
       await useTool(marker, true);
       expect(await receipts()).toEqual([marker]);
+      // An edit must reach the agent's existing conversation. The old target gets no further calls.
+      const nextToken = randomUUID();
+      const first = endpoint;
+      if (endpoint) endpoint = await serve(nextToken);
+      else {
+        receipt = join(owner.profile, `mcp-${marker}-edited.txt`);
+        await writeFile(receipt, "");
+      }
+      await openMcp(app);
+      await actions();
+      await app.page.getByRole("menuitem", { name: t("common.edit"), exact: true }).click();
+      if (endpoint) {
+        await app.page.getByRole("textbox", { name: t("mcp.panel.serverUrl"), exact: true }).fill(endpoint.url);
+        await testConnection();
+        await expect(status(t("error.backend.mcpServerHttpCredentials", { status: 403 }))).toBeVisible();
+        await app.page
+          .getByRole("textbox", { name: t("mcp.panel.headerValue", { position: 1 }), exact: true })
+          .fill(nextToken);
+      } else
+        await app.page
+          .getByRole("textbox", { name: t("mcp.panel.environmentVariableValue", { position: 1 }), exact: true })
+          .fill(receipt);
+      await testConnection();
+      await expect(status(t("mcp.test.connected", { count: 1 }))).toBeVisible();
+      await app.page.getByRole("button", { name: t("common.save"), exact: true }).click();
+      await expect
+        .poll(async () => (await saved()).find((entry) => entry.name === name))
+        .toMatchObject(
+          endpoint
+            ? { url: endpoint.url, headers: [{ key: "x-e2e-token", value: nextToken }] }
+            : { env: [{ key: "OPENBOT_E2E_MCP_RECEIPT", value: receipt }] },
+        );
+      await close();
+      await useTool(`edited-${marker}`, true);
+      expect(await receipts()).toEqual([`edited-${marker}`]);
+      if (first) expect(first.receipts).toEqual([marker]);
+      else expect((await readFile(firstReceipt, "utf8")).split("\n").filter(Boolean)).toEqual([marker]);
+      // OpenBot saves only a disabled placeholder in the provider's user config file.
+      // The endpoint, credentials, and environment values stay in the thread configuration.
+      const userConfig = await readFile(join(owner.profile, "protocol", "codex-user-config.json"), "utf8");
+      expect(
+        z.object({ config: z.object({ mcp_servers: z.record(z.string(), z.json()) }) }).parse(JSON.parse(userConfig))
+          .config.mcp_servers[name],
+      ).toEqual(
+        transport === "http"
+          ? { url: "http://127.0.0.1:1", enabled: false }
+          : { command: "openbot-mcp", enabled: false },
+      );
+      for (const secret of [token, nextToken, firstReceipt, receipt, ...endpoints.map((server) => server.url)])
+        expect(userConfig).not.toContain(secret);
       await openMcp(app);
       const enabled = app.page.getByRole("switch", { name: t("mcp.panel.enable", { name }), exact: true });
       await enabled.focus();
@@ -115,7 +175,7 @@ for (const transport of ["http", "stdio"] as const) {
       await expect.poll(async () => (await saved()).find((entry) => entry.name === name)?.enabled).toBe(false);
       await close();
       await useTool(`disabled-${marker}`, false);
-      expect(await receipts()).toEqual([marker]);
+      expect(await receipts()).toEqual([`edited-${marker}`]);
       await openMcp(app);
       await enabled.focus();
       await enabled.press("Space");
@@ -123,7 +183,7 @@ for (const transport of ["http", "stdio"] as const) {
       await expect.poll(async () => (await saved()).find((entry) => entry.name === name)?.enabled).toBe(true);
       await close();
       await useTool(`reconnected-${marker}`, true);
-      expect(await receipts()).toEqual([marker, `reconnected-${marker}`]);
+      expect(await receipts()).toEqual([`edited-${marker}`, `reconnected-${marker}`]);
       await openMcp(app);
       await actions();
       await app.page.getByRole("menuitem", { name: t("common.remove"), exact: true }).click();
@@ -132,9 +192,9 @@ for (const transport of ["http", "stdio"] as const) {
       await expect(enabled).not.toBeVisible();
       await close();
       await useTool(`removed-${marker}`, false);
-      expect(await receipts()).toEqual([marker, `reconnected-${marker}`]);
+      expect(await receipts()).toEqual([`edited-${marker}`, `reconnected-${marker}`]);
     } finally {
-      await endpoint?.stop();
+      await Promise.all(endpoints.map((server) => server.stop()));
     }
   });
 }
