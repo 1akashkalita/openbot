@@ -475,8 +475,9 @@ The workflow:
    and signed and notarized x64 DMG and ZIP artifacts on a GitHub Intel runner (`macos-15-intel`). Each
    architecture builds on its own runner, because the voice runtime and the remote desktop runtime
    are prepared for the architecture of the build machine. The Host PKG is ARM64 only;
-   when `hdiutil create` fails with "Device not configured" or "Resource busy", it builds again,
-   up to 3 attempts, because that runner error is not caused by the app;
+   when `hdiutil create` fails with "Device not configured" or "Resource busy", or when the staple
+   step loses its connection to Apple, it builds again, up to 3 attempts, because these runner
+   errors are not caused by the app;
 5. builds a signed Windows x64 NSIS installer on a GitHub Windows runner (unsigned in a dry run);
 6. builds unsigned Linux x64 and arm64 AppImages on GitHub Ubuntu 24.04 runners of each architecture,
    with the launch check under `xvfb-run`;

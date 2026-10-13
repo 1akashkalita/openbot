@@ -341,8 +341,10 @@ jobs:
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
           CSC_LINK: ${{ secrets.CSC_LINK }}
         # On a hosted macOS runner, `hdiutil create` can fail with "Device not configured" or
-        # "Resource busy" when nothing is wrong with the app; v0.21.1 failed this way. Only that
-        # error gets another attempt. Each attempt signs and notarizes again, about 6 minutes.
+        # "Resource busy" when nothing is wrong with the app; v0.21.1 failed this way. The staple
+        # step can also lose its connection to Apple's ticket service (NSURLErrorDomain) after a
+        # successful notarization; the v0.38.2 x64 build failed this way two times. Only these
+        # errors get another attempt. Each attempt signs and notarizes again, about 6 minutes.
         shell: bash
         run: |
           bun run voice:prepare-runtime
@@ -353,10 +355,13 @@ jobs:
               --config.mac.provisioningProfile="$OPENBOT_PROVISIONING_PROFILE" 2>&1 | tee "$log"; then
               exit 0
             fi
-            if ! grep -Eq 'hdiutil: create failed - (Device not configured|Resource busy)' "$log"; then
+            if grep -Eq 'hdiutil: create failed - (Device not configured|Resource busy)' "$log"; then
+              echo "::warning::hdiutil could not create the DMG (attempt $attempt of 3)."
+            elif grep -q 'Failed to staple your application' "$log" && grep -q 'NSURLErrorDomain' "$log"; then
+              echo "::warning::Stapling lost its connection to Apple (attempt $attempt of 3)."
+            else
               exit 1
             fi
-            echo "::warning::hdiutil could not create the DMG (attempt $attempt of 3)."
             hdiutil info || true
           done
           exit 1
