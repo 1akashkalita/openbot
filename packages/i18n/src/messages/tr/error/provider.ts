@@ -228,6 +228,12 @@ export const messages = {
   "error.provider.geminiBrowserUnavailable":
     "Gemini giriş sayfasını açamadı. Bir tarayıcı ve xdg-utils yükleyin, ardından bu ana makinede bir masaüstü oturumundan bağlanın. Masaüstü olmayan bir sunucu bu girişi tamamlayamaz.",
   "error.provider.acpSignInFailed": "Oturum açma tamamlanmadı.",
+  "error.provider.acpSignInFailedReason": "Oturum açma tamamlanmadı: {reason}",
+  "error.provider.acpSignInMethodMissing":
+    "Bu sağlayıcı bu bilgisayarda bu oturum açma yöntemini sunmuyor. Sağlayıcıyı güncelleyin, ardından tekrar deneyin.",
+  "error.provider.httpsSignInLinkOnly": "Tarayıcıda yalnızca HTTPS oturum açma bağlantıları açılabilir.",
+  "error.provider.geminiKeyRefused":
+    "Gemini kayıtlı API anahtarını reddetti. Ayarlar'da anahtarı değiştirin veya kaldırın, ardından yeniden bağlanın.",
   "error.provider.messageTooLarge":
     "OpenBot, {limit} MB'tan daha büyük bir mesaj gönderdiği için {provider} sağlayıcısını durdurdu.",
   "error.provider.customAgentIdInvalid":

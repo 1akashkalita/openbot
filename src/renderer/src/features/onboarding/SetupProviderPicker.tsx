@@ -44,6 +44,7 @@ export interface SetupProviderProps {
   providerAvailableVersions?: Partial<Record<AgentProviderId, string | null>> | undefined;
   onUpdateProvider?: ((provider: AgentProviderId) => void | Promise<void>) | undefined;
   onConnectProvider?: ((provider: AgentProviderId) => void | Promise<void>) | undefined;
+  onCancelProviderSignIn?: ((provider: AgentProviderId) => void | Promise<void>) | undefined;
   onDownloadProvider?: ((provider: AgentProviderId) => void | Promise<void>) | undefined;
   onCancelProviderDownload?: ((provider: AgentProviderId) => void | Promise<void>) | undefined;
   onInstallProvider?: ((provider: AgentProviderId) => void | Promise<void>) | undefined;
@@ -415,6 +416,16 @@ export function createSetupProviders(
         focusRefreshTimer = setTimeout(synchronize, 250);
         return;
       }
+      // A refresh cancels a sign-in that OpenBot runs, such as Gemini's Google sign-in. The browser
+      // takes focus, so the user often comes back before the sign-in is complete. That sign-in
+      // reports its own result.
+      const signingIn = props.agentStatus.providers?.some(
+        (status) => providersAwaitingFocusRefresh.has(status.id) && status.connectionState === "connecting",
+      );
+      if (signingIn) {
+        blurredAfterProviderConnect = false;
+        return;
+      }
       providersAwaitingFocusRefresh.clear();
       blurredAfterProviderConnect = false;
       void refreshProviders();
@@ -613,6 +624,7 @@ export function SetupProviderPicker(props: SetupProviderPickerProps) {
               }
             : undefined
         }
+        onCancelProviderSignIn={source().onCancelProviderSignIn}
         onDownloadProvider={
           source().onDownloadProvider
             ? async (provider) => {

@@ -60,6 +60,7 @@ export const messages = {
   "provider.restartPending": "Перезапустится после завершения текущих задач",
   "provider.action.install": "Установить",
   "provider.action.signIn": "Войти",
+  "provider.action.apiKey": "Ключ API",
   "provider.action.signInWithCode": "Войти по коду",
   "provider.aria.download": "Скачать: {name}",
   "provider.aria.cancel": "Отменить: {name}",
@@ -67,6 +68,10 @@ export const messages = {
   "provider.aria.reconnect": "Переподключить: {name}",
   "provider.aria.restart": "Перезапустить: {name}",
   "provider.aria.retry": "Повторить: {name}",
+  "provider.aria.cancelSignIn": "Отменить вход в {name}",
+  "provider.aria.apiKey": "Ключ API {name}",
+  "provider.connecting.browserHint": "Завершите вход, если откроется страница в браузере.",
+  "provider.connecting.cancelFailed": "OpenBot не удалось отменить вход в {name}. Попробуйте ещё раз.",
   "provider.aria.install": "Установить: {name}",
   "provider.aria.signIn": "Войти в {name}",
   "provider.aria.codeFallback": "Войти в {name} по коду",
@@ -141,7 +146,7 @@ export const messages = {
   "provider.museKey.label": "Ключ API Meta",
   "provider.geminiKey.title": "Ключ API Gemini",
   "provider.geminiKey.description":
-    "Сохраните ключ API Gemini на хосте или нажмите «Подключить», чтобы войти через Google.",
+    "Сохраните ключ API Gemini на этом компьютере. Сохранённый ключ используется вместо аккаунта Google. Чтобы войти через Google, удалите ключ и нажмите «Подключить» в строке Gemini.",
   "provider.geminiKey.label": "Ключ API Gemini",
 
   "provider.openCodeKey.title": "Вход в OpenCode Go",

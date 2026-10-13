@@ -329,6 +329,7 @@ function ServerSettings(props: {
     startProviderUpdate,
     cancelProviderRuntimeDownload,
     connectProvider,
+    cancelProviderSignIn,
     openProviderInstallGuide,
     setProviderOn,
     restartProvider,
@@ -517,6 +518,9 @@ function ServerSettings(props: {
       // The browser sign-in, the install guide, the scan and custom agents are of this computer.
       get onConnectProvider() {
         return local && providerRuntimeDownloadsAvailable() ? connectProvider : undefined;
+      },
+      get onCancelProviderSignIn() {
+        return local && providerRuntimeDownloadsAvailable() ? cancelProviderSignIn : undefined;
       },
       get onInstallProvider() {
         return local && providerRuntimeDownloadsAvailable() ? openProviderInstallGuide : undefined;

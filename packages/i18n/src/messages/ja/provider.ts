@@ -46,6 +46,7 @@ export const messages = {
   "provider.restartPending": "現在のタスクが停止した後に再起動します",
   "provider.action.install": "インストール",
   "provider.action.signIn": "サインイン",
+  "provider.action.apiKey": "API キー",
   "provider.action.signInWithCode": "コードでログイン",
   "provider.aria.download": "{name} をダウンロード",
   "provider.aria.cancel": "{name} をキャンセル",
@@ -53,6 +54,11 @@ export const messages = {
   "provider.aria.reconnect": "{name} に再接続",
   "provider.aria.restart": "{name} を再起動",
   "provider.aria.retry": "{name} を再試行",
+  "provider.aria.cancelSignIn": "{name} のサインインをキャンセル",
+  "provider.aria.apiKey": "{name} の API キー",
+  "provider.connecting.browserHint": "ブラウザのページが開いたら、サインインを完了してください。",
+  "provider.connecting.cancelFailed":
+    "OpenBot は {name} のサインインをキャンセルできませんでした。もう一度お試しください。",
   "provider.aria.install": "{name} をインストール",
   "provider.aria.signIn": "{name} にサインイン",
   "provider.aria.codeFallback": "コードで {name} にログイン",
@@ -124,7 +130,7 @@ export const messages = {
   "provider.museKey.label": "Meta API キー",
   "provider.geminiKey.title": "Gemini API キー",
   "provider.geminiKey.description":
-    "ホストに Gemini API キーを保存するか、「接続」を選択して Google でサインインしてください。",
+    "このコンピュータに Gemini API キーを保存します。保存したキーは Google アカウントの代わりに使われます。Google でサインインするには、キーを削除してから Gemini の行で「接続」を選択してください。",
   "provider.geminiKey.label": "Gemini API キー",
 
   "provider.openCodeKey.title": "OpenCode Go にサインイン",

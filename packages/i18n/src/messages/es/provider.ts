@@ -51,6 +51,7 @@ export const messages = {
   "provider.restartPending": "Se reinicia cuando terminen las tareas actuales",
   "provider.action.install": "Instalar",
   "provider.action.signIn": "Iniciar sesión",
+  "provider.action.apiKey": "Clave de API",
   "provider.action.signInWithCode": "Iniciar sesión con código",
   "provider.aria.download": "Descargar {name}",
   "provider.aria.cancel": "Cancelar {name}",
@@ -58,6 +59,10 @@ export const messages = {
   "provider.aria.reconnect": "Volver a conectar {name}",
   "provider.aria.restart": "Reiniciar {name}",
   "provider.aria.retry": "Reintentar {name}",
+  "provider.aria.cancelSignIn": "Cancelar el inicio de sesión en {name}",
+  "provider.aria.apiKey": "Clave de API de {name}",
+  "provider.connecting.browserHint": "Completa el inicio de sesión si se abre una página del navegador.",
+  "provider.connecting.cancelFailed": "OpenBot no pudo cancelar el inicio de sesión en {name}. Inténtalo de nuevo.",
   "provider.aria.install": "Instalar {name}",
   "provider.aria.signIn": "Iniciar sesión en {name}",
   "provider.aria.codeFallback": "Iniciar sesión en {name} con un código",
@@ -128,7 +133,7 @@ export const messages = {
   "provider.museKey.label": "Clave de API de Meta",
   "provider.geminiKey.title": "Clave de API de Gemini",
   "provider.geminiKey.description":
-    "Guarda una clave de API de Gemini en el host o selecciona Conectar para iniciar sesión con Google.",
+    "Guarda una clave de API de Gemini en este ordenador. Una clave guardada se usa en lugar de tu cuenta de Google. Para iniciar sesión con Google, elimina la clave y selecciona Conectar en la fila de Gemini.",
   "provider.geminiKey.label": "Clave de API de Gemini",
   "provider.openCodeKey.title": "Iniciar sesión en OpenCode Go",
   "provider.openCodeKey.description":
