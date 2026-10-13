@@ -30,7 +30,6 @@ import {
   CLOSE_WAIT_TOOL,
   closeWaitToolSchema,
 } from "./agent-waits/agent-waits";
-import { CHANNEL_TOOL_DEFINITIONS } from "./channel-tools";
 import { ROUTINE_FLOW_TOOL_DEFINITIONS } from "./routine-flows/routine-flow-tools";
 import { routineScheduleZodSchema } from "./routine-tool-schema";
 
@@ -83,8 +82,8 @@ export const htmlPreviewToolSchema = z.object({
 });
 
 /** Shared declarations for Codex, Grok, and Claude. Service handlers enforce execution rules. */
+// Channel tools are left out: channels are deprecated and archived at start.
 export const OPENBOT_TOOL_DEFINITIONS: readonly OpenBotToolDefinition[] = [
-  ...CHANNEL_TOOL_DEFINITIONS,
   ...HISTORY_TOOL_DEFINITIONS,
   ...DATA_TOOL_DEFINITIONS,
   ...LOCAL_SKILL_TOOL_DEFINITIONS,
