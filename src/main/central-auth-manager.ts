@@ -474,6 +474,7 @@ export class CentralAuthManager extends EventEmitter<CentralAuthEvents> {
                   current: z.boolean(),
                   connectedAt: z.number().finite(),
                   lastActiveAt: z.number().finite(),
+                  hostedServer: z.boolean().exactOptional(),
                 }),
               ),
             })

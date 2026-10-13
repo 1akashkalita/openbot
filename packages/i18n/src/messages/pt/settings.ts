@@ -255,6 +255,9 @@ export const messages = {
   "settings.profile.sessions.thisDevice": "Este dispositivo",
   "settings.profile.sessions.kind.desktop": "Computador",
   "settings.profile.sessions.kind.mobile": "Celular",
+  "settings.profile.sessions.kind.hostedServer": "Servidor hospedado",
+  "settings.profile.sessions.hostedServerNote":
+    "Desconectar encerra a sessão do servidor. Reinicie o servidor para conectá-lo de novo.",
   "settings.profile.sessions.details": "{kind} · Conectado em {signedIn} · Última atividade em {lastActive}",
   "settings.profile.sessions.disconnectLabel": "Desconectar a sessão de {name} de {signedIn}",
   "settings.profile.sessions.loadFailed": "Não foi possível carregar as sessões da conta. Tente novamente.",
