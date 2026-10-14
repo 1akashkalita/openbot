@@ -1,6 +1,17 @@
 import type { AgentProviderId } from "@openbot/contracts/agent-providers";
-import type { CentralAuthUser, UpdateAgentInput } from "@openbot/contracts/ipc";
+import {
+  type AgentModelChoice,
+  type CentralAuthUser,
+  sameAgentModelChoice,
+  type UpdateAgentInput,
+} from "@openbot/contracts/ipc";
 import { hasVisibleToasts } from "@openbot/ui";
+import {
+  type BackupModelSource,
+  rememberedBackupModels,
+  type UsageLimitAskCardProps,
+  usageLimitAskOptions,
+} from "@openbot/ui/features/conversation/BackupModels";
 import { unloadedHistory } from "@openbot/ui/features/conversation/ChatScrollRail";
 import { createMemo } from "solid-js";
 import { ProviderSignInDialogs } from "../../components/ProviderSignInDialogs";
@@ -42,6 +53,7 @@ import { useConversation } from "./conversation-context";
  * composer state that survives one - which is why the id is read per prop
  * rather than captured once.
  */
+
 export function WorkspaceConversation(props: { account: () => CentralAuthUser }) {
   const scopeIsCurrent = createScopeGuard();
   const serverScope = useServerScope();
@@ -108,6 +120,11 @@ export function WorkspaceConversation(props: { account: () => CentralAuthUser })
     updateQueuedMessage,
     reorderQueue,
     stopActiveTurn,
+    usageLimits,
+    usageLimitedModels,
+    waitedUsageLimits,
+    setWaitedUsageLimits,
+    queues,
   } = useTurns();
   const {
     activeMessages,
@@ -262,6 +279,62 @@ export function WorkspaceConversation(props: { account: () => CentralAuthUser })
     () => activeServer()?.kind === "local" && providerRuntimeDownloadsAvailable(),
   );
 
+  /** Whether a usage limit holds this model and account now. */
+  const usageLimited = (choice: AgentModelChoice) =>
+    usageLimitedModels().some((limited) => sameAgentModelChoice(limited, choice));
+
+  /**
+   * A usage limit holds the active agent's queued message on this computer. The chat asks where to
+   * send it, unless the agent switches by itself to a saved backup model that is ready.
+   */
+  const usageLimitAsk = createMemo((): UsageLimitAskCardProps | undefined => {
+    const agent = activeAgent();
+    if (!agent || activeServer()?.kind !== "local") return undefined;
+    const limits = usageLimits();
+    if (!(agent.id in limits)) return undefined;
+    const resetsAt = limits[agent.id] ?? null;
+    if (waitedUsageLimits()[agent.id] === resetsAt && agent.id in waitedUsageLimits()) return undefined;
+    if (!queues()[agent.id]?.deliveries.some((delivery) => delivery.status === "queued")) return undefined;
+    const source: BackupModelSource = {
+      modelOptions: modelOptions(),
+      providers: agentStatus().providers,
+      limited: usageLimited,
+    };
+    const options = usageLimitAskOptions(agent, agent.backupModels, source);
+    if (options.length === 0) return undefined;
+    const backupModels = agent.backupModels;
+    if (
+      backupModels?.automatic &&
+      backupModels.order.some((choice) => options.some((option) => sameAgentModelChoice(option.choice, choice)))
+    )
+      return undefined;
+    const agentId = agent.id;
+    const reasoningEffort = agent.reasoningEffort;
+    return {
+      provider: agent.provider,
+      resetsAt,
+      options,
+      onSend: (option, remember) => {
+        // The agent keeps its reasoning effort where the other model has it.
+        const model = modelOptions().find(
+          (candidate) => candidate.provider === option.choice.provider && candidate.id === option.choice.model,
+        );
+        return updateAgent(agentId, {
+          provider: option.choice.provider,
+          model: option.choice.model,
+          providerAccountId: option.choice.providerAccountId ?? null,
+          reasoningEffort:
+            model && !model.supportedReasoningEfforts.includes(reasoningEffort)
+              ? model.defaultReasoningEffort
+              : reasoningEffort,
+          leaveUsageLimit: true,
+          ...(remember ? { backupModels: rememberedBackupModels(option.choice, backupModels) } : {}),
+        });
+      },
+      onWait: () => setWaitedUsageLimits((current) => ({ ...current, [agentId]: resetsAt })),
+    };
+  });
+
   return (
     <>
       <Conversation
@@ -338,6 +411,8 @@ export function WorkspaceConversation(props: { account: () => CentralAuthUser })
         remoteDesktopEnabled={!platform.landingPreview && activeServerSupportsCapability("remote-desktop")}
         prompt={activePrompt()}
         approval={activeApproval()}
+        usageLimitAsk={usageLimitAsk()}
+        usageLimited={activeServer()?.kind === "local" ? usageLimited : undefined}
         browserTakeover={activeBrowserTakeover()}
         activeTurnId={activeAgent() ? activeTurns()[activeAgent()?.id ?? ""] : null}
         activityDetail={activeAgent() ? turnProgress()[activeAgent()?.id ?? ""]?.detail : undefined}
