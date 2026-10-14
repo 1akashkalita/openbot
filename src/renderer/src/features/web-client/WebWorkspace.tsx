@@ -102,11 +102,16 @@ import { hostSetupProviderProps } from "../onboarding/host-setup-provider-props"
 import { ServerOnboarding } from "../onboarding/ServerOnboarding";
 import { RoutineFlowsCanvas } from "../routine-flows/RoutineFlowsCanvas";
 import { AddServerOverlay, type AddServerResume } from "../servers/AddServerOverlay";
-import { watchHostUpdate } from "../servers/host-update-toast";
 import type { ServerHostedSitesOptions, ServerSettingsSection } from "../servers/ServerSettingsModal";
 import type { HostUpdateCalls } from "../servers/ServerUpdatePanel";
 import { remoteAdminServer, remoteUpdateServer, serverRoleCanAdminister } from "../servers/server-capabilities";
 import { createServerConnectionToast } from "../servers/server-connection-toast";
+import {
+  offerServerUpdate,
+  ServerUpdateDialogHost,
+  serverUpdateBadge,
+  showServerUpdate,
+} from "../servers/server-update-flow";
 import { isReaderAuthor } from "../team/reader-identity";
 import { WebAgentSettings } from "./WebAgentSettings";
 import { WebConnectComputer } from "./WebConnectComputer";
@@ -793,21 +798,31 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     setServerSettingsSection(section);
     serverSettings.open(trigger);
   }
-  // A member learns about a new version, or sees the download that runs, each time the host connects.
+  // Each time the user enters a host that has a new version, the update dialog opens. A reconnect does not offer again.
+  let entry: { id: string; offered: boolean } | null = null;
   createEffect(
     () => {
       const current = server();
-      // An id, not an object: the summary is rebuilt on each host change, and one read is enough.
-      return current?.state === "online" && remoteUpdateServer(current) ? current.id : null;
+      return current ? { id: current.id, online: current.state === "online" } : null;
     },
-    (serverId) => {
-      if (!serverId) return;
-      watchHostUpdate({
-        serverId,
-        name: untrack(() => server()?.name) ?? "",
-        calls: hostUpdateCalls,
-        openUpdates: () => void openServerSettings(serverId, null, "updates"),
-      });
+    (current) => {
+      if (current?.id !== entry?.id) {
+        entry = current ? { id: current.id, offered: false } : null;
+        void offerServerUpdate(null);
+      }
+      if (!current?.online || !entry || entry.offered) return;
+      entry.offered = true;
+      const active = untrack(server);
+      void offerServerUpdate(
+        active && remoteUpdateServer(active)
+          ? {
+              serverId: active.id,
+              name: active.name,
+              canManage: serverRoleCanAdminister(active),
+              calls: hostUpdateCalls,
+            }
+          : null,
+      );
     },
   );
   const channelsPort = createWebChannelsPort(
@@ -1257,6 +1272,11 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                     : undefined
                 }
                 serverName={workspace.state.host?.name ?? "OpenBot"}
+                serverUpdate={(() => {
+                  const id = server()?.id;
+                  const badge = id ? serverUpdateBadge(id) : null;
+                  return id && badge ? { ...badge, onOpen: () => void showServerUpdate(id) } : undefined;
+                })()}
                 serverMenu={{
                   servers: servers(),
                   view: layout.serverView(),
@@ -1380,6 +1400,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
           }
           after={
             <>
+              <ServerUpdateDialogHost hosts={workspace.hostViews()} />
               <AddServerOverlay
                 open={addServer() !== null}
                 calls={hostedServerCalls}
