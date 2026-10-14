@@ -19,13 +19,28 @@ import type {
   MessagingPlace,
   StatusReaction,
 } from "../messaging-types";
-import { MessagingAdapterError } from "../messaging-types";
+import { MessagingAdapterError, MessagingConnectionError } from "../messaging-types";
 import { plainText, SLACK_ACTION_IDS, slackMentionIds } from "./slack-events";
 import { SlackEventsTransport } from "./slack-events-transport";
 import { slackChunks, slackMrkdwn } from "./slack-render";
 import { SlackApiError, SlackWebApi } from "./slack-web-api";
 
 const { io: adapterIo } = causeHelpers(MessagingAdapterError);
+
+/** Slack error codes that a later lookup can recover from. */
+const TEMPORARY_SLACK_ERRORS = new Set([
+  "ratelimited",
+  "internal_error",
+  "fatal_error",
+  "service_unavailable",
+  "request_timeout",
+]);
+
+function isTemporaryLookupFailure(failure: MessagingAdapterError): boolean {
+  const error = failure.cause;
+  if (error instanceof MessagingConnectionError) return false;
+  return !(error instanceof SlackApiError) || error.code.startsWith("http_") || TEMPORARY_SLACK_ERRORS.has(error.code);
+}
 
 /** Slack's own limit for one uploaded file is 1 GB; the host holds its uploads to this. */
 const UPLOAD_BYTES = 100 * 1024 * 1024;
@@ -344,7 +359,12 @@ class SlackAdapter implements MessagingAdapter {
           if (isString(candidate) && candidate.trim()) return candidate.trim();
         return userId;
       }),
-      Effect.catch(() => Effect.succeed(userId)),
+      Effect.catch((failure) =>
+        Effect.sync(() => {
+          if (isTemporaryLookupFailure(failure)) this.#names.delete(userId);
+          return userId;
+        }),
+      ),
     );
     yield* Deferred.succeed(name, result);
     return result;
@@ -361,7 +381,12 @@ class SlackAdapter implements MessagingAdapter {
           ? `#${response.channel.name}`
           : platformChannelId,
       ),
-      Effect.catch(() => Effect.succeed(platformChannelId)),
+      Effect.catch((failure) =>
+        Effect.sync(() => {
+          if (isTemporaryLookupFailure(failure)) this.#places.delete(platformChannelId);
+          return platformChannelId;
+        }),
+      ),
     );
     yield* Deferred.succeed(name, result);
     return result;
