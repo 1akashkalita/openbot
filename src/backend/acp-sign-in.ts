@@ -6,6 +6,7 @@ import { redactText, registerSecretValue } from "@openbot/logging";
 import { Effect, Fiber } from "effect";
 import { cliSpawnTarget } from "./cli";
 import { type ProviderClientOperationError, ProviderSignInError, providerFailure } from "./provider-client-effects";
+import { type ProviderTempOptions, spawnWithProviderTemp } from "./provider-temp";
 import { stopProcessTree } from "./windows-process-tree";
 
 /** The messages this client sends: two requests, and a refusal for each request the server makes. */
@@ -46,21 +47,30 @@ export const startAcpAuthentication = Effect.fnUntraced(function* (options: {
   timeoutMs: number;
   /** Linux Gemini delegates its browser launch to the desktop so failure is visible. */
   openGoogleSignIn?: (url: string) => Promise<void>;
+  /** A temporary folder of its own for the process (`provider-temp.ts`). */
+  privateTemp?: ProviderTempOptions | undefined;
 }) {
   // Cursor's Windows launcher is a `.cmd` file, which starts only through `cmd.exe`.
   const target = cliSpawnTarget(options.executable, options.argv);
   const child = yield* Effect.acquireRelease(
     Effect.try({
       try: () =>
-        spawn(target.command, target.args, {
-          cwd: process.cwd(),
-          env: { ...process.env, ...options.env, ...(options.openGoogleSignIn ? { BROWSER: "true" } : {}) },
-          windowsVerbatimArguments: target.windowsVerbatimArguments,
-          // Only Gemini on Linux delegates the browser launch. Other servers still open it themselves.
-          stdio: ["pipe", "pipe", "pipe"],
-          shell: false,
-          windowsHide: process.platform === "win32",
-        }),
+        spawnWithProviderTemp(options.privateTemp, (tempEnv) =>
+          spawn(target.command, target.args, {
+            cwd: process.cwd(),
+            env: {
+              ...process.env,
+              ...options.env,
+              ...(options.openGoogleSignIn ? { BROWSER: "true" } : {}),
+              ...tempEnv,
+            },
+            windowsVerbatimArguments: target.windowsVerbatimArguments,
+            // Only Gemini on Linux delegates the browser launch. Other servers still open it themselves.
+            stdio: ["pipe", "pipe", "pipe"],
+            shell: false,
+            windowsHide: process.platform === "win32",
+          }),
+        ),
       catch: providerFailure,
     }),
     (child) => stopProcessTree(child).pipe(Effect.orDie),

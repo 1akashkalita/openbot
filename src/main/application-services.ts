@@ -97,6 +97,7 @@ import { MessagingOperationFailed, MessagingService } from "../backend/messaging
 import { slackDriver } from "../backend/messaging/slack/slack-driver";
 import { telegramDriver } from "../backend/messaging/telegram/telegram-driver";
 import { passwordVaultRouter } from "../backend/password-vault-router";
+import { sweepProviderTemp } from "../backend/provider-temp";
 import { SidebarLayoutStore } from "../backend/sidebar-layout-store";
 import { StorageUsageScanner, StorageUsageService } from "../backend/storage-usage";
 import { TeamChatStore } from "../backend/team-chat-store";
@@ -1280,6 +1281,11 @@ export async function createApplicationServices({
   teardown.push(TEARDOWN_ORDER.computerUsePermissionHelp, "the Computer Use permission help", () => {
     computerUsePermissionHelp.close();
   });
+  // Windows only: there the Antigravity server unpacks about 310 MB at each start, and the process
+  // tree stop ends every command it started, so none outlives its folder. Elsewhere the system
+  // folder stays: a macOS path in userData has a space and is too long for a Unix socket.
+  const providerTempDirectory = join(app.getPath("userData"), "provider-temp");
+  if (process.platform === "win32") await sweepProviderTemp(providerTempDirectory);
   const service: AgentService = new AgentService({
     store,
     mailbox,
@@ -1340,6 +1346,7 @@ export async function createApplicationServices({
       // service asks for one at each hand-off; only a test the user pressed may open a browser.
       mcpOAuth,
       providerStateDirectory: join(app.getPath("userData"), "provider-state"),
+      ...(process.platform === "win32" ? { providerTempDirectory } : {}),
       // Paths only: `gh` and `git` read the token from the files the connection keeps current.
       agentEnvironment: (inherited) => githubConnector.agentEnvironment(inherited),
     },

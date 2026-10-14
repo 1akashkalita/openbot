@@ -20,7 +20,7 @@ import type { ProviderCredentialStore } from "../provider-credential-store";
 import type { ProviderRuntimeManager } from "../provider-runtime-manager";
 import { parseProviderId } from "./app-inputs";
 import { handler, type IpcGroupHandlers, payloadHandler } from "./define-ipc-group";
-import { requireString } from "./validation";
+import { optionalPayload, requireString } from "./validation";
 
 /** Long enough for any key a provider issues, short enough that nothing large reaches the cipher. */
 const MAX_API_KEY_LENGTH = 512;
@@ -57,7 +57,9 @@ export function providerIpcHandlers({
         await runCauseEffect(providerRuntimes.downloadAndWait(provider));
         return service.getStatus();
       }),
-      refreshAgentProviders: handler(() => runCauseEffect(service.refreshProviders())),
+      refreshAgentProviders: payloadHandler(optionalPayload(parseRefreshProvidersInput), (input) =>
+        runCauseEffect(service.refreshProviders({ automatic: input?.automatic === true })),
+      ),
       restartProvider: payloadHandler(parseProviderId, (provider) => runCauseEffect(service.restartProvider(provider))),
       cancelProviderRestart: payloadHandler(parseProviderId, async (provider) =>
         service.cancelProviderRestart(provider),
@@ -147,6 +149,11 @@ export function parseManagedProviderId(value: unknown): ManagedProviderId {
   const provider = parseProviderId(value);
   if (!isManagedRuntimeProvider(provider)) throw new Error("OpenBot does not manage this provider's CLI.");
   return provider;
+}
+
+function parseRefreshProvidersInput(value: unknown): { automatic: boolean } {
+  if (!isDynamicRecord(value) || typeof value.automatic !== "boolean") throw new Error("Invalid provider refresh.");
+  return { automatic: value.automatic };
 }
 
 function parseProviderUseInput(value: unknown): { provider: AgentProviderId; on: boolean } {

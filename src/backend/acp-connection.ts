@@ -13,6 +13,7 @@ import {
   providerSync,
 } from "./provider-client-effects";
 import { registerProviderProcess } from "./provider-processes";
+import { type ProviderTempOptions, spawnWithProviderTemp } from "./provider-temp";
 import { createDiagnosticStream } from "./stderr-diagnostics";
 import { stopWindowsProcessTree } from "./windows-process-tree";
 
@@ -29,6 +30,8 @@ export interface AcpConnectionOptions {
   env: Record<string, string>;
   extraEnv?: (() => Record<string, string>) | undefined;
   confine?: ((target: SpawnTarget) => SpawnTarget) | undefined;
+  /** A temporary folder of its own for each process, in this root (`provider-temp.ts`). */
+  privateTemp?: Omit<ProviderTempOptions, "provider"> | undefined;
   label(): string;
   redact(text: string): string;
   diagnostic(message: string, origin: DiagnosticOrigin): void;
@@ -64,12 +67,15 @@ export class AcpConnection {
     this.#stopping = false;
     const direct = cliSpawnTarget(this.options.cli.executable, this.options.argv);
     const target = this.options.confine ? this.options.confine(direct) : direct;
-    const child = spawn(target.command, target.args, {
-      stdio: ["pipe", "pipe", "pipe"],
-      env: { ...process.env, ...this.options.env, ...this.options.extraEnv?.() },
-      windowsVerbatimArguments: target.windowsVerbatimArguments,
-      windowsHide: true,
-    });
+    const privateTemp = this.options.privateTemp;
+    const child = spawnWithProviderTemp(privateTemp && { ...privateTemp, provider: this.options.label() }, (tempEnv) =>
+      spawn(target.command, target.args, {
+        stdio: ["pipe", "pipe", "pipe"],
+        env: { ...process.env, ...this.options.env, ...this.options.extraEnv?.(), ...tempEnv },
+        windowsVerbatimArguments: target.windowsVerbatimArguments,
+        windowsHide: true,
+      }),
+    );
     this.#process = child;
     registerProviderProcess(child, this.options.provider);
     // The SDK holds a line until its newline with no limit. At the limit the connection closes with
