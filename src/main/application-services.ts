@@ -140,6 +140,7 @@ import { HostedServerStartRetry } from "./hosted-server-start-retry";
 import { HostedSiteDesktopService } from "./hosted-site-service";
 import { IdleRestart } from "./idle-restart";
 import { loadIngressQueueKey } from "./ingress-queue-key";
+import { InstanceTransferService } from "./instance-transfer-service";
 import { LanguageService } from "./language-service";
 import { localRoutineFeedDocument } from "./local-routine-calendar";
 import { LogoColorService } from "./logo-color-service";
@@ -439,6 +440,7 @@ export interface ApplicationServices {
   marketplaceAgents: AgentMarketplaceService;
   agentTemplates: AgentTemplateService;
   agentImport: AgentImportService;
+  instanceTransfer: InstanceTransferService;
   voice: VoiceTranscriptionService;
   dynamicIsland: DynamicIslandWindowController;
   cuaDriver: CuaDriverRuntime;
@@ -1644,6 +1646,30 @@ export async function createApplicationServices({
     undefined,
     join(app.getPath("userData"), "agent-import-uploads"),
   );
+  // The same owners the Settings screens write through, so an import has their checks and restarts.
+  const instanceTransfer = new InstanceTransferService({
+    agents: service,
+    skills: { library: () => skills.requireLocalLibrary(), installLocal: (input) => skills.installLocal(input) },
+    sharedRoot: store.sharedRoot,
+    appVersion: app.getVersion(),
+    uploadDirectory: join(app.getPath("userData"), "instance-transfer-uploads"),
+    settings: {
+      mcpServers: () => service.listMcpServers(),
+      saveMcpServer: (config) => service.saveMcpServer({ config }),
+      customProviders: () => customProviderChanges.list(),
+      saveCustomProvider: (input) => customProviderChanges.save(input),
+      customAgents: () => customAgentChanges.list(),
+      providersOff: () => providerUse.off(),
+      sidebar: () => sidebarLayout.getSnapshot(),
+      mutateSidebar: (action) => sidebarLayout.mutate(action, service.sidebarChatIds()),
+      routineFlowLinks: (agentId) => routineFlowRuntime.canvas(agentId).pipe(Effect.map((canvas) => canvas.links)),
+      connectRoutineFlow: (input) => routineFlowRuntime.connect(input),
+      signedInProviders: () =>
+        (service.getStatus().providers ?? [])
+          .filter((provider) => provider.state === "available" && !provider.off)
+          .map((provider) => provider.id),
+    },
+  });
   const mcpHostSignIns = new McpHostSignIns({ service, browser });
   const providerSignIns = new ProviderHostSignIns({ service, browser });
   // The flows end with the sign-ins they relay, which `mcpHostSignIns` and `providerSignIns` close.
@@ -1701,6 +1727,8 @@ export async function createApplicationServices({
     hostedSites,
     // Present, so the host advertises `agent-import-v1`. Any member can import.
     agentImport,
+    // Present, so the host advertises `instance-transfer-v1`. Only owners and admins.
+    instanceTransfer,
     // Present, so the host advertises `routine-flows-v1`. Any member who can see the agents.
     routineFlows: routineFlowRuntime,
     // Each member present advertises its admin capability. Every admin route requires an owner or admin.
@@ -2356,6 +2384,7 @@ export async function createApplicationServices({
     marketplaceAgents,
     agentTemplates,
     agentImport,
+    instanceTransfer,
     voice,
     dynamicIsland,
     cuaDriver,
