@@ -1024,9 +1024,9 @@ export class ProviderRuntime implements ProviderPort {
 
   /**
    * Signs the user in to one provider, in the way that provider's driver declares. `openExternal`
-   * is only reached by a `browser` sign-in, whose login hands back a URL; a `cli-command` sign-in
-   * opens its own browser window from the CLI OpenBot spawns, and an `external` sign-in happens
-   * outside OpenBot, so Connect only asks the provider again.
+   * is only reached by a `browser` or `muse-device` sign-in, whose login hands back a URL; a
+   * `cli-command` sign-in opens its own browser window from the CLI OpenBot spawns, and an
+   * `external` sign-in happens outside OpenBot, so Connect only asks the provider again.
    */
   readonly connectProvider = Effect.fn("ProviderRuntime.connectProvider")(function* (
     this: ProviderRuntime,
@@ -1121,6 +1121,16 @@ export class ProviderRuntime implements ProviderPort {
           .start(provider, (cli) => startProviderTerminalLogin(cli, signIn.timeoutMs))
           .pipe(toProviderOperationFailed);
         return this.status();
+      case "muse-device": {
+        const started = yield* this.#startProviderCode(provider, signIn);
+        if (started.kind !== "code") return this.status();
+        // A page that did not open cannot finish the sign-in, so its code stops working.
+        yield* Effect.tryPromise({
+          try: () => openExternal(started.verificationUrlComplete ?? started.verificationUrl),
+          catch: (cause) => new ProviderOperationFailed({ cause }),
+        }).pipe(Effect.tapError(() => this.#cancelCliLogin(provider).pipe(Effect.ignore)));
+        return this.status();
+      }
     }
   });
 
@@ -1205,15 +1215,7 @@ export class ProviderRuntime implements ProviderPort {
     provider: AgentProvider,
     openPage: (url: string) => Promise<void>,
   ) {
-    const codeSignIn = requireProviderDriver(provider).codeSignIn;
-    if (codeSignIn?.kind === "muse-device") {
-      // `muse login` with no terminal waits on a device page it never opens; the page is the sign-in.
-      const started = yield* this.startProviderCodeLogin(provider);
-      if (started.kind === "code")
-        yield* Effect.promise(() => openPage(started.verificationUrlComplete ?? started.verificationUrl));
-    } else {
-      yield* this.#connectProvider(provider, openPage, true);
-    }
+    yield* this.#connectProvider(provider, openPage, true);
     // A sign-in that ended before this read leaves no task; the clients then tell how it ended.
     const pending =
       requireProviderDriver(provider).signIn.kind === "browser"
