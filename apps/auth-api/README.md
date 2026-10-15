@@ -190,6 +190,13 @@ for a team invitation. The message is never sent in that case, so the app can
 ask again later. Namecheap Private Email allows 500 messages an hour for each
 mailbox, and every sign-in code and invitation spends that same quota.
 
+The contact form on `/contact` posts to `/v1/contact`. The Worker sends each message to
+`EMAIL_FROM` through SMTP, with the visitor's address in `Reply-To`, and stores nothing.
+The D1 counter of sign-in allows 3 messages for each IP address and 15 in total in each 15-minute
+window, so the form cannot spend the quota that sign-in codes need. A Cloudflare rate-limit binding
+counts in each location separately, so it cannot hold a total. Without SMTP the route answers 503
+`email_delivery_not_configured`, and the form tells the visitor to write to `hello@openbot.run`.
+
 ## Cloudflare deployment
 
 Create the D1 database and replace the placeholder `database_id` in

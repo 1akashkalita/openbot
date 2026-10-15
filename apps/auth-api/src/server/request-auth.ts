@@ -10,10 +10,11 @@ import { AgentTemplates } from "./agent-templates";
 import { type FcmRelaySender, sharedFcmSender } from "./android-notification-relay";
 import { AuthOperationError, AuthService, AuthServiceError } from "./auth-service";
 import { BillingError, type BillingService } from "./billing-service";
+import type { ContactMessageServices } from "./contact-message";
 import { D1AuthRepository } from "./d1-auth-repository";
 import { DiscordAppError, DiscordAppService } from "./discord-app";
 import { runApiEffect } from "./effect-runtime";
-import { createEmailCodeDelivery, createTeamInviteEmailDelivery } from "./email-delivery";
+import { createContactMessageDelivery, createEmailCodeDelivery, createTeamInviteEmailDelivery } from "./email-delivery";
 import { GitHubInstallationTokens, GitHubInstallationTokensError } from "./github-installation-tokens";
 import { createHostedBilling } from "./hosted-billing";
 import { type HostedServerService, HostedServerServiceError } from "./hosted-server-service";
@@ -281,6 +282,16 @@ export const requireOperationsAdmin = Effect.fn("Auth.requireOperationsAdmin")(f
 export const requireServerClaimsAdmin = Effect.fn("Auth.requireServerClaimsAdmin")(function* (request: Request) {
   return yield* adminTokenMatches(requireWorkerBindings(env).SERVER_CLAIMS_ADMIN_TOKEN, bearerToken(request));
 });
+
+/** The limits and delivery of the site's contact form. */
+export function requestContactMessageServices(): ContactMessageServices {
+  const bindings = requireWorkerBindings(env);
+  return {
+    repository: new D1AuthRepository(bindings.DB),
+    now: () => Date.now(),
+    delivery: () => createContactMessageDelivery(bindings),
+  };
+}
 
 export function requestTeamInviteEmailDelivery(): TeamInviteEmailDelivery | null {
   const bindings = requireWorkerBindings(env);
