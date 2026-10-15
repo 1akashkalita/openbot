@@ -45,10 +45,13 @@ const SCENARIOS = [
   "refund",
   "dispute",
   "portal",
+  "welcome",
   "boat",
 ] as const;
 type Scenario = (typeof SCENARIOS)[number];
 const DAY = 86_400;
+/** `WELCOME_EMAIL_CLAIM_PREFIX` of `billing-service.ts`. That module needs the Worker types. */
+const WELCOME_EMAIL_CLAIM_PREFIX = "openbot_welcome_email:";
 
 const stepSchema = z.object({
   scenario: z.enum(SCENARIOS),
@@ -255,6 +258,7 @@ class Account {
         `DELETE FROM billing_subscriptions WHERE user_id = ${id}`,
         `DELETE FROM billing_customers WHERE user_id = ${id}`,
         `DELETE FROM auth_sessions WHERE user_id = ${id}`,
+        `DELETE FROM billing_webhook_events WHERE event_id = ${quote(`${WELCOME_EMAIL_CLAIM_PREFIX}${this.id}`)}`,
         `INSERT OR IGNORE INTO users(id, identity_key, email, name, created_at, updated_at)
          VALUES (${id}, ${quote(`e2e:${this.id}`)}, ${quote(`${this.id}@example.com`)}, 'Stripe e2e', ${now}, ${now})`,
         `INSERT INTO auth_sessions(id, user_id, token_hash, expires_at, created_at, last_used_at)
@@ -653,12 +657,40 @@ function rowWhere(account: Account, serverId: string, label: string, test: (row:
   );
 }
 
+/** The claim that the Worker records when it sends the welcome email of an account. */
+function welcomeClaims(account: Account) {
+  return d1(
+    `SELECT event_id, type, received_at FROM billing_webhook_events
+     WHERE event_id = ${quote(`${WELCOME_EMAIL_CLAIM_PREFIX}${account.id}`)}`,
+    welcomeClaimSchema,
+  );
+}
+
+const observabilitySchema = z.object({ result: z.object({ rows: z.array(z.tuple([z.string()])) }) });
+
+/**
+ * The welcome email results that a local Worker logged since `since`: one line for each send. Only
+ * `bun run dev:api` has this log query, so `--remote-d1` reads nothing.
+ */
+async function welcomeSends(api: string, since: number) {
+  const response = await fetch(`${api}/cdn-cgi/local/explorer/api/local/observability/query`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      sql: `SELECT message FROM logs WHERE message LIKE '%billing: welcome email%' AND ts_ms >= ${since}`,
+    }),
+  });
+  return observabilitySchema.parse(await response.json()).result.rows.map(([message]) => message);
+}
+
 function planWhere(account: Account, subscriptionId: string, label: string, test: (plan: Plan) => boolean) {
   return waitFor(label, async () => {
     const plan = await account.plan(subscriptionId);
     return plan && test(plan) ? plan : null;
   });
 }
+
+const welcomeClaimSchema = z.object({ event_id: z.string(), type: z.string(), received_at: z.number() });
 
 const scenarios: Record<Scenario, (account: Account) => Promise<void>> = {
   async renewal(account) {
@@ -1103,6 +1135,37 @@ const scenarios: Record<Scenario, (account: Account) => Promise<void>> = {
     } else {
       print("SKIP [dispute] sales facts: the Worker has no OpenPanel client");
     }
+  },
+
+  // The Worker claims the welcome email before it sends it, and logs one line for each send.
+  async welcome(account) {
+    const since = Date.now();
+    const first = await account.createServer("Welcome");
+    record("welcome", "a server that is not paid gets no welcome email", welcomeClaims(account).length === 0, null);
+    const sub = await account.pay(first.server.serverId);
+    await applied("customer.subscription.created", sub);
+    await provisioned(account, first.server.serverId);
+    const claimed = await waitFor("welcome claim", async () => welcomeClaims(account)[0]);
+    record(
+      "welcome",
+      "the first plan of the account claims the welcome email",
+      claimed.type === "welcome_email",
+      claimed,
+    );
+    const second = await account.createServer("Welcome second");
+    const secondSub = await account.pay(second.server.serverId);
+    await applied("customer.subscription.created", secondSub);
+    await provisioned(account, second.server.serverId);
+    await stripe("DELETE", `/v1/subscriptions/${sub}`, idSchema);
+    await rowWhere(account, first.server.serverId, "ended", (row) => row.desired_state === "stopped");
+    await account.pay(first.server.serverId);
+    await rowWhere(account, first.server.serverId, "running again", (row) => row.desired_state === "running");
+    if (REMOTE_D1) {
+      print("SKIP [welcome] send count: the remote Worker log is not available");
+      return;
+    }
+    const sends = await welcomeSends(account.api, since);
+    record("welcome", "a second server and a renewed plan send no second welcome email", sends.length === 1, sends);
   },
   async boat(account) {
     const name = "Boat e2e";
