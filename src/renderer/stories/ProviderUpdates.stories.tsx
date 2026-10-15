@@ -80,7 +80,10 @@ function ProviderUpdateFlow(props: {
   failure?: string;
   /** Two other notifications open beside the update, so the stack has something to make room for. */
   companions?: boolean;
+  /** Replaces the offers in `AVAILABLE` for the providers it names. */
+  available?: Partial<Record<ManagedProviderId, string | null>>;
 }) {
+  const available = untrack(() => ({ ...AVAILABLE, ...props.available }));
   const [runtimes, setRuntimes] = createSignal(readyRuntimes());
   const [provider, setProvider] = createSignal<AgentProviderId>("claude");
   // One update fails, and the flag is spent when it does, so the Retry after it succeeds. The
@@ -96,7 +99,7 @@ function ProviderUpdateFlow(props: {
       provider: id,
       name: NAMES[id],
       runtime: runtimes()[id],
-      availableVersion: AVAILABLE[id],
+      availableVersion: available[id],
     }));
 
   function setRuntime(id: AgentProviderId, patch: Partial<ProviderRuntimeStatus>): void {
@@ -138,7 +141,7 @@ function ProviderUpdateFlow(props: {
       setRuntime(id, { phase: "finishing", progress: 100 });
       timers.add(
         window.setTimeout(() => {
-          setRuntime(id, { phase: "ready", progress: 100, version: AVAILABLE[id] ?? INSTALLED[id] });
+          setRuntime(id, { phase: "ready", progress: 100, version: available[id] ?? INSTALLED[id] });
         }, FINISHING_DELAY),
       );
     }, PROGRESS_INTERVAL);
@@ -307,4 +310,17 @@ export const LongFailureStacked: Story = {
 export const LongFailureNarrow: Story = {
   globals: { viewport: "toastNarrow" },
   render: () => <ProviderUpdateFlow controls companions failure={LONG_FAILURE} />,
+};
+
+/**
+ * A Cursor build is a date, a time and a commit. The offer and the row show the dates; hover the
+ * version for the full builds.
+ */
+export const DatedBuild: Story = {
+  render: () => <ProviderUpdateFlow controls available={{ claude: null, cursor: "2026.10.08-14-22-05-a1b2c3d" }} />,
+};
+
+/** Two Cursor builds of one day: the date alone would read the same, so each side keeps its commit. */
+export const DatedBuildSameDay: Story = {
+  render: () => <ProviderUpdateFlow controls available={{ claude: null, cursor: "2026.09.28-14-22-05-a1b2c3d" }} />,
 };

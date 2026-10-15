@@ -42,6 +42,8 @@ export interface ProviderUpdatePresentation {
   actionLabel: string | undefined;
   title: string;
   detail: string;
+  /** The full versions, when `detail` names them in their short form. */
+  detailTitle: string | undefined;
   /**
    * The download percentage, while the download is what is happening, and `null` everywhere else -
    * including the "Setting up" step, which has no measurable end and shows an indeterminate bar.
@@ -79,13 +81,17 @@ export function presentProviderUpdate(
   else if (busy) title = t("update.provider.updating", { name });
   else if (failed) title = t("update.provider.failed", { name });
 
+  const detail = updateDetail(update, updatable, text, (version, other) => versionLabel(version, other, text));
+  const fullDetail = updateDetail(update, updatable, text, (version) => formatVersion(version, text));
+
   return {
     updatable,
     busy,
     failed,
     actionLabel,
     title,
-    detail: updateDetail(update, updatable, text),
+    detail,
+    detailTitle: fullDetail === detail ? undefined : fullDetail,
     progress: !update.checking && runtime.phase === "downloading" ? clampProgress(runtime.progress) : null,
   };
 }
@@ -95,28 +101,64 @@ export function presentProviderUpdate(
  * reports none.
  *
  * This is a function rather than a string built in the picker so that the row and the notification
- * never disagree about the leading "v". It names one version only, even while a newer one is
- * offered: the row has the badge and the Update button to say an update exists, and the version
- * the user would get is in the notification, which has the width for both.
+ * never disagree about the leading "v" or the short form of a dated build. It names one version
+ * only, even while a newer one is offered: the row has the badge and the Update button to say an
+ * update exists, and the version the user would get is in the notification, which has the width
+ * for both.
  */
 export function providerVersionLabel(
   runtime: ProviderRuntimeStatus,
   text: Pick<TextValue, "t"> = currentText(),
 ): string | null {
-  return runtime.version ? formatVersion(runtime.version, text) : null;
+  return runtime.version ? versionLabel(runtime.version, null, text) : null;
 }
 
-function versionTransition(version: string | null, availableVersion: string | null, text: UpdateText): string {
-  return `${formatVersion(version, text)} → ${formatVersion(availableVersion, text)}`;
+/** The full installed version, when `providerVersionLabel` shows it in its short form. */
+export function providerVersionTitle(
+  runtime: ProviderRuntimeStatus,
+  text: Pick<TextValue, "t"> = currentText(),
+): string | undefined {
+  if (!runtime.version) return undefined;
+  const full = formatVersion(runtime.version, text);
+  return full === versionLabel(runtime.version, null, text) ? undefined : full;
 }
 
-function updateDetail(update: ProviderUpdate, updatable: boolean, text: UpdateText): string {
+/**
+ * A dated build, as Cursor names one: a date, in the newer form a time, and a commit. The date is
+ * the release; the rest only tells two builds of one day apart, and makes the line too long for the
+ * notification to show the version offered.
+ */
+const DATED_BUILD = /^(\d{4}\.\d{2}\.\d{2})(?:-\d{2}-\d{2}-\d{2})?-([0-9a-f]{7,40})$/u;
+
+/**
+ * One version as the interface shows it. A dated build is its date, and its date and short commit
+ * when `other` is a build of the same day, so the two sides of an update never read the same. A
+ * no-break space holds the date and the commit together on one line.
+ * This only shortens text: nothing here decides which version is newer.
+ */
+function versionLabel(version: string | null, other: string | null, text: Pick<TextValue, "t">): string {
+  const build = version ? DATED_BUILD.exec(version) : null;
+  if (!build) return formatVersion(version, text);
+  const [, date = "", commit = ""] = build;
+  const otherDate = other ? DATED_BUILD.exec(other)?.[1] : undefined;
+  return otherDate === date ? `v${date}\u00a0(${commit.slice(0, 7)})` : `v${date}`;
+}
+
+function updateDetail(
+  update: ProviderUpdate,
+  updatable: boolean,
+  text: UpdateText,
+  label: (version: string | null, other: string | null) => string,
+): string {
   const { runtime, availableVersion } = update;
-  if (updatable || runtime.phase === "downloading") return versionTransition(runtime.version, availableVersion, text);
+  // The no-break space keeps the arrow with the version before it, so a line too long for the
+  // notification wraps before the version on offer.
+  if (updatable || runtime.phase === "downloading")
+    return `${label(runtime.version, availableVersion)}\u00a0→ ${label(availableVersion, runtime.version)}`;
   if (runtime.phase === "finishing") return text.t("update.provider.settingUp");
   if (runtime.phase === "download-error")
     return text.errorMessage(runtime.message, text.t("update.provider.failedRetry"));
-  return formatVersion(runtime.version ?? availableVersion, text);
+  return label(runtime.version ?? availableVersion, null);
 }
 
 function formatVersion(version: string | null, text: Pick<TextValue, "t">): string {

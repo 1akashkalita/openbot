@@ -44,14 +44,15 @@
 }
 
 /* A block, so the ellipsis applies in a state with no bar too, where the description is not a flex
-   column. */
+   column. Two versions too long for one line wrap after the arrow, the one place the presenter
+   leaves a normal space, so the version on offer is never the part cut off. */
 .provider-update-toast-line {
   display: block;
   min-width: 0;
   overflow: hidden;
   font-variant-numeric: tabular-nums;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
 }
 
 /* A failure is a sentence, not a version. It wraps, also inside a long path or address, and stops

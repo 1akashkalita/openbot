@@ -113,6 +113,7 @@ function ProviderUpdateDetail(props: {
         ref={(element) => (line = element)}
         id={lineId}
         class="provider-update-toast-line"
+        title={props.presentation.detailTitle}
         data-failed={props.presentation.failed ? "true" : undefined}
         data-expanded={props.expanded ? "true" : undefined}
       >
@@ -171,6 +172,7 @@ function samePresentation(a: ProviderUpdatePresentation, b: ProviderUpdatePresen
     a.actionLabel === b.actionLabel &&
     a.title === b.title &&
     a.detail === b.detail &&
+    a.detailTitle === b.detailTitle &&
     a.progress === b.progress
   );
 }

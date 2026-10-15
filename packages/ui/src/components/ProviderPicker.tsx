@@ -29,7 +29,11 @@ import {
 } from "@openbot/ui";
 import type { JSX } from "@solidjs/web";
 import { createEffect, createSignal, createStore, createUniqueId, For, Show } from "solid-js";
-import { providerUpdateAvailable, providerVersionLabel } from "../features/provider-updates/provider-update";
+import {
+  providerUpdateAvailable,
+  providerVersionLabel,
+  providerVersionTitle,
+} from "../features/provider-updates/provider-update";
 import { useText } from "../text";
 import { createCodeSignInFallback } from "./createCodeSignInFallback";
 import { MoreProvidersDialog } from "./MoreProvidersDialog";
@@ -453,6 +457,10 @@ export function ProviderPicker(props: ProviderPickerProps) {
                 const runtime = runtimeStatus();
                 return runtime ? providerVersionLabel(runtime, { t }) : null;
               };
+              const versionTitle = () => {
+                const runtime = runtimeStatus();
+                return runtime ? providerVersionTitle(runtime, { t }) : undefined;
+              };
               const visualState = () => providerVisualState(state(), connecting(), runtimeStatus(), updatable());
               /**
                * A downloaded row that runs free models needs no sign-in, so its Connect is an option
@@ -676,7 +684,11 @@ export function ProviderPicker(props: ProviderPickerProps) {
                         }
                       >
                         <Show when={props.versionInDetail ? null : version()}>
-                          {(installed) => <small class="provider-picker-version">{installed()}</small>}
+                          {(installed) => (
+                            <small class="provider-picker-version" title={versionTitle()}>
+                              {installed()}
+                            </small>
+                          )}
                         </Show>
                         {/* Free-tier badge only beside runtime badge. */}
                         <Show
