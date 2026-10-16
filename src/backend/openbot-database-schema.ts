@@ -472,6 +472,14 @@ const V42_ROUTINE_FLOW_SWEEP_INDEX_SQL = `
   CREATE INDEX IF NOT EXISTS routine_flow_steps_updated ON routine_flow_steps(updated_at);
 `;
 
+// Migration 43 indexes thread events by type. Each stream flush looks up the earlier streamed-message
+// events of its thread by type, which without it reads every earlier event of the thread (#2278). Only
+// that lookup reads it, so it is partial: other aggregates do not pay its write cost. Frozen with the migration.
+const V43_THREAD_EVENT_TYPE_INDEX_SQL = `
+  CREATE INDEX IF NOT EXISTS orchestration_events_thread_type
+    ON orchestration_events(aggregate_id, event_type, sequence) WHERE aggregate_type = 'thread';
+`;
+
 const BASELINE_AGENT_ROUTINES_END_SQL = `    last_event_sequence INTEGER NOT NULL
   );
   CREATE INDEX IF NOT EXISTS agent_routines_agent`;
@@ -584,7 +592,8 @@ const LATEST_SCHEMA_SQL =
   AGENT_TASK_SCHEMA_SQL +
   V40_THREAD_MESSAGE_ORDER_INDEX_SQL +
   V41_ATTACHMENT_OWNER_INDEX_SQL +
-  V42_ROUTINE_FLOW_SWEEP_INDEX_SQL;
+  V42_ROUTINE_FLOW_SWEEP_INDEX_SQL +
+  V43_THREAD_EVENT_TYPE_INDEX_SQL;
 
 /** The end of the thread message table with the migration 40 columns before its PRIMARY KEY constraint. */
 function withThreadMessageOrderColumns(tableEnd: string): string {
@@ -823,6 +832,11 @@ const MIGRATIONS: readonly OpenBotMigration[] = [
     version: 42,
     // Only creates indexes, so no foreign-key pause and no vacuum.
     up: (db) => db.exec(V42_ROUTINE_FLOW_SWEEP_INDEX_SQL),
+  },
+  {
+    version: 43,
+    // Only creates an index, so no foreign-key pause and no vacuum.
+    up: (db) => db.exec(V43_THREAD_EVENT_TYPE_INDEX_SQL),
   },
 ];
 
