@@ -40,7 +40,7 @@ interface NetworkEdge {
   length: number;
 }
 
-interface NetworkMessage {
+export interface NetworkMessage {
   node: number;
   text: string;
   at: number;
@@ -206,9 +206,9 @@ function hash(index: number): number {
   return (value >>> 0) / 4294967296;
 }
 
-const clamp01 = (value: number) => Math.min(1, Math.max(0, value));
+export const clamp01 = (value: number) => Math.min(1, Math.max(0, value));
 const easeOutCubic = (value: number) => 1 - (1 - value) ** 3;
-const easeInOutCubic = (value: number) => (value < 0.5 ? 4 * value ** 3 : 1 - (-2 * value + 2) ** 3 / 2);
+export const easeInOutCubic = (value: number) => (value < 0.5 ? 4 * value ** 3 : 1 - (-2 * value + 2) ** 3 / 2);
 const easeOutBack = (value: number) => 1 + 2.2 * (value - 1) ** 3 + 1.2 * (value - 1) ** 2;
 
 function nodeReach(node: NetworkNode): number {
@@ -516,6 +516,19 @@ export function agentNetworkNodeAt(network: AgentNetwork, view: NetworkView, t: 
   return -1;
 }
 
+/** The frame point and the radius in pixels of node `index` at second `t`, or undefined. */
+export function agentNetworkNodePoint(
+  network: AgentNetwork,
+  view: NetworkView,
+  t: number,
+  index: number,
+): { x: number; y: number; radius: number } | undefined {
+  const node = network.nodes[index];
+  if (!node) return undefined;
+  const { cam, toX, toY } = projector(view, network, t, NO_PAN);
+  return { x: toX(node.x), y: toY(node.y), radius: node.radius * cam.scale };
+}
+
 /** True when the frame point (`x`, `y`) is on the hub at second `t`. */
 export function agentNetworkHubAt(network: AgentNetwork, view: NetworkView, t: number, x: number, y: number): boolean {
   const hub = network.nodes.find((node) => node.avatar === HUB);
@@ -533,6 +546,10 @@ export function agentNetworkHubAt(network: AgentNetwork, view: NetworkView, t: n
  */
 export const HUB_SIGNAL_STYLES = ["ripple", "broadcast", "echo"] as const;
 export type HubSignalStyle = (typeof HUB_SIGNAL_STYLES)[number];
+
+/** One of the signal styles, at random. */
+export const randomHubSignalStyle = (): HubSignalStyle =>
+  HUB_SIGNAL_STYLES[Math.floor(Math.random() * HUB_SIGNAL_STYLES.length)] ?? "ripple";
 
 /** A signal that a click on the hub starts at second `at`. */
 export interface HubSignal {
@@ -974,7 +991,7 @@ function drawNetwork(
   const lineHeight = 20;
   for (const [order, message] of network.messages.entries()) {
     const following = network.messages[order + 1];
-    const until = view.narrow && following ? following.at : message.until;
+    const until = view.narrow && following ? Math.min(message.until, following.at) : message.until;
     const appear = clamp01((t - message.at) / 0.3);
     const leave = clamp01((t - until) / 0.25);
     const alpha = easeOutCubic(appear) * (1 - leave);
