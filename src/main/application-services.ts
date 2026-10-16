@@ -868,7 +868,7 @@ export async function createApplicationServices({
       if (!remoteServers.list().some((server) => server.id === serverId))
         void Effect.runPromise(remoteServers.invalidateDirectory());
     },
-    (serverId) => remoteServers.hostedServerStarting(serverId),
+    (serverId, server) => remoteServers.hostedServerStarting(serverId, server),
   );
   const sidebarLayout = new SidebarLayoutStore(join(app.getPath("userData"), SIDEBAR_LAYOUT_FILE));
   await runCauseEffect(sidebarLayout.initialize());
@@ -2101,6 +2101,7 @@ export async function createApplicationServices({
       hostedServers: {
         unavailable: (serverId, wake) => hostedServers.unavailableHost(serverId, wake),
         wake: (serverId) => hostedServers.wake(serverId),
+        status: (serverId) => hostedServers.status(serverId),
       },
       webrtcTransport: new TeamWebRtcClientTransport({
         bridge: teamWebRtcBridge,
