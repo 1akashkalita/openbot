@@ -7,6 +7,7 @@ import {
   type AgentEvent,
   type AgentSummary,
   AnalyticsInputError,
+  canAdministerServer,
   type DirectConversationPage,
   type DirectConversationPageAnchor,
   type DirectConversationSnapshot,
@@ -1206,7 +1207,7 @@ export class TeamApiServer {
     const { browser, store } = this.#options;
     if (!event.tabs.some((tab) => browser.isPrivate(tab.id))) return event;
     const role = store.authenticate(connection.token)?.role;
-    if (role && role !== "member") return event;
+    if (canAdministerServer(role)) return event;
     const tabs = event.tabs.filter((tab) => !browser.isPrivate(tab.id));
     return { ...event, tabs, activeTabId: tabs.some((tab) => tab.id === event.activeTabId) ? event.activeTabId : null };
   }

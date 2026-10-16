@@ -199,6 +199,12 @@ export async function routeTeam(
   if (method === "DELETE" && sessionMatch) {
     requireAdmin(member);
     const revokedSessionId = pathIdentifier(sessionMatch[1], "sessionId");
+    // Admins manage members, not the owner: only the owner ends the owner's sessions.
+    const target = store.listSessions().find((session) => session.id === revokedSessionId);
+    const targetMember = target && store.listMembers().find((candidate) => candidate.id === target.memberId);
+    if (member.role !== "owner" && targetMember?.role === "owner") {
+      throw new HttpError(400, sourceText("error.team.ownerCannotChange"));
+    }
     await runCauseEffect(store.revokeSession(revokedSessionId));
     await (onSessionRevoked ? runCauseEffect(onSessionRevoked(revokedSessionId)) : undefined);
     await (remoteScreen ? runCauseEffect(remoteScreen.revokeTeamSession(revokedSessionId)) : undefined);
