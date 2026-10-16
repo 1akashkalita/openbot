@@ -6,6 +6,7 @@ import type { ConversationQueries } from "./conversation-queries";
 import { type DatabaseCore, deleteThreadAttachments } from "./database-core";
 import { databaseRows, decodeThreadAgentRow, objectValue, requiredEventRow } from "./database-rows";
 import { currentConversationMessage } from "./legacy-conversation-message";
+import { claimProviderSession } from "./outside-usage";
 import type { ProviderSession } from "./provider-sessions";
 import { refreshThreadOrder } from "./thread-message-order";
 import type { StoredThreadSummary } from "./thread-summaries";
@@ -192,6 +193,7 @@ export class ThreadReplay {
           session.resumeCursor,
           session.sequence,
         );
+        claimProviderSession(db, session.provider, session.externalSessionId, session.createdAt);
       }
       const messageInsert = db.prepare(`
         INSERT INTO projection_thread_messages (

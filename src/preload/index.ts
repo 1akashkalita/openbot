@@ -77,6 +77,7 @@ import {
   decodeMemory,
   decodeMemorySelection,
   decodeOptionalMemorySelection,
+  decodeOutsideUsageFromMain,
   decodeProviderApiKeyState,
   decodeProviderCodeLoginStart,
   decodeRoutine,
@@ -415,6 +416,7 @@ window.addEventListener("change", (event) => {
 const agentGroup = bridgeGroup(IPC_ENDPOINTS.agent, {
   getStatus: decodeAgentStatusFromMain,
   getHostAnalytics: decodeHostAnalyticsFromMain,
+  getOutsideUsage: decodeOutsideUsageFromMain,
   getAnalytics: decodeAgentAnalyticsFromMain,
   getUsage: decodeAccountUsageFromMain,
   listModels: decodeAgentModels,

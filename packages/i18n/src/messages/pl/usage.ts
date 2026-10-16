@@ -62,6 +62,24 @@ export const messages = {
   "usage.about.title": "O tych szacunkach",
   "usage.about.body":
     "Koszt tokenów w USD odpowiadający cenom API. To szacunek, a nie opłata za subskrypcję. Osobne opłaty za narzędzia i multimedia nie są liczone. Nieznane ceny i niepełne użycie pozostają niedostępne. Udziały uwzględniają tylko znane wartości; częściowe dane mogą zaniżać sumy.",
+  "usage.outside.title": "Poza OpenBot",
+  "usage.outside.label": "Użycie poza OpenBot",
+  "usage.outside.description":
+    "Użycie z sesji wiersza poleceń dostawców na tym hoście, których OpenBot nie uruchomił. Sumy powyżej go nie obejmują.",
+  "usage.outside.empty": "Brak użycia poza OpenBot w tym okresie.",
+  "usage.outside.requests": "Żądania",
+  "usage.outside.sessions": "Sesje",
+  "usage.outside.partial":
+    "Częściowe dane · {unpriced} żądań nie ma szacunku kosztu; {incomplete} żądań ma niepełne dane o tokenach.",
+  "usage.outside.byModel": "Użycie poza OpenBot według modelu",
+  "usage.outside.source": {
+    one: "{provider}: {files} plik dziennika",
+    few: "{provider}: {files} pliki dziennika",
+    many: "{provider}: {files} plików dziennika",
+    other: "{provider}: {files} plików dziennika",
+  },
+  "usage.outside.scannedAt": "Dzienniki odczytane {time}",
+  "usage.outside.notScanned": "Dzienniki jeszcze nieodczytane",
   "usage.panel.label": "Użycie agentów",
   "usage.panel.title": "Użycie",
   "usage.panel.allAgents": "Wszyscy agenci",

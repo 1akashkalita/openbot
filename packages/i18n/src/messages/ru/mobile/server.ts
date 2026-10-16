@@ -274,4 +274,20 @@ export const messages = {
   "mobile.server.usage.agent": "Агент",
   "mobile.server.usage.unsupported":
     "Этот хост не поддерживает аналитику использования. Обновите хост, чтобы открыть этот экран.",
+  "mobile.server.usage.outside.title": "Вне OpenBot",
+  "mobile.server.usage.outside.description":
+    "Использование из сеансов командной строки провайдеров на этом хосте, которые OpenBot не запускал. Итоги выше его не включают.",
+  "mobile.server.usage.outside.empty": "Нет использования вне OpenBot за этот период.",
+  "mobile.server.usage.outside.requests": "Запросы",
+  "mobile.server.usage.outside.sessions": "Сеансы",
+  "mobile.server.usage.outside.partial":
+    "Неполные данные · у {unpriced} запросов нет оценки стоимости; у {incomplete} запросов неполные данные о токенах.",
+  "mobile.server.usage.outside.source": {
+    one: "{provider}: {files} файл журнала",
+    few: "{provider}: {files} файла журнала",
+    many: "{provider}: {files} файлов журнала",
+    other: "{provider}: {files} файла журнала",
+  },
+  "mobile.server.usage.outside.scannedAt": "Журналы прочитаны {time}",
+  "mobile.server.usage.outside.notScanned": "Журналы ещё не прочитаны",
 } as const satisfies PartialTranslation<typeof source>;

@@ -4,6 +4,7 @@ import {
   decodeHostAnalytics,
   decodeHostProviderAccounts,
   decodeInstalledSkills,
+  decodeOutsideUsageReport,
   type HostProviderAccounts,
   isAgentHostSettings,
   isAgentSessionSettings,
@@ -203,6 +204,10 @@ export function decodeAgentAnalyticsFromHost(value: unknown) {
 
 export function decodeHostAnalyticsFromHost(value: unknown) {
   return decodeHostAnalytics(value);
+}
+
+export function decodeOutsideUsageFromHost(value: unknown) {
+  return decodeOutsideUsageReport(value);
 }
 
 export function decodeAgentSessionSettingsFromHost(value: unknown): AgentSessionSettings {

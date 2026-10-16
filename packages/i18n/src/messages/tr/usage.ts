@@ -57,6 +57,19 @@ export const messages = {
   "usage.about.title": "Bu tahminler hakkında",
   "usage.about.body":
     "USD cinsinden API eşdeğeri token maliyeti. Bu bir tahmindir, abonelik ücreti değildir. Ayrı araç ve medya ücretleri hesaplanmaz. Bilinmeyen fiyatlar ve eksik kullanımlar kullanılamaz durumda kalır. Paylar yalnızca bilinen miktarları kullanır; kısmi veriler toplamları olduğundan düşük gösterebilir.",
+  "usage.outside.title": "OpenBot dışında",
+  "usage.outside.label": "OpenBot dışındaki kullanım",
+  "usage.outside.description":
+    "Bu ana bilgisayarda OpenBot'un başlatmadığı sağlayıcı komut satırı oturumlarının kullanımı. Yukarıdaki toplamlar bunu içermez.",
+  "usage.outside.empty": "Bu aralıkta OpenBot dışında kullanım yok.",
+  "usage.outside.requests": "İstekler",
+  "usage.outside.sessions": "Oturumlar",
+  "usage.outside.partial":
+    "Kısmi veri · {unpriced} isteğin maliyet tahmini yok; {incomplete} isteğin token verisi eksik.",
+  "usage.outside.byModel": "Modele göre OpenBot dışındaki kullanım",
+  "usage.outside.source": { one: "{provider}: {files} günlük dosyası", other: "{provider}: {files} günlük dosyası" },
+  "usage.outside.scannedAt": "Günlükler okundu {time}",
+  "usage.outside.notScanned": "Günlükler henüz okunmadı",
   "usage.panel.label": "Ajan kullanımı",
   "usage.panel.title": "Kullanım",
   "usage.panel.allAgents": "Tüm ajanlar",

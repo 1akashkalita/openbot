@@ -20,6 +20,7 @@ import {
   type DuplicateAgentResult,
   decodeOptionalAgentAnalytics,
   decodeOptionalHostAnalytics,
+  decodeOptionalOutsideUsageReport,
   type HostProviderAccounts,
   isAccountUsage,
   isAgentHostSettings,
@@ -186,6 +187,10 @@ export function decodeAgentAnalyticsFromMain(value: unknown) {
 
 export function decodeHostAnalyticsFromMain(value: unknown) {
   return decodeOptionalHostAnalytics(value);
+}
+
+export function decodeOutsideUsageFromMain(value: unknown) {
+  return decodeOptionalOutsideUsageReport(value);
 }
 
 export function decodeMemorySelection(value: unknown): AgentMemorySelectionState {

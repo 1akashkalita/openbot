@@ -57,6 +57,19 @@ export const messages = {
   "usage.about.title": "Informazioni su queste stime",
   "usage.about.body":
     "Costo dei token equivalente all'API, in USD. È una stima, non un addebito dell'abbonamento. Le tariffe separate per tool e contenuti multimediali non sono calcolate. I prezzi sconosciuti e l'utilizzo incompleto restano non disponibili. Le quote usano solo gli importi noti; i dati parziali possono far sottostimare i totali.",
+  "usage.outside.title": "Fuori da OpenBot",
+  "usage.outside.label": "Utilizzo fuori da OpenBot",
+  "usage.outside.description":
+    "Utilizzo delle sessioni da riga di comando dei provider su questo host che OpenBot non ha avviato. I totali sopra non lo includono.",
+  "usage.outside.empty": "Nessun utilizzo fuori da OpenBot in questo periodo.",
+  "usage.outside.requests": "Richieste",
+  "usage.outside.sessions": "Sessioni",
+  "usage.outside.partial":
+    "Dati parziali · {unpriced} richieste non hanno una stima dei costi; {incomplete} richieste hanno dati sui token incompleti.",
+  "usage.outside.byModel": "Utilizzo fuori da OpenBot per modello",
+  "usage.outside.source": { one: "{provider}: {files} file di log", other: "{provider}: {files} file di log" },
+  "usage.outside.scannedAt": "Log letti {time}",
+  "usage.outside.notScanned": "Log non ancora letti",
   "usage.panel.label": "Utilizzo dell'agente",
   "usage.panel.title": "Utilizzo",
   "usage.panel.allAgents": "Tutti gli agenti",

@@ -123,7 +123,7 @@ import {
   STORY_UPDATE_STATUS,
   STORY_USAGE,
 } from "./fixtures";
-import { mockAgentAnalytics, mockHostAnalytics } from "./mock-agent-analytics";
+import { mockAgentAnalytics, mockHostAnalytics, mockOutsideUsage } from "./mock-agent-analytics";
 import { createMockAuth, type MockAuthOptions } from "./mock-auth";
 import { createMockBilling, previewBillingServers } from "./mock-billing";
 import { createMockBitwardenConnector } from "./mock-bitwarden-connector";
@@ -1369,6 +1369,7 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
     agent: {
       getStatus: async () => clone(agentStatus),
       getHostAnalytics: async (input) => mockHostAnalytics(input, agents),
+      getOutsideUsage: async (input) => mockOutsideUsage(input),
       getAnalytics: async (input) => {
         const agent = agents.find((entry) => entry.id === input.agentId);
         if (!agent) throw new Error("Agent not found.");

@@ -91,8 +91,17 @@ A script can send the data elsewhere under its own configuration.
 
 The Usage view stores numeric token counts, activity counts, provider and model identifiers,
 internal session and turn identifiers, timestamps, and cost estimates in the host's local SQLite
-database. Collection starts when this feature is installed. It does not import old provider
-transcripts or store message contents, credentials, or raw provider responses in analytics records.
+database. Collection starts when this feature is installed. It does not store message contents,
+credentials, or raw provider responses in analytics records.
+
+The host also reads the logs that the Claude and Codex command-line tools write on that computer
+(`~/.claude/projects`, `~/.codex/sessions` and `~/.codex/archived_sessions`, or the folders that
+`CLAUDE_CONFIG_DIR` and `CODEX_HOME` name). From each usage line it stores only token counts, the
+model name, the time, a cost estimate and hashes of the request, session and file. It does not
+store prompts, output, file paths, project names or working folders. This includes usage from
+before the update, as far back as the logs go. Sessions that OpenBot ran are not counted again.
+The records stay in the local database when the tools delete their logs. Reading the logs sends
+nothing over the network.
 
 Authenticated members of a host team can read aggregate usage for that host's agents through the
 Team API, including from mobile. Desktop can also show the combined totals for all agents on one
@@ -100,7 +109,9 @@ host, with an optional agent filter. A host-wide response carries the combined t
 day, one row per model, one aggregate row per agent, identified by the agent's internal id, and one
 row per day and provider with that provider's token count and cost estimate for the day. Agent
 names are not part of the analytics payload; the client shows them from the agent list it already
-reads. These records are separate from product analytics and are not sent
+reads. Members can also read the totals of the usage outside OpenBot: tokens and costs per day,
+model and provider, and the number of log files per provider. These records are separate from
+product analytics and are not sent
 to OpenPanel or stored by the account service or Signal service. Conversation clearing retains usage;
 agent deletion removes it. A duplicate agent starts with no usage history.
 

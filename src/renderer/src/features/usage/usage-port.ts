@@ -5,7 +5,7 @@ import type { OpenBotDesktopApi } from "@openbot/contracts/ipc";
  * make the report stale.
  */
 export interface UsagePort {
-  agent: Pick<OpenBotDesktopApi["agent"], "getHostAnalytics" | "listAgents" | "onScopedEvent">;
+  agent: Pick<OpenBotDesktopApi["agent"], "getHostAnalytics" | "getOutsideUsage" | "listAgents" | "onScopedEvent">;
   servers: Pick<OpenBotDesktopApi["servers"], "onEvent">;
 }
 

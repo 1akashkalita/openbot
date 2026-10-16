@@ -273,4 +273,20 @@ export const messages = {
   "mobile.server.usage.agent": "Agent",
   "mobile.server.usage.unsupported":
     "Ten host nie obsługuje analityki użycia. Zaktualizuj hosta, aby korzystać z tego widoku.",
+  "mobile.server.usage.outside.title": "Poza OpenBot",
+  "mobile.server.usage.outside.description":
+    "Użycie z sesji wiersza poleceń dostawców na tym hoście, których OpenBot nie uruchomił. Sumy powyżej go nie obejmują.",
+  "mobile.server.usage.outside.empty": "Brak użycia poza OpenBot w tym okresie.",
+  "mobile.server.usage.outside.requests": "Żądania",
+  "mobile.server.usage.outside.sessions": "Sesje",
+  "mobile.server.usage.outside.partial":
+    "Częściowe dane · {unpriced} żądań nie ma szacunku kosztu; {incomplete} żądań ma niepełne dane o tokenach.",
+  "mobile.server.usage.outside.source": {
+    one: "{provider}: {files} plik dziennika",
+    few: "{provider}: {files} pliki dziennika",
+    many: "{provider}: {files} plików dziennika",
+    other: "{provider}: {files} plików dziennika",
+  },
+  "mobile.server.usage.outside.scannedAt": "Dzienniki odczytane {time}",
+  "mobile.server.usage.outside.notScanned": "Dzienniki jeszcze nieodczytane",
 } as const satisfies PartialTranslation<typeof source>;

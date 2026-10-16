@@ -1,6 +1,7 @@
 export { readAgentAnalytics } from "./agent-analytics";
 export { runTeamEffect } from "./effect-boundary";
 export { readHostAnalytics } from "./host-analytics";
+export { readOutsideUsage } from "./outside-usage";
 export { createRemoteAccountRefresh } from "./remote-account-refresh";
 export type TeamClientFetch = typeof globalThis.fetch;
 

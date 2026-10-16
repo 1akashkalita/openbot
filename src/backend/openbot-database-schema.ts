@@ -480,6 +480,45 @@ const V43_THREAD_EVENT_TYPE_INDEX_SQL = `
     ON orchestration_events(aggregate_id, event_type, sequence) WHERE aggregate_type = 'thread';
 `;
 
+// Migration 44 stores the usage that the Claude and Codex CLIs log for sessions OpenBot did not run. The CLIs
+// delete old logs, so the records stay here after their file goes. Keys and session keys are SHA-256 values: no
+// path, prompt or working folder is stored. `openbot_provider_sessions` remembers each session OpenBot ran, with
+// no foreign key, so a deleted or replayed thread still keeps its sessions out of the outside usage. Frozen with
+// the migration.
+const V44_OUTSIDE_USAGE_SCHEMA_SQL = `
+  CREATE TABLE IF NOT EXISTS outside_usage_records (
+    record_key TEXT PRIMARY KEY,
+    provider TEXT NOT NULL CHECK(provider IN ('claude', 'codex')),
+    account_ref TEXT NOT NULL,
+    session_key TEXT NOT NULL,
+    model TEXT NOT NULL,
+    occurred_at TEXT NOT NULL,
+    tokens_json TEXT NOT NULL CHECK(json_valid(tokens_json)),
+    estimated_cost_usd REAL,
+    rate_basis TEXT,
+    recorded_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS outside_usage_records_occurred ON outside_usage_records(occurred_at);
+  CREATE INDEX IF NOT EXISTS outside_usage_records_session ON outside_usage_records(session_key);
+  CREATE TABLE IF NOT EXISTS outside_usage_files (
+    provider TEXT NOT NULL CHECK(provider IN ('claude', 'codex')),
+    account_ref TEXT NOT NULL,
+    file_key TEXT NOT NULL,
+    size INTEGER NOT NULL,
+    mtime_ms INTEGER NOT NULL,
+    read_offset INTEGER NOT NULL,
+    state_json TEXT NOT NULL CHECK(json_valid(state_json)),
+    scanned_at TEXT NOT NULL,
+    PRIMARY KEY (provider, account_ref, file_key)
+  );
+  CREATE TABLE IF NOT EXISTS openbot_provider_sessions (
+    provider TEXT NOT NULL,
+    external_session_id TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (provider, external_session_id)
+  );
+`;
+
 const BASELINE_AGENT_ROUTINES_END_SQL = `    last_event_sequence INTEGER NOT NULL
   );
   CREATE INDEX IF NOT EXISTS agent_routines_agent`;
@@ -593,7 +632,8 @@ const LATEST_SCHEMA_SQL =
   V40_THREAD_MESSAGE_ORDER_INDEX_SQL +
   V41_ATTACHMENT_OWNER_INDEX_SQL +
   V42_ROUTINE_FLOW_SWEEP_INDEX_SQL +
-  V43_THREAD_EVENT_TYPE_INDEX_SQL;
+  V43_THREAD_EVENT_TYPE_INDEX_SQL +
+  V44_OUTSIDE_USAGE_SCHEMA_SQL;
 
 /** The end of the thread message table with the migration 40 columns before its PRIMARY KEY constraint. */
 function withThreadMessageOrderColumns(tableEnd: string): string {
@@ -838,7 +878,21 @@ const MIGRATIONS: readonly OpenBotMigration[] = [
     // Only creates an index, so no foreign-key pause and no vacuum.
     up: (db) => db.exec(V43_THREAD_EVENT_TYPE_INDEX_SQL),
   },
+  {
+    version: 44,
+    // Only creates tables and copies the provider sessions OpenBot already ran, so no foreign-key pause and no
+    // vacuum.
+    up: addOutsideUsage,
+  },
 ];
+
+function addOutsideUsage(db: DatabaseSync, appliedAt: string): void {
+  db.exec(V44_OUTSIDE_USAGE_SCHEMA_SQL);
+  db.prepare(
+    `INSERT OR IGNORE INTO openbot_provider_sessions (provider, external_session_id, created_at)
+     SELECT provider, external_session_id, ? FROM projection_provider_sessions`,
+  ).run(appliedAt);
+}
 
 const LATEST_SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1]?.version ?? BASELINE_SCHEMA_VERSION;
 

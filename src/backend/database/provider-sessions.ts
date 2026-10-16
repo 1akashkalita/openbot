@@ -3,6 +3,7 @@ import { type AgentProviderId, isAgentProvider } from "@openbot/contracts/ipc";
 import type { DynamicRecord } from "@openbot/contracts/runtime-values";
 import type { DatabaseCore } from "./database-core";
 import { databaseRow, databaseRows, optionalStringColumn, requiredStringColumn } from "./database-rows";
+import { claimProviderSession } from "./outside-usage";
 
 export interface ProviderSession {
   id: string;
@@ -171,6 +172,7 @@ export class ProviderSessions {
           session.resumeCursor,
           sequences[0] ?? 0,
         );
+        claimProviderSession(db, session.provider, session.externalSessionId, now);
         return session;
       },
     );

@@ -1,4 +1,11 @@
-import type { AnalyticsProviderDay, AnalyticsTotals, HostAnalytics, HostAnalyticsInput } from "@openbot/contracts/ipc";
+import type {
+  AnalyticsProviderDay,
+  AnalyticsTotals,
+  HostAnalytics,
+  HostAnalyticsInput,
+  OutsideUsageInput,
+  OutsideUsageReport,
+} from "@openbot/contracts/ipc";
 import {
   type AgentAnalytics,
   type AgentAnalyticsInput,
@@ -137,5 +144,32 @@ export function mockHostAnalytics(
     providerDaily: [...providerDays.values()].sort(
       (a, b) => a.date.localeCompare(b.date) || a.provider.localeCompare(b.provider),
     ),
+  };
+}
+
+// The CLI logs record requests, not messages, so the outside report has no message counts.
+export function mockOutsideUsage(input: OutsideUsageInput): OutsideUsageReport {
+  const host = mockHostAnalytics(input, [
+    { id: "outside-claude", provider: "claude", model: "claude-sonnet-4-5" },
+    { id: "outside-codex", provider: "codex", model: "gpt-5.5" },
+  ]);
+  const requests = (row: AnalyticsTotals): AnalyticsTotals => ({ ...row, userMessages: 0, assistantMessages: 0 });
+  return {
+    ...input,
+    scannedAt: new Date().toISOString(),
+    updatedAt: host.updatedAt,
+    totals: requests(host.totals),
+    daily: host.daily.map((day) => ({ ...requests(day), date: day.date })),
+    models: host.models.map((model) => ({
+      ...requests(model),
+      provider: model.provider,
+      model: model.model,
+      share: model.share,
+    })),
+    providerDaily: host.providerDaily,
+    sources: [
+      { provider: "claude", files: 42 },
+      { provider: "codex", files: 17 },
+    ],
   };
 }

@@ -9,6 +9,7 @@ import { UsageLoading } from "@/features/agents/components/usage-motion";
 import { lastUsageDays, UsageRangePicker } from "@/features/agents/components/usage-range-picker";
 import { mobileAnalytics } from "@/features/analytics/mobile-analytics";
 import { useQueryScope } from "@/features/auth/context/mobile-session-context";
+import { OutsideUsageSection } from "@/features/servers/components/outside-usage-report";
 import {
   SettingsContent,
   SettingsNote,
@@ -27,7 +28,7 @@ export function ServerUsageScreen() {
   const { theme } = useUniwind();
   const { serverId } = useLocalSearchParams<{ serverId: string }>();
   const queryScope = useQueryScope();
-  const { servers, agents, loadHostAnalytics } = useMobileWorkspace();
+  const { servers, agents, loadHostAnalytics, loadOutsideUsage } = useMobileWorkspace();
   const server = servers.find((item) => item.id === serverId);
   const online = server?.state === "online";
   const serverAgents = agents.filter((agent) => agent.serverId === serverId);
@@ -46,6 +47,21 @@ export function ServerUsageScreen() {
     staleTime: 0,
     gcTime: 0,
   });
+  // A report of one agent has no outside usage, so only the report of all agents reads it.
+  const outside = useQuery({
+    queryKey: queryKeys.serverOutsideUsage(queryScope, serverId, range),
+    queryFn: () => loadOutsideUsage(range, serverId),
+    enabled: online && !agentId,
+    retry: false,
+    staleTime: 0,
+    gcTime: 0,
+  });
+  const outsideReport =
+    !agentId &&
+    outside.data &&
+    (outside.data.totals.turns > 0 || outside.data.sources.some((source) => source.files > 0))
+      ? outside.data
+      : null;
   // As on desktop: an agent the phone does not list, such as one removed since, keeps its ID as its name.
   const agentName = (id: string) => serverAgents.find((agent) => agent.id === id)?.name ?? id;
   function selectAgent(id: string | undefined) {
@@ -96,14 +112,17 @@ export function ServerUsageScreen() {
           </View>
         ) : usage.data ? (
           <UsageLoading loading={usage.isPlaceholderData}>
-            <AgentUsageReport
-              result={usage.data}
-              // A filtered report splits into one row that restates the totals.
-              agents={
-                agentId ? undefined : usage.data.agents.map((agent) => ({ ...agent, name: agentName(agent.agentId) }))
-              }
-              onSelectAgent={selectAgent}
-            />
+            <View className="gap-5">
+              <AgentUsageReport
+                result={usage.data}
+                // A filtered report splits into one row that restates the totals.
+                agents={
+                  agentId ? undefined : usage.data.agents.map((agent) => ({ ...agent, name: agentName(agent.agentId) }))
+                }
+                onSelectAgent={selectAgent}
+              />
+              {outsideReport ? <OutsideUsageSection report={outsideReport} /> : null}
+            </View>
           </UsageLoading>
         ) : (
           <Typography.Paragraph>{t("mobile.server.usage.unsupported")}</Typography.Paragraph>

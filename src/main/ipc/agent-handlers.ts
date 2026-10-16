@@ -12,6 +12,7 @@ import {
   analyticsQuery,
   assertAnalyticsScope,
   assertHostAnalyticsScope,
+  assertOutsideUsageScope,
   BROWSER_SECRET_RESPONSE_PATH,
   CHANNEL_DELETE_CAPABILITY,
   DEFAULT_PROVIDER_ACCOUNT_ID,
@@ -29,6 +30,7 @@ import {
   parseChannelRead,
   parseGenerateAgentProfile,
   parseHostAnalyticsInput,
+  parseOutsideUsageInput,
   parseResetAgentSessionSetting,
   parseSaveAgentProfile,
   parseSetAgentHiddenInput,
@@ -38,6 +40,7 @@ import { isDynamicRecord } from "@openbot/contracts/runtime-values";
 import { TEAM_API_ROUTES } from "@openbot/contracts/team-api-routes";
 import { CHANNEL_ROUTES } from "@openbot/contracts/team-protocol/channels-v1";
 import { CONTEXT_RESET_CAPABILITY, CONTEXT_RESET_ROUTES } from "@openbot/contracts/team-protocol/context-reset-v1";
+import { OUTSIDE_USAGE_CAPABILITY, OUTSIDE_USAGE_ROUTES } from "@openbot/contracts/team-protocol/outside-usage-v1";
 import {
   PROVIDER_ACCOUNTS_CAPABILITY,
   PROVIDER_ACCOUNTS_ROUTES,
@@ -61,6 +64,7 @@ import {
   decodeHiddenAgentsFromHost,
   decodeHostAnalyticsFromHost,
   decodeInstalledSkillsFromHost,
+  decodeOutsideUsageFromHost,
   decodeQueuedMessageReceipt,
   decodeQueueSnapshot,
   decodeSidebarLayoutSnapshot,
@@ -162,6 +166,24 @@ export function agentIpcHandlers({
             ? runCauseEffect(
                 remoteServers.request(serverId, `${TEAM_API_ROUTES.analytics}?${hostAnalyticsQuery(input)}`, (value) =>
                   assertHostAnalyticsScope(decodeHostAnalyticsFromHost(value), input),
+                ),
+              )
+            : null,
+      }),
+      getOutsideUsage: scopedHandler(parseOutsideUsageInput, {
+        local: (input) => service.getOutsideUsage(input),
+        // A host without `outside-usage-v1` does not read its provider logs.
+        remote: (input, serverId) =>
+          remoteServers.supportsCapability(serverId, OUTSIDE_USAGE_CAPABILITY)
+            ? runCauseEffect(
+                remoteServers.request(
+                  serverId,
+                  OUTSIDE_USAGE_ROUTES.read,
+                  (value) => assertOutsideUsageScope(decodeOutsideUsageFromHost(value), input),
+                  {
+                    method: "POST",
+                    body: { startDate: input.startDate, endDate: input.endDate, timeZone: input.timeZone },
+                  },
                 ),
               )
             : null,

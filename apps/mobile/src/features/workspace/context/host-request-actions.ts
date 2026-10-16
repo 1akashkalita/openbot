@@ -49,7 +49,7 @@ import { SKILLS_ADMIN_CAPABILITY } from "@openbot/contracts/team-protocol/skills
 import { STORAGE_ROUTES } from "@openbot/contracts/team-protocol/storage-v1";
 import type { TeamProtocolV2Json } from "@openbot/contracts/team-protocol/v2";
 import type { MobileTextKey } from "@openbot/i18n/mobile";
-import { readHostAnalytics } from "@openbot/team-client";
+import { readHostAnalytics, readOutsideUsage } from "@openbot/team-client";
 import type { RemoteFileUpload } from "@openbot/team-client/remote-peer";
 import { buildRoutineCalendar, type RoutineCalendarSource } from "@openbot/team-client/routine-calendar";
 import {
@@ -139,6 +139,7 @@ type HostRequestActions = Pick<
   | "rotateEventRoutineSecret"
   | "listEventActivity"
   | "loadHostAnalytics"
+  | "loadOutsideUsage"
   | "searchMessages"
   | "searchFiles"
   | "loadAgentSkills"
@@ -393,6 +394,8 @@ export function createHostRequestActions({
       ),
     loadHostAnalytics: (input, serverId) =>
       runTeamRequest(readHostAnalytics(teamApi(serverId), capabilities.get(serverId) ?? [], input)),
+    loadOutsideUsage: (input, serverId) =>
+      runTeamRequest(readOutsideUsage(teamApi(serverId), capabilities.get(serverId) ?? [], input)),
     searchMessages: (query, serverId, cursor) =>
       request(
         "GET",

@@ -3,13 +3,15 @@ import { onCleanup } from "solid-js";
 import { fn } from "storybook/test";
 import type { Meta, StoryObj } from "storybook-solidjs-vite";
 import { AgentUsagePanel } from "../src/features/usage/AgentUsagePanel";
-import { mockHostAnalytics } from "../src/preview/mock-agent-analytics";
+import { mockHostAnalytics, mockOutsideUsage } from "../src/preview/mock-agent-analytics";
 import { createMockOpenBot } from "./mock-openbot";
 
 function UsageStory(props: {
   state: "ready" | "empty" | "partial" | "loading" | "error" | "unsupported" | "large" | "small" | "long";
   narrow?: boolean;
   agentId?: string;
+  /** "none" is a host with no CLI logs or one that predates the report. */
+  outside?: "logs" | "empty" | "none";
 }) {
   const previous = window.openbot;
   const mock = createMockOpenBot();
@@ -46,6 +48,13 @@ function UsageStory(props: {
       return { ...data, totals: emptyAnalyticsTotals(), models: [], daily: [], agents: [], providerDaily: [] };
     if (props.state === "partial")
       return { ...data, totals: { ...data.totals, missingUsageTurns: 3, unpricedRecords: 2 } };
+    return data;
+  };
+  mock.api.agent.getOutsideUsage = async (input) => {
+    if (props.outside === "none" || props.state === "unsupported") return null;
+    const data = mockOutsideUsage(input);
+    if (props.outside === "empty" || props.state === "empty")
+      return { ...data, totals: emptyAnalyticsTotals(), models: [], daily: [], providerDaily: [] };
     return data;
   };
   onCleanup(() => {
@@ -85,3 +94,6 @@ export const SmallCosts: Story = { args: { state: "small" } };
 export const LongModelNames: Story = { args: { state: "long", narrow: true } };
 
 export const SingleAgent: Story = { args: { agentId: "chief" } };
+
+export const OutsideUsageEmpty: Story = { args: { outside: "empty" } };
+export const NoOutsideUsage: Story = { args: { outside: "none" } };

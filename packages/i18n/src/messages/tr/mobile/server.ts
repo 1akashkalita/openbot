@@ -249,4 +249,18 @@ export const messages = {
   "mobile.server.usage.agent": "Ajan",
   "mobile.server.usage.unsupported":
     "Bu ana makine kullanım analizlerini desteklemiyor. Bu görünümü kullanmak için ana makineyi güncelleyin.",
+  "mobile.server.usage.outside.title": "OpenBot dışında",
+  "mobile.server.usage.outside.description":
+    "Bu ana bilgisayarda OpenBot'un başlatmadığı sağlayıcı komut satırı oturumlarının kullanımı. Yukarıdaki toplamlar bunu içermez.",
+  "mobile.server.usage.outside.empty": "Bu aralıkta OpenBot dışında kullanım yok.",
+  "mobile.server.usage.outside.requests": "İstekler",
+  "mobile.server.usage.outside.sessions": "Oturumlar",
+  "mobile.server.usage.outside.partial":
+    "Kısmi veri · {unpriced} isteğin maliyet tahmini yok; {incomplete} isteğin token verisi eksik.",
+  "mobile.server.usage.outside.source": {
+    one: "{provider}: {files} günlük dosyası",
+    other: "{provider}: {files} günlük dosyası",
+  },
+  "mobile.server.usage.outside.scannedAt": "Günlükler okundu {time}",
+  "mobile.server.usage.outside.notScanned": "Günlükler henüz okunmadı",
 } as const satisfies PartialTranslation<typeof source>;

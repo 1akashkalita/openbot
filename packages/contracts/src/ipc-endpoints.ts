@@ -303,6 +303,7 @@ import type {
   OnePasswordConnectorStatus,
   OnePasswordHostConnectInput,
 } from "./ipc-onepassword-connector";
+import type { OutsideUsageInput, OutsideUsageReport } from "./ipc-outside-usage";
 import type {
   DetectedModelServer,
   DiscoverModelsInput,
@@ -1016,6 +1017,10 @@ export const IPC_ENDPOINTS = {
     getStatus: scopedQuery<AgentStatus>()("agent:get-status"),
     getAnalytics: scopedRequest<AgentAnalyticsInput, AgentAnalytics | null, "required">()("agent:get-analytics"),
     getHostAnalytics: scopedRequest<HostAnalyticsInput, HostAnalytics | null, "required">()("host:get-analytics"),
+    // Usage that the provider CLIs on the host logged outside OpenBot. Null when a remote host does not have it.
+    getOutsideUsage: scopedRequest<OutsideUsageInput, OutsideUsageReport | null, "required">()(
+      "host:get-outside-usage",
+    ),
     getUsage: scopedRequest<string | undefined, AccountUsage>()("agent:get-usage"),
     listModels: scopedQuery<AgentModelOption[]>()("agent:list-models"),
     listAgents: scopedQuery<AgentSummary[]>()("agent:list"),

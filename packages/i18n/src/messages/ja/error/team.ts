@@ -65,6 +65,7 @@ export const messages = {
   "error.team.contextResetUnsupported": "この接続では新しいチャットを始められません。",
   "error.team.workspaceDirectoryUnsupported": "この接続ではフォルダーを表示できません。",
   "error.team.conversationFileSearchUnsupported": "この接続ではファイルを検索できません。",
+  "error.team.outsideUsageUnsupported": "この接続では OpenBot 以外の使用量を表示できません。",
   "error.team.routineFlowsUnsupported":
     "このサーバーはルーティンフローに対応していません。サーバーを実行しているコンピューターの OpenBot を更新してください。",
   "error.team.routineCanvasTooLarge":

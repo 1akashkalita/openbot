@@ -1,4 +1,4 @@
-import type { AnalyticsTotals, HostAnalytics } from "@openbot/contracts/ipc";
+import type { AnalyticsTotals, HostAnalytics, OutsideUsageReport } from "@openbot/contracts/ipc";
 import type { AppTextKey } from "@openbot/i18n";
 import { Button, SlidingTabs } from "@openbot/ui";
 import { createMemo, createStore, For, onSettled, Show } from "solid-js";
@@ -83,8 +83,124 @@ function BreakdownCells(props: { row: AnalyticsTotals; cost: boolean; share: (am
     </>
   );
 }
+// The host reads the CLI logs of its own provider sign-ins and keeps only these counts. The section is its own
+// report: none of it is added to the OpenBot totals above it, because the two can never be told apart again.
+function OutsideUsageSection(props: { report: OutsideUsageReport; cost: boolean }) {
+  const text = useText();
+  const { t, format } = text;
+  const totals = () => props.report.totals;
+  const models = createMemo(() =>
+    [...props.report.models].sort((a, b) =>
+      props.cost ? (b.estimatedCostUsd ?? -1) - (a.estimatedCostUsd ?? -1) : b.processedTokens - a.processedTokens,
+    ),
+  );
+  const share = (amount: number | null) => {
+    const total = props.cost ? totals().estimatedCostUsd : totals().processedTokens;
+    return amount === null || total === null
+      ? t("usage.unavailable")
+      : format.percent(total ? amount / total : 0, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  };
+  const sources = () =>
+    props.report.sources
+      .filter((source) => source.files > 0)
+      .map((source) =>
+        t("usage.outside.source", {
+          count: source.files,
+          provider: usageProviderName(source.provider),
+          files: usageNumber(source.files, text),
+        }),
+      );
+  return (
+    <section aria-label={t("usage.outside.label")}>
+      <h3>{t("usage.outside.title")}</h3>
+      <p class="agent-usage-secondary">{t("usage.outside.description")}</p>
+      <Show
+        when={totals().turns > 0}
+        fallback={
+          <p class="agent-usage-notice" role="status">
+            {t("usage.outside.empty")}
+          </p>
+        }
+      >
+        <dl class="agent-usage-totals">
+          <div>
+            <dt>{t("usage.column.cost")}</dt>
+            <dd>
+              <Amount value={totals().estimatedCostUsd} cost />
+            </dd>
+          </div>
+          <div>
+            <dt>{t("usage.totals.processedTokens")}</dt>
+            <dd>
+              <Amount value={totals().processedTokens} />
+            </dd>
+          </div>
+          <div>
+            <dt>{t("usage.outside.requests")}</dt>
+            <dd>
+              <Amount value={totals().turns} />
+            </dd>
+          </div>
+          <div>
+            <dt>{t("usage.outside.sessions")}</dt>
+            <dd>
+              <Amount value={totals().sessions} />
+            </dd>
+          </div>
+        </dl>
+        <Show when={totals().unpricedRecords > 0 || totals().incompleteRecords > 0}>
+          <p class="agent-usage-notice" role="status">
+            {t("usage.outside.partial", {
+              unpriced: totals().unpricedRecords,
+              incomplete: totals().incompleteRecords,
+            })}
+          </p>
+        </Show>
+        <div class="agent-usage-table">
+          <table>
+            <caption class="sr-only">{t("usage.outside.byModel")}</caption>
+            <thead>
+              <BreakdownColumns label={t("usage.breakdown.model")} />
+            </thead>
+            <tbody>
+              <For each={models()}>
+                {(model) => (
+                  <tr>
+                    <th scope="row">
+                      <span class="agent-usage-model-name">
+                        <UsageProviderMark provider={model.provider} />
+                        <span>
+                          {model.model || t("usage.unknownModel")}
+                          <span class="sr-only">{usageProviderName(model.provider)}</span>
+                        </span>
+                      </span>
+                    </th>
+                    <BreakdownCells row={model} cost={props.cost} share={share} />
+                  </tr>
+                )}
+              </For>
+            </tbody>
+          </table>
+        </div>
+      </Show>
+      <p class="agent-usage-secondary">
+        {[
+          ...sources(),
+          props.report.scannedAt
+            ? t("usage.outside.scannedAt", {
+                time: format.date(new Date(props.report.scannedAt), UPDATED_AT_FORMAT),
+              })
+            : t("usage.outside.notScanned"),
+        ].join(" · ")}
+      </p>
+    </section>
+  );
+}
+
 export function AgentUsageReport(props: {
   result: HostAnalytics;
+  /** Usage outside OpenBot. Null hides the section: an older host, a report of one agent, or a host with no CLI logs. */
+  outside?: OutsideUsageReport | null;
   metric: UsageMetric;
   agentLabel: (agentId: string) => UsageAgentLabel;
   onReady: () => void;
@@ -318,6 +434,15 @@ export function AgentUsageReport(props: {
           </SlidingTabs.Content>
         </SlidingTabs.ContentSlot>
       </SlidingTabs.Root>
+      <Show
+        when={
+          props.outside &&
+          (props.outside.totals.turns > 0 || props.outside.sources.some((source) => source.files > 0)) &&
+          props.outside
+        }
+      >
+        {(outside) => <OutsideUsageSection report={outside()} cost={cost()} />}
+      </Show>
       <footer class="agent-usage-footer">
         <p>
           {t("usage.footer", {

@@ -1,5 +1,5 @@
 import type { ServerSummary } from "@openbot/contracts/ipc";
-import { readHostAnalytics, runTeamEffect } from "@openbot/team-client";
+import { readHostAnalytics, readOutsideUsage, runTeamEffect } from "@openbot/team-client";
 import type { TeamApiRequest } from "@openbot/team-client/team-api-requests";
 import { Effect } from "effect";
 import { type Accessor, createEffect, untrack } from "solid-js";
@@ -24,6 +24,12 @@ export function createWebUsagePort(
       getHostAnalytics: (input, serverId) =>
         runTeamEffect(
           readHostAnalytics(hostRequest(serverId), workspace.state.capabilities, input).pipe(
+            Effect.mapError((error) => error.cause),
+          ),
+        ),
+      getOutsideUsage: (input, serverId) =>
+        runTeamEffect(
+          readOutsideUsage(hostRequest(serverId), workspace.state.capabilities, input).pipe(
             Effect.mapError((error) => error.cause),
           ),
         ),

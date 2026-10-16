@@ -249,4 +249,18 @@ export const messages = {
   "mobile.server.usage.agent": "Agente",
   "mobile.server.usage.unsupported":
     "Este computador anfitrião não oferece análises de uso. Atualize-o para usar esta tela.",
+  "mobile.server.usage.outside.title": "Fora do OpenBot",
+  "mobile.server.usage.outside.description":
+    "Uso de sessões de linha de comando dos provedores neste host que o OpenBot não iniciou. Os totais acima não o incluem.",
+  "mobile.server.usage.outside.empty": "Nenhum uso fora do OpenBot neste período.",
+  "mobile.server.usage.outside.requests": "Solicitações",
+  "mobile.server.usage.outside.sessions": "Sessões",
+  "mobile.server.usage.outside.partial":
+    "Dados parciais · {unpriced} solicitações não têm estimativa de custo; {incomplete} solicitações têm dados de tokens incompletos.",
+  "mobile.server.usage.outside.source": {
+    one: "{provider}: {files} arquivo de log",
+    other: "{provider}: {files} arquivos de log",
+  },
+  "mobile.server.usage.outside.scannedAt": "Logs lidos {time}",
+  "mobile.server.usage.outside.notScanned": "Logs ainda não lidos",
 } as const satisfies PartialTranslation<typeof source>;

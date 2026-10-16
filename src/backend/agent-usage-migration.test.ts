@@ -26,7 +26,9 @@ describe("agent usage migration", () => {
       // the parity check cannot notice: it compares the two build paths to each other.
       expect(
         db
-          .prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND name LIKE '%_occurred' ORDER BY name")
+          .prepare(
+            "SELECT name FROM sqlite_master WHERE type = 'index' AND name LIKE 'agent_usage%_occurred' ORDER BY name",
+          )
           .all(),
       ).toEqual([{ name: "agent_usage_activity_occurred" }, { name: "agent_usage_occurred" }]);
       expect(db.prepare("PRAGMA integrity_check").get()).toMatchObject({ integrity_check: "ok" });

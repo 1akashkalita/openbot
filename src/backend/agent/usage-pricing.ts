@@ -51,3 +51,48 @@ export function estimateUsageCost(
     basis: JSON.stringify({ effectiveDate: "2026-09-07", model, ...price }),
   };
 }
+
+// Cache writes cost more than plain input: 1.25 times for the five-minute cache and 2 times for the one-hour cache.
+const CACHE_WRITE_SHORT = 1.25;
+const CACHE_WRITE_LONG = 2;
+
+/**
+ * The cost of one provider request that a CLI log recorded. Unlike an aggregate, one request shows its cache-write
+ * lifetime, so it can be priced. A dated Claude model id has the price of its alias. Long-context requests and
+ * Codex cache writes stay unpriced.
+ */
+export function estimateRequestCost(
+  provider: string,
+  model: string,
+  tokens: UsageTokens,
+  cacheWriteLong: number,
+): { cost: number | null; basis: string | null } {
+  const priced = provider === "claude" ? model.replace(/-\d{8}$/u, "") : model;
+  const price = PRICES[`${provider}:${priced}`];
+  if (
+    !price ||
+    tokens.uncachedInput === null ||
+    tokens.cachedInput === null ||
+    tokens.cacheCreation === null ||
+    tokens.output === null ||
+    (provider !== "claude" && tokens.cacheCreation !== 0) ||
+    tokens.uncachedInput + tokens.cachedInput + tokens.cacheCreation >= 200_000
+  )
+    return { cost: null, basis: null };
+  const long = Math.min(cacheWriteLong, tokens.cacheCreation);
+  return {
+    cost:
+      (tokens.uncachedInput * price.input +
+        tokens.cachedInput * price.cached +
+        (tokens.cacheCreation - long) * price.input * CACHE_WRITE_SHORT +
+        long * price.input * CACHE_WRITE_LONG +
+        tokens.output * price.output) /
+      1_000_000,
+    basis: JSON.stringify({
+      effectiveDate: "2026-09-07",
+      model: priced,
+      ...price,
+      cacheWrite: { short: CACHE_WRITE_SHORT, long: CACHE_WRITE_LONG },
+    }),
+  };
+}

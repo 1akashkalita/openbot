@@ -57,6 +57,19 @@ export const messages = {
   "usage.about.title": "この推定について",
   "usage.about.body":
     "API 相当のトークンコスト (USD) です。これは推定であり、サブスクリプションの請求額ではありません。ツールやメディアの個別の料金は計算されません。不明な価格や不完全な使用量は利用できないままです。割合は既知の金額のみを使います。一部のデータでは合計が実際より少なくなることがあります。",
+  "usage.outside.title": "OpenBot 以外",
+  "usage.outside.label": "OpenBot 以外の使用量",
+  "usage.outside.description":
+    "このホストで OpenBot が実行していないプロバイダーのコマンドラインセッションの使用量です。上の合計には含まれません。",
+  "usage.outside.empty": "この期間に OpenBot 以外の使用量はありません。",
+  "usage.outside.requests": "リクエスト",
+  "usage.outside.sessions": "セッション",
+  "usage.outside.partial":
+    "一部のデータ · {unpriced} 件のリクエストにコスト見積もりがありません。{incomplete} 件のリクエストのトークンデータが不完全です。",
+  "usage.outside.byModel": "モデル別の OpenBot 以外の使用量",
+  "usage.outside.source": { other: "{provider}: ログファイル {files} 件" },
+  "usage.outside.scannedAt": "ログ読み取り {time}",
+  "usage.outside.notScanned": "ログはまだ読み取られていません",
   "usage.panel.label": "エージェントの使用量",
   "usage.panel.title": "使用量",
   "usage.panel.allAgents": "すべてのエージェント",

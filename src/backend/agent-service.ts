@@ -58,6 +58,8 @@ import type {
   McpSignInAppState,
   McpSignInState,
   McpTestResult,
+  OutsideUsageInput,
+  OutsideUsageReport,
   ProviderCodeLoginStart,
   QueuedMessageReceipt,
   QueueSnapshot,
@@ -150,6 +152,7 @@ import {
   startingModel,
 } from "./agent/model-choice";
 import { OpenBotToolRouter } from "./agent/openbot-tool-router";
+import { OutsideUsageScanner } from "./agent/outside-usage-scanner";
 import { ProfileClients } from "./agent/profile-clients";
 import {
   GenerationUsageLimitError,
@@ -367,6 +370,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
   readonly #threads: ThreadLifecycle;
   readonly #memoryHold: MemoryHold;
   readonly #usageLimits: UsageLimitGate;
+  readonly #outsideUsage: OutsideUsageScanner;
   readonly #drain: DrainScheduler;
   readonly #sessionSettings: SessionSettings;
   readonly #queue: QueueControls;
@@ -579,6 +583,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
                 );
             this.#channelRoutines.reconcileAll();
             yield* this.#boot.backfillProviderHistory().pipe(Effect.forkIn(this.#scope));
+            this.#outsideUsage.start();
             // Limits are not kept over a restart, so an agent on a backup model goes back first.
             for (const agent of this.#store.list()) this.#drain.scheduleDrain(agent.id);
           }).pipe(toProviderOperationFailed),
@@ -982,6 +987,10 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
         emitError: (code, error, agentId) => this.#emitError(code, error, agentId),
       },
     });
+    this.#outsideUsage = new OutsideUsageScanner({
+      usage: () => this.#store.database.outsideUsage,
+      scope: () => this.#scope,
+    });
     this.#usageLimits = new UsageLimitGate({
       store,
       hooks: {
@@ -1225,6 +1234,12 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     if (input.agentId && !this.listAgents().some((agent) => agent.id === input.agentId))
       throw new Error(sourceText("error.team.agentNotFound"));
     return this.#store.database.usage.readHost(input);
+  }
+
+  /** The usage that the provider CLIs on this computer logged outside OpenBot. A read starts when it is old. */
+  getOutsideUsage(input: OutsideUsageInput): OutsideUsageReport {
+    this.#outsideUsage.scanSoon();
+    return this.#store.database.outsideUsage.read(input, this.#outsideUsage.scannedAt());
   }
 
   readonly getUsage = Effect.fn("AgentService.getUsage")(function* (this: AgentService, agentId?: string) {

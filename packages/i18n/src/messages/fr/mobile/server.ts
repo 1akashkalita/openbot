@@ -247,4 +247,18 @@ export const messages = {
   "mobile.server.usage.agent": "Agent",
   "mobile.server.usage.unsupported":
     "Cet hôte ne prend pas en charge les statistiques d’utilisation. Mettez à jour l’hôte pour utiliser cette vue.",
+  "mobile.server.usage.outside.title": "Hors d'OpenBot",
+  "mobile.server.usage.outside.description":
+    "Utilisation des sessions en ligne de commande des fournisseurs sur cet hôte qu'OpenBot n'a pas lancées. Les totaux ci-dessus ne l'incluent pas.",
+  "mobile.server.usage.outside.empty": "Aucune utilisation hors d'OpenBot sur cette période.",
+  "mobile.server.usage.outside.requests": "Requêtes",
+  "mobile.server.usage.outside.sessions": "Sessions",
+  "mobile.server.usage.outside.partial":
+    "Données partielles · {unpriced} requêtes n'ont pas d'estimation de coût ; {incomplete} requêtes ont des données de jetons incomplètes.",
+  "mobile.server.usage.outside.source": {
+    one: "{provider} : {files} fichier journal",
+    other: "{provider} : {files} fichiers journaux",
+  },
+  "mobile.server.usage.outside.scannedAt": "Journaux lus {time}",
+  "mobile.server.usage.outside.notScanned": "Journaux pas encore lus",
 } as const satisfies PartialTranslation<typeof source>;

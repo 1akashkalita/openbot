@@ -27,6 +27,7 @@ import {
   type MailboxProjectionChanges,
   type MailboxProjectionState,
 } from "./database/mailbox-projection";
+import { OutsideUsage } from "./database/outside-usage";
 import {
   type ProviderHistoryImportState,
   type ProviderHistorySessionInput,
@@ -70,6 +71,7 @@ export type { StoredThreadSummary } from "./database/thread-summaries";
 export class OpenBotDatabase {
   readonly #core: DatabaseCore;
   readonly usage: AgentUsage;
+  readonly outsideUsage: OutsideUsage;
   readonly #conversations: ConversationQueries;
   readonly #roster: AgentRoster;
   readonly #conversationWrites: ConversationWriter;
@@ -84,6 +86,7 @@ export class OpenBotDatabase {
   constructor(readonly userDataPath: string) {
     this.#core = new DatabaseCore({ userDataPath });
     this.usage = new AgentUsage(this.#core);
+    this.outsideUsage = new OutsideUsage(this.#core);
     this.#conversations = new ConversationQueries({ core: this.#core });
     this.#roster = new AgentRoster({ core: this.#core });
     this.#conversationWrites = new ConversationWriter({ core: this.#core, roster: this.#roster });

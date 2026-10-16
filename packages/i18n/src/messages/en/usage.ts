@@ -56,6 +56,19 @@ export const messages = defineMessages("usage", {
   "usage.about.title": "About these estimates",
   "usage.about.body":
     "API-equivalent token cost in USD. This is an estimate, not a subscription charge. Separate tool and media fees are not calculated. Unknown prices and incomplete usage stay unavailable. Shares use known amounts only; partial data can understate totals.",
+  "usage.outside.title": "Outside OpenBot",
+  "usage.outside.label": "Usage outside OpenBot",
+  "usage.outside.description":
+    "Usage from provider command-line sessions on this host that OpenBot did not run. The totals above do not include it.",
+  "usage.outside.empty": "No usage outside OpenBot in this range.",
+  "usage.outside.requests": "Requests",
+  "usage.outside.sessions": "Sessions",
+  "usage.outside.partial":
+    "Partial data · {unpriced} requests have no cost estimate; {incomplete} requests have incomplete token data.",
+  "usage.outside.byModel": "Usage outside OpenBot by model",
+  "usage.outside.source": { one: "{provider}: {files} log file", other: "{provider}: {files} log files" },
+  "usage.outside.scannedAt": "Logs read {time}",
+  "usage.outside.notScanned": "Logs not read yet",
   "usage.panel.label": "Agent usage",
   "usage.panel.title": "Usage",
   "usage.panel.allAgents": "All agents",

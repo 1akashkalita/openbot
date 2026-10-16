@@ -151,6 +151,45 @@ WebRTC use an explicit host analytics codec. Existing agent analytics and accoun
 contracts. All authenticated team members can read these aggregates; no additional analytics data
 is stored by the account service or Signal service.
 
+### Usage outside OpenBot
+
+`OutsideUsageScanner` reads the logs that the Claude and Codex CLIs write on the host, so the
+Usage view also shows terminal and editor sessions that OpenBot did not run. It reads
+`projects` under `CLAUDE_CONFIG_DIR` (default `~/.claude`) and `sessions` and `archived_sessions`
+under `CODEX_HOME` (default `~/.codex`). The folders of added provider accounts are not read:
+only OpenBot agents use them, so `AgentUsage` already counts them. A missing folder is no usage.
+The first read starts 30 seconds after the backend starts, then every 15 minutes. A report request
+starts a read when the last one is older than 60 seconds; the request does not wait for it.
+
+`OutsideUsage` owns migration 44: `outside_usage_records`, `outside_usage_files` and
+`openbot_provider_sessions`. A record is one provider request. Its key and session key are SHA-256
+hashes; the file key is the hash of the path inside the CLI folder. The scanner keeps a read
+position per file and reads only new complete lines. A smaller file or new first bytes reads the
+file again from the start. A Claude request that several lines record (one per content block, or a
+copy in a resumed session) is one record with the largest value of each count. Codex
+`token_usage_record` lines win over the `token_count` events that repeat them, and a repeated
+`token_count` with the same totals is skipped. A file that moves adds no record. Records stay when
+the CLI deletes its logs.
+
+A session that OpenBot ran is not outside usage. A provider session bind and a thread replay write
+the session to `openbot_provider_sessions` and delete its outside records in the same transaction,
+so a read before or after the bind keeps it out. Migration 44 copies the existing provider sessions.
+Codex sessions that OpenBot's app-server client started (`originator: "openbot"`) are skipped.
+
+The parsers check the text of a line before they parse it and copy only counts, ids, model names
+and times. Prompts, output, paths and working folders stay in the log. Costs are per request: a
+request shows its cache-write lifetime, so five-minute writes cost 1.25 times input and one-hour
+writes 2 times input. Requests with 200,000 or more input tokens and Codex cache writes stay
+unpriced.
+
+`host:get-outside-usage` and the optional `outside-usage-v1` capability expose
+`POST /v1/analytics/outside` with the date range and time zone of `/v1/analytics`. Any member can
+read it. The report carries totals, days, models, the daily provider split and the number of log
+files per provider; never a path, prompt, project or session id. `/v1/analytics` and
+`host:get-analytics` do not change: outside usage is never in OpenBot totals. Desktop and the
+iPhone app show it as its own section of the host report, and hide it with an agent filter. A host
+without the capability gives `null`, and the client sends no request.
+
 The desktop chart adapts Zaidan's chart and interactive area composition. The pinned
 `solid-recharts` dependency has a Solid 2 compatibility patch and uses the application's single
 Solid runtime. Chart colors use OpenBot tokens. Daily tables provide exact accessible values.

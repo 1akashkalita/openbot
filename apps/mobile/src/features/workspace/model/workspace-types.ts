@@ -27,6 +27,8 @@ import type {
   HostProviderAccounts,
   InstallAgentTemplateInput,
   InstalledSkill,
+  OutsideUsageInput,
+  OutsideUsageReport,
   QueueSnapshot,
   ResetAgentSessionSettingInput,
   RespondToApprovalInput,
@@ -266,6 +268,8 @@ export interface MobileWorkspaceContextValue {
   loadAgentAnalytics: (input: AgentAnalyticsInput, serverId: string) => Promise<AgentAnalytics | null>;
   /** Null when the host does not advertise `host-analytics`. Without an agent ID, the report covers every agent. */
   loadHostAnalytics: (input: HostAnalyticsInput, serverId: string) => Promise<HostAnalytics | null>;
+  /** Null when the host does not advertise `outside-usage-v1`. The CLI usage on the host that OpenBot did not run. */
+  loadOutsideUsage: (input: OutsideUsageInput, serverId: string) => Promise<OutsideUsageReport | null>;
   /**
    * Null when the host does not advertise `installed-skills`. With `manage`, reads the
    * `skills-admin-v1` list, which has the enabled state and origin; the host refuses a member.

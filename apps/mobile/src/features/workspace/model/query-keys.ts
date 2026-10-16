@@ -88,6 +88,12 @@ export const queryKeys = {
     range,
     agentId,
   ],
+  serverOutsideUsage: (scope: QueryScope, serverId: string, range: unknown) => [
+    "server-outside-usage",
+    ...scope,
+    serverId,
+    range,
+  ],
   /** The routine calendar of a server. Its routine and turn events invalidate the prefix. */
   serverRoutines: (scope: QueryScope, serverId: string, ...range: [] | [from: string, to: string]) => [
     "server-routines",

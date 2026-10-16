@@ -62,6 +62,24 @@ export const messages = {
   "usage.about.title": "Об этих оценках",
   "usage.about.body":
     "Стоимость токенов в USD по ценам API. Это оценка, а не списание по подписке. Отдельная плата за инструменты и медиа не учитывается. Неизвестные цены и неполные данные об использовании остаются недоступными. Доли считаются только по известным значениям; неполные данные могут занижать итоги.",
+  "usage.outside.title": "Вне OpenBot",
+  "usage.outside.label": "Использование вне OpenBot",
+  "usage.outside.description":
+    "Использование из сеансов командной строки провайдеров на этом хосте, которые OpenBot не запускал. Итоги выше его не включают.",
+  "usage.outside.empty": "Нет использования вне OpenBot за этот период.",
+  "usage.outside.requests": "Запросы",
+  "usage.outside.sessions": "Сеансы",
+  "usage.outside.partial":
+    "Неполные данные · у {unpriced} запросов нет оценки стоимости; у {incomplete} запросов неполные данные о токенах.",
+  "usage.outside.byModel": "Использование вне OpenBot по моделям",
+  "usage.outside.source": {
+    one: "{provider}: {files} файл журнала",
+    few: "{provider}: {files} файла журнала",
+    many: "{provider}: {files} файлов журнала",
+    other: "{provider}: {files} файла журнала",
+  },
+  "usage.outside.scannedAt": "Журналы прочитаны {time}",
+  "usage.outside.notScanned": "Журналы ещё не прочитаны",
   "usage.panel.label": "Использование агентов",
   "usage.panel.title": "Использование",
   "usage.panel.allAgents": "Все агенты",

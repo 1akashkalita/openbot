@@ -245,4 +245,15 @@ export const messages = defineMessages("mobile.server", {
   "mobile.server.usage.allAgents": "All agents",
   "mobile.server.usage.agent": "Agent",
   "mobile.server.usage.unsupported": "This host does not support usage analytics. Update the host to use this view.",
+  "mobile.server.usage.outside.title": "Outside OpenBot",
+  "mobile.server.usage.outside.description":
+    "Usage from provider command-line sessions on this host that OpenBot did not run. The totals above do not include it.",
+  "mobile.server.usage.outside.empty": "No usage outside OpenBot in this range.",
+  "mobile.server.usage.outside.requests": "Requests",
+  "mobile.server.usage.outside.sessions": "Sessions",
+  "mobile.server.usage.outside.partial":
+    "Partial data · {unpriced} requests have no cost estimate; {incomplete} requests have incomplete token data.",
+  "mobile.server.usage.outside.source": { one: "{provider}: {files} log file", other: "{provider}: {files} log files" },
+  "mobile.server.usage.outside.scannedAt": "Logs read {time}",
+  "mobile.server.usage.outside.notScanned": "Logs not read yet",
 });

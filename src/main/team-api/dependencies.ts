@@ -66,6 +66,7 @@ type TeamApiAgentMethods = Pick<
   | "getUsage"
   | "getAnalytics"
   | "getHostAnalytics"
+  | "getOutsideUsage"
   | "listModels"
   | "listAgents"
   | "sidebarChatIds"

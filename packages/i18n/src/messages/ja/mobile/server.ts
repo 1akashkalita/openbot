@@ -242,4 +242,15 @@ export const messages = {
   "mobile.server.usage.agent": "エージェント",
   "mobile.server.usage.unsupported":
     "このホストは使用量の分析に対応していません。この画面を使うには、ホストを更新してください。",
+  "mobile.server.usage.outside.title": "OpenBot 以外",
+  "mobile.server.usage.outside.description":
+    "このホストで OpenBot が実行していないプロバイダーのコマンドラインセッションの使用量です。上の合計には含まれません。",
+  "mobile.server.usage.outside.empty": "この期間に OpenBot 以外の使用量はありません。",
+  "mobile.server.usage.outside.requests": "リクエスト",
+  "mobile.server.usage.outside.sessions": "セッション",
+  "mobile.server.usage.outside.partial":
+    "一部のデータ · {unpriced} 件のリクエストにコスト見積もりがありません。{incomplete} 件のリクエストのトークンデータが不完全です。",
+  "mobile.server.usage.outside.source": { other: "{provider}: ログファイル {files} 件" },
+  "mobile.server.usage.outside.scannedAt": "ログ読み取り {time}",
+  "mobile.server.usage.outside.notScanned": "ログはまだ読み取られていません",
 } as const satisfies PartialTranslation<typeof source>;

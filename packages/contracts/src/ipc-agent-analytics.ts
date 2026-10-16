@@ -94,7 +94,7 @@ export function analyticsRange(agentId: string, days = 30, now = new Date()): Ag
 
 export class AnalyticsInputError extends Error {}
 
-function dateValue(value: unknown): string {
+export function decodeAnalyticsDate(value: unknown): string {
   if (
     !isString(value) ||
     !/^\d{4}-\d{2}-\d{2}$/u.test(value) ||
@@ -108,8 +108,8 @@ function dateValue(value: unknown): string {
 export function parseAnalyticsRange(value: unknown): Omit<AgentAnalyticsInput, "agentId"> {
   if (!isDynamicRecord(value) || !isString(value.timeZone) || value.timeZone.length > 100)
     throw new AnalyticsInputError("Invalid analytics request.");
-  const startDate = dateValue(value.startDate);
-  const endDate = dateValue(value.endDate);
+  const startDate = decodeAnalyticsDate(value.startDate);
+  const endDate = decodeAnalyticsDate(value.endDate);
   if (startDate > endDate || Date.parse(endDate) - Date.parse(startDate) > 366 * 86400000)
     throw new AnalyticsInputError("Choose an analytics range of at most 367 days.");
   try {
@@ -171,7 +171,7 @@ export function emptyAnalyticsTotals(): AnalyticsTotals {
     incompleteRecords: 0,
   };
 }
-function totals(value: unknown): AnalyticsTotals {
+export function decodeAnalyticsTotals(value: unknown): AnalyticsTotals {
   if (!isDynamicRecord(value)) throw new Error("Invalid analytics totals.");
   return {
     ...decodeUsageTokens(value),
@@ -186,7 +186,7 @@ function totals(value: unknown): AnalyticsTotals {
     incompleteRecords: number(value.incompleteRecords),
   };
 }
-function timestamp(value: unknown): string {
+export function decodeAnalyticsTimestamp(value: unknown): string {
   if (!isString(value) || !Number.isFinite(Date.parse(value))) throw new Error("Invalid analytics timestamp.");
   return value;
 }
@@ -196,12 +196,12 @@ export function decodeAnalyticsReport(value: unknown): Omit<AgentAnalytics, "age
     throw new Error("Invalid agent analytics.");
   return {
     ...input,
-    collectionStartedAt: timestamp(value.collectionStartedAt),
-    updatedAt: value.updatedAt === null ? null : timestamp(value.updatedAt),
-    totals: totals(value.totals),
+    collectionStartedAt: decodeAnalyticsTimestamp(value.collectionStartedAt),
+    updatedAt: value.updatedAt === null ? null : decodeAnalyticsTimestamp(value.updatedAt),
+    totals: decodeAnalyticsTotals(value.totals),
     daily: value.daily.map((day) => {
       if (!isDynamicRecord(day)) throw new Error("Invalid daily analytics.");
-      return { ...totals(day), date: dateValue(day.date) };
+      return { ...decodeAnalyticsTotals(day), date: decodeAnalyticsDate(day.date) };
     }),
     models: value.models.map((model) => {
       if (
@@ -213,7 +213,12 @@ export function decodeAnalyticsReport(value: unknown): Omit<AgentAnalytics, "age
         number(model.share) > 1
       )
         throw new Error("Invalid model analytics.");
-      return { ...totals(model), provider: model.provider, model: model.model, share: number(model.share) };
+      return {
+        ...decodeAnalyticsTotals(model),
+        provider: model.provider,
+        model: model.model,
+        share: number(model.share),
+      };
     }),
   };
 }
@@ -226,7 +231,7 @@ export function decodeAnalyticsAgents(value: unknown): AnalyticsAgent[] {
     if (!isDynamicRecord(agent) || !isString(agent.agentId) || !agent.agentId || agent.agentId.length > 256)
       throw new Error("Invalid agent analytics row.");
     if (number(agent.share) > 1) throw new Error("Invalid agent analytics row.");
-    return { ...totals(agent), agentId: agent.agentId, share: number(agent.share) };
+    return { ...decodeAnalyticsTotals(agent), agentId: agent.agentId, share: number(agent.share) };
   });
 }
 
@@ -239,7 +244,7 @@ export function decodeAnalyticsProviderDays(value: unknown): AnalyticsProviderDa
     if (!isDynamicRecord(cell) || !isString(cell.provider) || cell.provider.length > 100)
       throw new Error("Invalid provider analytics row.");
     return {
-      date: dateValue(cell.date),
+      date: decodeAnalyticsDate(cell.date),
       provider: cell.provider,
       processedTokens: number(cell.processedTokens),
       estimatedCostUsd: nullableNumber(cell.estimatedCostUsd),

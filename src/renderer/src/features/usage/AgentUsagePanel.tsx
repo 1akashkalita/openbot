@@ -1,4 +1,10 @@
-import { type AgentSummary, analyticsRange, type HostAnalytics, type HostAnalyticsInput } from "@openbot/contracts/ipc";
+import {
+  type AgentSummary,
+  analyticsRange,
+  type HostAnalytics,
+  type HostAnalyticsInput,
+  type OutsideUsageReport,
+} from "@openbot/contracts/ipc";
 import type { AppTextKey } from "@openbot/i18n";
 import {
   ArrowLeft,
@@ -41,6 +47,8 @@ interface AgentUsagePanelProps {
 interface UsageState {
   range: HostAnalyticsInput;
   result: HostAnalytics | null;
+  /** The CLI usage that OpenBot did not run. Only the report of all agents shows it. */
+  outside: OutsideUsageReport | null;
   phase: "loading" | "ready" | "unsupported" | "error";
   errorReference: string | null;
   agents: AgentSummary[];
@@ -56,6 +64,7 @@ export function AgentUsagePanel(props: AgentUsagePanelProps) {
     range: { ...analyticsRange("range"), agentId: props.agentId },
     agents: [],
     result: null,
+    outside: null,
     phase: "loading",
     errorReference: null,
     metric: "cost",
@@ -78,18 +87,26 @@ export function AgentUsagePanel(props: AgentUsagePanelProps) {
       setState((draft) => {
         draft.phase = "loading";
         draft.result = null;
+        draft.outside = null;
       });
     try {
-      const [result, agents] = await Promise.all([
+      const [result, agents, outside] = await Promise.all([
         // Electron cannot clone the Solid store proxy across the context bridge.
         port().agent.getHostAnalytics({ ...range }, serverId),
         port().agent.listAgents(serverId),
+        agentId
+          ? null
+          : port().agent.getOutsideUsage(
+              { startDate: range.startDate, endDate: range.endDate, timeZone: range.timeZone },
+              serverId,
+            ),
       ]);
       if (request === generation && props.serverId === serverId && state.range.agentId === agentId)
         setState((draft) => {
           draft.agents = agents;
           draft.serverId = serverId;
           draft.result = result;
+          draft.outside = outside;
           draft.phase = result ? "ready" : "unsupported";
         });
     } catch (error) {
@@ -102,6 +119,7 @@ export function AgentUsagePanel(props: AgentUsagePanelProps) {
       if (request === generation && props.serverId === serverId && state.range.agentId === agentId)
         setState((draft) => {
           draft.result = null;
+          draft.outside = null;
           draft.phase = "error";
           draft.errorReference = errorReference(error);
         });
@@ -273,6 +291,13 @@ export function AgentUsagePanel(props: AgentUsagePanelProps) {
           {(result) => (
             <AgentUsageReport
               result={result()}
+              outside={
+                !state.range.agentId &&
+                state.outside?.startDate === result().startDate &&
+                state.outside.endDate === result().endDate
+                  ? state.outside
+                  : null
+              }
               metric={state.metric}
               agentLabel={agentLabel}
               onReady={() => {

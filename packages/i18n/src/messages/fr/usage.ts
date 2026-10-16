@@ -57,6 +57,22 @@ export const messages = {
   "usage.about.title": "À propos de ces estimations",
   "usage.about.body":
     "Coût des jetons en équivalent API, en USD. Il s’agit d’une estimation, pas d’un montant d’abonnement. Les frais distincts des outils et des médias ne sont pas calculés. Les prix inconnus et l’utilisation incomplète restent indisponibles. Les parts utilisent uniquement les montants connus ; des données partielles peuvent sous-estimer les totaux.",
+  "usage.outside.title": "Hors d'OpenBot",
+  "usage.outside.label": "Utilisation hors d'OpenBot",
+  "usage.outside.description":
+    "Utilisation des sessions en ligne de commande des fournisseurs sur cet hôte qu'OpenBot n'a pas lancées. Les totaux ci-dessus ne l'incluent pas.",
+  "usage.outside.empty": "Aucune utilisation hors d'OpenBot sur cette période.",
+  "usage.outside.requests": "Requêtes",
+  "usage.outside.sessions": "Sessions",
+  "usage.outside.partial":
+    "Données partielles · {unpriced} requêtes n'ont pas d'estimation de coût ; {incomplete} requêtes ont des données de jetons incomplètes.",
+  "usage.outside.byModel": "Utilisation hors d'OpenBot par modèle",
+  "usage.outside.source": {
+    one: "{provider} : {files} fichier journal",
+    other: "{provider} : {files} fichiers journaux",
+  },
+  "usage.outside.scannedAt": "Journaux lus {time}",
+  "usage.outside.notScanned": "Journaux pas encore lus",
   "usage.panel.label": "Utilisation des agents",
   "usage.panel.title": "Utilisation",
   "usage.panel.allAgents": "Tous les agents",
