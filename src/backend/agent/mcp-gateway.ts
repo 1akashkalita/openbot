@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type {
   McpServerConfig,
   McpSignInAppInput,
@@ -18,8 +19,10 @@ import type { AgentProvider } from "../agent-client";
 import { causeHelpers } from "../effect-boundary";
 import { McpHandoffLog } from "../mcp-handoff-log";
 import { type McpOAuthAuthority, type McpSignInOpener, normalizeResource } from "../mcp-oauth-provider";
+import { type McpOAuthProxy, mcpOAuthHandoff, proxiedAddress } from "../mcp-oauth-proxy";
 import { type McpSignInPlace, testMcpServer } from "../mcp-probe";
 import {
+  type McpHandoffAuthorization,
   type McpServerDrop,
   type McpToolRuntimeSource,
   type McpToolRuntimes,
@@ -100,6 +103,11 @@ export class McpGateway {
    */
   readonly #oauth: McpOAuthAuthority | null;
   /**
+   * The loopback proxy that adds the current token to each request, or `null` when it could not
+   * listen. Without it a provider is handed the stored token, as before the proxy existed.
+   */
+  readonly #proxy: McpOAuthProxy | null;
+  /**
    * What has already been handed to a provider process, kept for redaction. Declared here because
    * both hand-off paths - the client credentials and `enabled` - start in this class.
    */
@@ -119,6 +127,7 @@ export class McpGateway {
     this.#githubConnector = options.githubConnector ?? null;
     this.#toolRuntimes = () => credentials.mcpToolRuntimes?.() ?? NO_MCP_TOOL_RUNTIMES;
     this.#oauth = credentials.mcpOAuth ?? null;
+    this.#proxy = credentials.mcpOAuthProxy ?? null;
     this.#logger = options.logger;
     this.#hooks = options.hooks;
   }
@@ -132,22 +141,50 @@ export class McpGateway {
     return this.#toolRuntimes();
   }
 
-  /** The bearer token for one configuration, asked at every hand-off and never written to a row. */
-
-  readonly authorization = Effect.fnUntraced(function* (this: McpGateway, config: McpServerConfig) {
+  /**
+   * The bearer for one configuration, asked at every hand-off and never written to a row. A server
+   * whose sign-in can renew gets the address of `McpOAuthProxy` and its secret instead of a token,
+   * so a long session never holds a token that expires.
+   */
+  readonly authorization = Effect.fnUntraced(function* (
+    this: McpGateway,
+    config: McpServerConfig,
+  ): Effect.fn.Return<McpHandoffAuthorization | null, McpGatewayFailed> {
     const github = this.#githubConnector;
     const oauth = this.#oauth;
-    const token =
+    const handoff: McpHandoffAuthorization | null =
       config.id === GITHUB_CONNECTOR_MCP_SERVER_ID
         ? github
-          ? yield* github.mcpAuthorization().pipe(toMcpGatewayFailed)
+          ? yield* github.mcpAuthorization().pipe(
+              Effect.map((bearer) => (bearer ? { bearer } : null)),
+              toMcpGatewayFailed,
+            )
           : null
         : oauth
-          ? yield* oauth.accessToken(config.url).pipe(toMcpGatewayFailed)
+          ? yield* mcpOAuthHandoff(config, oauth, this.#proxy).pipe(toMcpGatewayFailed)
           : null;
-    if (token) this.#handoff.recordSecret(token);
-    return token;
+    if (handoff) this.#handoff.recordSecret(handoff.bearer);
+    return handoff;
   });
+
+  /**
+   * The proxy address of each enabled configuration that goes through `McpOAuthProxy`, with a
+   * digest of the secret. Codex keeps the configuration a session started with, so a change here
+   * must start a new session; `ThreadLifecycle` adds this to its tool fingerprint.
+   */
+  proxyRoutes(configs: readonly McpServerConfig[]): string[] {
+    const oauth = this.#oauth;
+    const proxy = this.#proxy;
+    if (!oauth || !proxy) return [];
+    const secret = createHash("sha256").update(proxy.secret()).digest("base64url");
+    return configs
+      .flatMap((config) => {
+        if (config.id === GITHUB_CONNECTOR_MCP_SERVER_ID) return [];
+        const address = proxiedAddress(config, oauth, proxy);
+        return address ? [`${config.name}\u0001${address}\u0001${secret}`] : [];
+      })
+      .sort();
+  }
 
   /**
    * Remembers a set that leaves for a provider, so its secrets stay redactable after the user edits

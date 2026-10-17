@@ -799,6 +799,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       mcpServers: () => this.#mcp.enabled(),
       mcpToolRuntimes: () => this.#mcp.toolRuntimes(),
       mcpAuthorization: (config) => this.#mcp.authorization(config).pipe(toMcpOperationError),
+      mcpProxyRoutes: (configs) => this.#mcp.proxyRoutes(configs),
       ...(credentials.agentEnvironment ? { agentEnvironment: credentials.agentEnvironment } : {}),
       passwordVaultConnected: () => options.passwordVault?.connected() ?? false,
       sectionTeammates: (agentId) => this.sectionTeammates(agentId),

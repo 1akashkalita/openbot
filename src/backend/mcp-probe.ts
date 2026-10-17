@@ -76,7 +76,12 @@ export const testMcpServer = Effect.fnUntraced(function* (
         const server = yield* usableMcpServer(
           config,
           tools,
-          oauth ? (subject) => oauth.accessToken(subject.url) : undefined,
+          // The test reaches the server itself, never through `McpOAuthProxy`: it reads the token
+          // once and connects at once, so the token cannot age in between.
+          oauth
+            ? (subject) =>
+                oauth.accessToken(subject.url).pipe(Effect.map((token) => (token ? { bearer: token } : null)))
+            : undefined,
         );
         return yield* probeMcpServerEffect(server, timeoutMs, signIn, signInPlace);
       }),

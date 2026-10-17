@@ -25,6 +25,7 @@ import {
 import { CustomAcpAgentsClient, type CustomAgentConfig, type CustomAgentSource } from "./custom-acp-agents-client";
 import { GrokAgentClient } from "./grok-client";
 import type { McpOAuthAuthority } from "./mcp-oauth-provider";
+import type { McpOAuthProxy } from "./mcp-oauth-proxy";
 import type {
   McpAuthorizationSource,
   McpDropReporter,
@@ -266,6 +267,12 @@ export interface ProviderClientContext {
    * the whole authority - it signs in, refreshes and forgets - so it travels no further.
    */
   readonly mcpOAuth?: McpOAuthAuthority;
+  /**
+   * The loopback proxy that adds the current access token to each request for a signed-in http
+   * server. Read by `AgentService` only, for the same reason as `mcpOAuth`: a driver is given its
+   * address and secret through `mcpAuthorization`, never the proxy.
+   */
+  readonly mcpOAuthProxy?: McpOAuthProxy;
   /**
    * Whether this model may still be used. A removed endpoint stays in the running process, with the
    * credentials it started with, until that process restarts, and the restart waits for the work in

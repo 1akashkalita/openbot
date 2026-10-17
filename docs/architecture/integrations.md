@@ -235,6 +235,16 @@ is one folder per plugin in [`marketplace/plugin-catalog/`](../../marketplace/pl
    - `link`: a browser sign-in. OpenBot is the OAuth client (`McpOAuth` in
      [`mcp-oauth-provider.ts`](../../src/backend/mcp-oauth-provider.ts)): discovery, dynamic
      registration, PKCE and refresh. The tokens stay in encrypted storage. No bridge program.
+     A provider does not get the token of a server that has a refresh token. It gets a loopback
+     address of `McpOAuthProxy` ([`mcp-oauth-proxy.ts`](../../src/backend/mcp-oauth-proxy.ts)) and
+     a secret bearer. The proxy listens on `127.0.0.1` only and refuses a request without the
+     secret. For each request it adds the stored token. When the server answers 401, it renews the
+     token one time through `McpOAuth` and sends the request again one time. Responses, event
+     streams included, pass through as they arrive. The port and the secret stay the same across
+     restarts (`openbot-mcp-oauth-proxy-v1.json`, encrypted), because Codex keeps the configuration
+     of a resumed session. A server with an `Authorization` header that the user typed, and a
+     sign-in with no refresh token, keep the stored token. `bun run test:mcp-oauth-proxy` checks
+     this against a fake server.
    - `key`: one or two fields that go into a `header` (http) or an `env` value (stdio).
    - `local`: steps that the user does on the computer that runs the server.
 3. Never put a secret in the catalog. The user types it in the connect dialog.

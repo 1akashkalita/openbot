@@ -176,6 +176,13 @@ export type McpSignInOpener = (url: string) => Promise<void>;
 
 export interface McpOAuthAuthority {
   accessToken: (url: string) => Effect.Effect<string | null, McpOperationError>;
+  /**
+   * A token to send again after the server refused `rejected`, or `null` when there is no better
+   * one. See `McpOAuthProxy`, the one caller.
+   */
+  renewAccessToken: (url: string, rejected: string) => Effect.Effect<string | null, McpOperationError>;
+  /** Whether the stored sign-in for this URL has a refresh token that this client can spend. */
+  renewable: (url: string) => boolean;
   signIn: (url: string, open?: McpSignInOpener) => McpSignIn | null;
   /** Ends the sign-in waiting for this URL's browser, if one is. Answers whether one was. */
   cancelSignIn: (url: string) => boolean;
@@ -253,6 +260,44 @@ export class McpOAuth implements McpOAuthAuthority {
     yield* this.#refresh(resource);
     return yield* mcpSync(() => this.#options.storage.read(resource)?.tokens?.access_token ?? fallback);
   }).bind(this);
+
+  /**
+   * A token to send again after the server refused `rejected` with 401.
+   *
+   * The server is the authority on expiry: it can end a token before `expires_in` says, and a
+   * provider session can outlive the token it started with. When the stored token is already
+   * another one, a refresh for another request stored it, and that token is the answer: no second
+   * exchange spends a rotated refresh token. Otherwise one refresh runs, shared with every other
+   * caller through `#refresh`. `null` when no token other than the rejected one is available.
+   */
+  readonly renewAccessToken = Effect.fn("McpOAuth.renewAccessToken")(function* (
+    this: McpOAuth,
+    url: string,
+    rejected: string,
+  ): Effect.fn.Return<string | null, McpOperationError> {
+    const resource = normalizeResource(url);
+    if (!resource) return null;
+    const stored = yield* mcpSync(() => this.#options.storage.read(resource));
+    const current = stored?.tokens?.access_token;
+    if (!stored?.tokens || !current) return null;
+    if (current !== rejected) return current;
+    // The same rule as `accessToken`: an unbound record never spends its refresh token.
+    if (!stored.tokens.refresh_token || !credentialIssuer(stored.tokens, stored)) return null;
+    yield* this.#refresh(resource);
+    const renewed = yield* mcpSync(() => this.#options.storage.read(resource)?.tokens?.access_token ?? null);
+    return renewed !== null && renewed !== rejected ? renewed : null;
+  }).bind(this);
+
+  /**
+   * Whether the stored sign-in has a refresh token bound to its issuer. A provider reaches such a
+   * server through `McpOAuthProxy`. The answer changes only at a sign-in or a sign-out, not with
+   * time, so the Codex tool fingerprint that reads it stays the same while a token ages.
+   */
+  renewable(url: string): boolean {
+    const resource = normalizeResource(url);
+    const record = resource === null ? null : this.#options.storage.read(resource);
+    return Boolean(record?.tokens?.refresh_token && credentialIssuer(record.tokens, record));
+  }
 
   /**
    * One exchange per server at a time, whoever asks.
@@ -1075,7 +1120,11 @@ export function secureOAuthFetch(signal?: AbortSignal): FetchLike {
   return (input, init) => runCauseEffect(secureOAuthRequest(input, init, signal));
 }
 
-const secureOAuthRequest = Effect.fn("McpOAuth.secureFetch")(function* (
+/**
+ * The same request as an Effect. `McpOAuthProxy` sends the MCP calls of a signed-in server through
+ * it, so a call that carries the access token follows the same redirect rules as the exchange.
+ */
+export const secureOAuthRequest = Effect.fn("McpOAuth.secureFetch")(function* (
   input: Parameters<FetchLike>[0],
   init: Parameters<FetchLike>[1],
   signal?: AbortSignal,

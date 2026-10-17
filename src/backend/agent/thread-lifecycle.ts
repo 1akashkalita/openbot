@@ -100,6 +100,13 @@ export interface ThreadLifecycleOptions {
   mcpToolRuntimes?: McpToolRuntimeSource;
   mcpAuthorization?: McpAuthorizationSource;
   /**
+   * The `McpOAuthProxy` addresses that the configurations are handed off through, with a digest of
+   * the proxy secret. Codex keeps the configuration of a resumed session, so the tool fingerprint
+   * holds them: a session that holds a stored token, or an old proxy address, starts again with its
+   * history.
+   */
+  mcpProxyRoutes?: (configs: readonly McpServerConfig[]) => readonly string[];
+  /**
    * Variables for the commands a Codex agent runs, such as the paths that point `gh` and `git` at
    * the built-in GitHub connection. Claude and the ACP clients read the same source at spawn.
    */
@@ -131,6 +138,7 @@ export class ThreadLifecycle {
   readonly #mcpServers: McpServerSource;
   readonly #mcpToolRuntimes: McpToolRuntimeSource | undefined;
   readonly #mcpAuthorization: McpAuthorizationSource | undefined;
+  readonly #mcpProxyRoutes: (configs: readonly McpServerConfig[]) => readonly string[];
   readonly #agentEnvironment: () => Readonly<Record<string, string>>;
   readonly #passwordVaultConnected: () => boolean;
   readonly #sectionTeammates: (agentId: string) => SectionTeammates | null;
@@ -156,6 +164,7 @@ export class ThreadLifecycle {
     this.#mcpServers = options.mcpServers ?? (() => []);
     this.#mcpToolRuntimes = options.mcpToolRuntimes;
     this.#mcpAuthorization = options.mcpAuthorization;
+    this.#mcpProxyRoutes = options.mcpProxyRoutes ?? (() => []);
     this.#agentEnvironment = options.agentEnvironment ?? (() => ({}));
     this.#passwordVaultConnected = options.passwordVaultConnected ?? (() => false);
     this.#sectionTeammates = options.sectionTeammates ?? (() => null);
@@ -656,6 +665,11 @@ export class ThreadLifecycle {
    * their sorted ids go in, so a reorder or a rename in the section does not drop the history of
    * each agent in it; a member who joins or leaves does. An agent with no section adds no value and
    * keeps its fingerprint.
+   *
+   * The `McpOAuthProxy` routes go in for the same reason as the MCP set: they are the address and
+   * the bearer Codex was given. They are added only when there is one, in place of an adapter
+   * version bump, so only a session with a signed-in server that can renew starts again, and it
+   * keeps its history through the handoff. A sign-in, a sign-out and a new proxy port change them.
    */
   private toolFingerprint(
     agent: AgentSummary,
@@ -665,6 +679,7 @@ export class ThreadLifecycle {
     environment: Readonly<Record<string, string>>,
     section: SectionTeammates | null,
   ): string {
+    const proxyRoutes = this.#mcpProxyRoutes(configs);
     return createHash("sha256")
       .update(
         JSON.stringify([
@@ -689,6 +704,7 @@ export class ThreadLifecycle {
           ],
           ...(Object.keys(environment).length > 0 ? [Object.entries(environment).sort()] : []),
           ...(section ? [section.members.map((member) => member.id).sort()] : []),
+          ...(proxyRoutes.length > 0 ? [proxyRoutes] : []),
         ]),
       )
       .digest("hex");

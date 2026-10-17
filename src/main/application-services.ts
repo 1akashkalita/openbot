@@ -182,6 +182,7 @@ import {
 } from "./main-window";
 import { ManagedSkillService } from "./managed-skill-service";
 import { McpHostSignIns } from "./mcp-host-sign-ins";
+import { startMcpOAuthProxy } from "./mcp-oauth-proxy-settings";
 import {
   MCP_OAUTH_REDIRECT_PATH,
   MCP_OAUTH_REDIRECT_PORT,
@@ -294,6 +295,8 @@ const MESSAGING_CREDENTIAL_FILE = "openbot-messaging-credentials-v1.json";
 const INGRESS_QUEUE_KEY_FILE = "openbot-ingress-queue-key-v1.json";
 /** The MCP sign-ins. Separate from the keys above: a key is typed by the user, a token is not. */
 const MCP_OAUTH_FILE = "openbot-mcp-oauth-v1.json";
+/** The port and the secret of the MCP sign-in proxy, with the same cipher as the MCP sign-ins. */
+const MCP_OAUTH_PROXY_FILE = "openbot-mcp-oauth-proxy-v1.json";
 /** The one GitHub sign-in of this computer, with the same cipher as the MCP sign-ins. */
 const GITHUB_CONNECTOR_FILE = "openbot-github-connector-v1.json";
 /** The 1Password service account token of this computer, with the same cipher. */
@@ -364,6 +367,8 @@ const TEARDOWN_ORDER = {
   automation: 108,
   storageUsage: 109,
   service: 110,
+  // After the agent service, so no provider loses its MCP connection while its turn ends.
+  mcpOAuthProxy: 110.5,
   mcpOAuth: 111,
   analytics: 112,
   // After all account consumers have stopped.
@@ -1154,6 +1159,17 @@ export async function createApplicationServices({
   mcpOAuthAuthority = mcpOAuth;
   teardown.push(TEARDOWN_ORDER.mcpOAuth, "MCP token refresh", () => Effect.runPromise(mcpOAuth.close()));
   /*
+   * The loopback address through which agents reach the MCP servers they are signed in to. It adds
+   * the current token to each request, so a session that runs past the token's lifetime keeps its
+   * tools. `null` when it cannot listen: agents then get the stored token, as before.
+   */
+  const mcpOAuthProxy = await Effect.runPromise(
+    startMcpOAuthProxy(join(app.getPath("userData"), MCP_OAUTH_PROXY_FILE), secretCipher, mcpOAuth),
+  );
+  if (mcpOAuthProxy) {
+    teardown.push(TEARDOWN_ORDER.mcpOAuthProxy, "the MCP sign-in proxy", () => Effect.runPromise(mcpOAuthProxy.stop()));
+  }
+  /*
    * The built-in GitHub connection. Loaded before the agent service, because the first spawn reads
    * its MCP server and its `gh` and `git` files. An unreadable file is logged by the service and
    * treated as no sign-in.
@@ -1399,6 +1415,8 @@ export async function createApplicationServices({
       // The bearer token for an http server, minted here and spent by the provider process. The
       // service asks for one at each hand-off; only a test the user pressed may open a browser.
       mcpOAuth,
+      // Each request to a signed-in server that can renew goes through it; see `McpOAuthProxy`.
+      ...(mcpOAuthProxy ? { mcpOAuthProxy } : {}),
       providerStateDirectory: join(app.getPath("userData"), "provider-state"),
       ...(process.platform === "win32" ? { providerTempDirectory } : {}),
       // The GitHub entries are paths only: `gh` and `git` read the token from the files the connection

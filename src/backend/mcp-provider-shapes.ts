@@ -47,14 +47,26 @@ export const NO_MCP_TOOL_RUNTIMES: McpToolRuntimes = { binDirectories: [], comma
 export type McpToolRuntimeSource = () => McpToolRuntimes;
 
 /**
- * The bearer token for an http server this machine has signed in to, or `null` for every other one.
+ * What an http server this machine has signed in to is handed: the bearer for its `Authorization`
+ * header, and the address to use when it is not the row's own. `url` is set when the server is
+ * reached through `McpOAuthProxy`; `bearer` is then the proxy's secret, not the access token.
+ */
+export interface McpHandoffAuthorization {
+  bearer: string;
+  url?: string;
+}
+
+/**
+ * The hand-off of an http server this machine has signed in to, or `null` for every other one.
  *
  * Read at each spawn and never stored on the row: the token is OpenBot's to refresh, and a value in
  * the configuration would be a credential the panel shows, the Team API carries and a user edits.
  * Asked per configuration rather than per URL, so a listing that grows a second way in can answer
  * differently without this signature moving.
  */
-export type McpAuthorizationSource = (config: McpServerConfig) => Effect.Effect<string | null, McpOperationError>;
+export type McpAuthorizationSource = (
+  config: McpServerConfig,
+) => Effect.Effect<McpHandoffAuthorization | null, McpOperationError>;
 
 /**
  * Why an enabled configuration was not given to a provider.
@@ -111,6 +123,8 @@ export type UsableMcpServer =
       path: string | null;
       /** The bearer token OpenBot holds for this server, added at hand-off. `null` for all others. */
       authorization: string | null;
+      /** The address a provider uses instead of `config.url`, or `null` for the row's own. */
+      endpoint: string | null;
       error?: undefined;
       reason?: undefined;
     }
@@ -120,6 +134,7 @@ export type UsableMcpServer =
       workingDirectory?: undefined;
       path?: undefined;
       authorization?: undefined;
+      endpoint?: undefined;
       error: string;
       /** Machine-readable beside the sentence, so a reporter never has to match on the wording. */
       reason: Exclude<McpDropReason, "working_directory_unsupported" | "name_conflict">;
@@ -172,14 +187,16 @@ export const usableMcpServer = Effect.fnUntraced(function* (
   // An http server starts no process, so it needs neither a command nor a `PATH`. It is the only
   // kind that can carry a sign-in, because a token travels in a header.
   if (config.transport !== "stdio") {
+    const handoff = authorization
+      ? yield* authorization(config).pipe(Effect.mapError(({ cause }) => new McpShapeFailed({ cause })))
+      : null;
     return {
       config,
       command: "",
       workingDirectory: "",
       path: null,
-      authorization: authorization
-        ? yield* authorization(config).pipe(Effect.mapError(({ cause }) => new McpShapeFailed({ cause })))
-        : null,
+      authorization: handoff?.bearer ?? null,
+      endpoint: handoff?.url ?? null,
     };
   }
   // A `PATH` the configuration carries is the one the server runs with, so it is the one the command
@@ -200,6 +217,7 @@ export const usableMcpServer = Effect.fnUntraced(function* (
     workingDirectory: expandHomePath(config.workingDirectory),
     path,
     authorization: null,
+    endpoint: null,
   };
 });
 
@@ -466,7 +484,7 @@ export function claudeMcpServers(servers: readonly UsableMcpServer[]): McpHandof
             env: mcpLaunchEnvironment(server),
             ...(server.workingDirectory ? { cwd: server.workingDirectory } : {}),
           }
-        : { type: "http", url: config.url, headers: mcpHandoffHeaders(server) };
+        : { type: "http", url: mcpHandoffUrl(server), headers: mcpHandoffHeaders(server) };
   }
   return { servers: record, dropped };
 }
@@ -512,7 +530,7 @@ export function acpMcpServers(servers: readonly UsableMcpServer[]): McpHandoff<A
       entries.push({
         type: "http",
         name: config.name,
-        url: config.url,
+        url: mcpHandoffUrl(server),
         headers: Object.entries(mcpHandoffHeaders(server)).map(([name, value]) => ({ name, value })),
       });
     }
@@ -597,7 +615,7 @@ export function codexMcpServers(servers: readonly UsableMcpServer[]): McpHandoff
       };
     } else {
       record[name] = {
-        url: server.config.url,
+        url: mcpHandoffUrl(server),
         http_headers: mcpHandoffHeaders(server),
       };
     }
@@ -655,9 +673,19 @@ function secretDigest(config: McpServerConfig): string {
  */
 export function mcpHandoffHeaders(server: ResolvedMcpServer): Record<string, string> {
   const headers = Object.fromEntries(server.config.headers.map((pair) => [pair.key, pair.value]));
-  const named = Object.keys(headers).some((key) => key.toLowerCase() === "authorization");
-  if (server.authorization && !named) headers.Authorization = `Bearer ${server.authorization}`;
+  if (server.authorization && !mcpNamesAuthorization(server.config))
+    headers.Authorization = `Bearer ${server.authorization}`;
   return headers;
+}
+
+/** Whether the user typed an `Authorization` header for this server. That header then wins. */
+export function mcpNamesAuthorization(config: McpServerConfig): boolean {
+  return config.headers.some((pair) => pair.key.toLowerCase() === "authorization");
+}
+
+/** The address one http server is handed: the loopback proxy for a signed-in server, else its own. */
+export function mcpHandoffUrl(server: ResolvedMcpServer): string {
+  return server.endpoint ?? server.config.url;
 }
 
 export class McpShapeFailed extends Schema.TaggedError<McpShapeFailed>()("McpShapeFailed", {
