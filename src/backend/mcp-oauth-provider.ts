@@ -217,6 +217,8 @@ export type McpSignInOpener = (url: string) => Promise<void>;
 
 export interface McpOAuthAuthority {
   accessToken: (url: string) => Effect.Effect<string | null, McpOperationError>;
+  /** A new token after the server refused `rejected`, or `null`. See `McpOAuth.refreshAccessToken`. */
+  refreshAccessToken: (url: string, rejected: string) => Effect.Effect<string | null, McpOperationError>;
   signIn: (url: string, open?: McpSignInOpener) => McpSignIn | null;
   /** Ends the sign-in waiting for this URL's browser, if one is. Answers whether one was. */
   cancelSignIn: (url: string) => boolean;
@@ -224,6 +226,8 @@ export interface McpOAuthAuthority {
   signedIn: (url: string) => boolean;
   /** Whether the server refused the stored sign-in, so the user must sign in again. */
   needsSignIn: (url: string) => boolean;
+  /** Whether this computer keeps a sign-in for this URL: current, expired, or ended by the server. */
+  hasSignIn: (url: string) => boolean;
   /** Drops the tokens and keeps the sign-in app, so the next sign-in uses the same app. */
   signOut: (url: string) => Effect.Effect<void, McpOperationError>;
   /** Drops everything kept for this URL, the sign-in app included. Used when the row is removed. */
@@ -296,6 +300,35 @@ export class McpOAuth implements McpOAuthAuthority {
     if (!credentialIssuer(stored.tokens, stored)) return fallback;
     yield* this.#refresh(resource);
     return yield* mcpSync(() => this.#options.storage.read(resource)?.tokens?.access_token ?? null);
+  }).bind(this);
+
+  /**
+   * A new bearer token after the server refused `rejected` with a 401, or `null` when there is none.
+   *
+   * The proxy asks this during a session, when the token can be refused before it expires. A
+   * request that arrives after another one already got a new token reads that token and does not
+   * spend the refresh token again. A token that has no refresh token cannot be renewed, so the
+   * refusal ends the sign-in and the row asks for a new one.
+   */
+  readonly refreshAccessToken = Effect.fn("McpOAuth.refreshAccessToken")(function* (
+    this: McpOAuth,
+    url: string,
+    rejected: string,
+  ): Effect.fn.Return<string | null, McpOperationError> {
+    const resource = normalizeResource(url);
+    if (!resource) return null;
+    const stored = yield* mcpSync(() => this.#options.storage.read(resource));
+    if (!stored?.tokens) return null;
+    if (stored.tokens.access_token !== rejected) return stored.tokens.access_token;
+    if (!stored.tokens.refresh_token) {
+      const { tokens: _tokens, obtainedAt: _obtainedAt, ...kept } = stored;
+      yield* this.#options.storage.write(resource, { ...kept, lostAt: Date.now() });
+      return null;
+    }
+    if (!credentialIssuer(stored.tokens, stored)) return null;
+    yield* this.#refresh(resource);
+    const next = yield* mcpSync(() => this.#options.storage.read(resource)?.tokens?.access_token ?? null);
+    return next === rejected ? null : next;
   }).bind(this);
 
   /**
@@ -503,6 +536,12 @@ export class McpOAuth implements McpOAuthAuthority {
     const resource = normalizeResource(url);
     const record = resource === null ? undefined : this.#options.storage.read(resource);
     return record?.lostAt !== undefined && !record.tokens;
+  }
+
+  hasSignIn(url: string): boolean {
+    const resource = normalizeResource(url);
+    const record = resource === null ? undefined : this.#options.storage.read(resource);
+    return record?.tokens !== undefined || record?.lostAt !== undefined;
   }
 
   get redirectUrl(): string {
