@@ -604,11 +604,10 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
           ),
         onProviderLost: (client) => {
           this.#boot.orphanDeliveriesOf(client.provider, (agentId) => this.#providers.runsOnOwnProcess(agentId));
-          this.#compaction.dispose();
+          this.#compaction.clientEnded(client);
           this.#attention.clearPrompts(client);
           this.#attention.clearBrowserTakeovers(client);
           this.#attention.clearApprovals(client);
-          this.#browser.clearControls();
           Effect.runFork(
             this.#turn
               .interruptTurnsOf(client, { keepRecoverable: true })
