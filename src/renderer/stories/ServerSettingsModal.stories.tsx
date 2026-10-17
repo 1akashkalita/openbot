@@ -3,6 +3,7 @@ import type {
   HostStatus,
   HostUpdateStatus,
   McpServerConfig,
+  McpSignInState,
   McpTestResult,
 } from "@openbot/contracts/ipc";
 import { sourceText } from "@openbot/i18n/source";
@@ -204,7 +205,7 @@ export const RemoteMcpSignIn: Story = {
     initialSection: "mcp",
     mcpServers: REMOTE_MCP_SERVERS,
   },
-  render: (args) => <RemoteMcpStory settings={args} />,
+  render: (args) => <McpSignInStory settings={args} />,
 };
 
 export const RemoteMcpMember: Story = {
@@ -215,11 +216,32 @@ export const RemoteMcpMember: Story = {
     initialSection: "mcp",
     mcpServers: REMOTE_MCP_SERVERS,
   },
-  render: (args) => <RemoteMcpStory settings={args} />,
+  render: (args) => <McpSignInStory settings={args} />,
 };
 
-function RemoteMcpStory(props: { settings: ServerSettingsModalProps }) {
-  const [signedIn, setSignedIn] = createStore<Record<string, boolean>>({ "mcp-linear": true });
+/**
+ * This computer's MCP list after Granola refused its saved sign-in. The row asks for a new sign-in
+ * with no test, and Sign in finishes at once. A joined host never reports a lost sign-in.
+ */
+export const LocalMcpSignInNeeded: Story = {
+  args: {
+    initialSection: "mcp",
+    mcpServers: REMOTE_MCP_SERVERS,
+  },
+  render: (args) => (
+    <McpSignInStory
+      settings={args}
+      initial={{ "mcp-granola": { mcpServerId: "mcp-granola", signedIn: false, needsSignIn: true } }}
+    />
+  ),
+};
+
+function McpSignInStory(props: { settings: ServerSettingsModalProps; initial?: Record<string, McpSignInState> }) {
+  const [states, setStates] = createStore<Record<string, McpSignInState>>({
+    "mcp-linear": { mcpServerId: "mcp-linear", signedIn: true },
+    ...props.initial,
+  });
+  const local = props.settings.server.kind === "local";
   const host = createSignInHost();
   const waiting = new Map<string, (result: McpTestResult) => void>();
   const finish = (url: string, result: McpTestResult) => {
@@ -228,27 +250,32 @@ function RemoteMcpStory(props: { settings: ServerSettingsModalProps }) {
     waiting.delete(url);
   };
   const signIn: McpPanelSignIn = {
-    signedIn,
-    remote: { hostName: props.settings.server.name, runtime: host.runtime, clipboard: true, pages: host.pages },
+    states,
+    ...(local
+      ? {}
+      : {
+          remote: { hostName: props.settings.server.name, runtime: host.runtime, clipboard: true, pages: host.pages },
+        }),
     start: (config) =>
       new Promise((resolve) => {
         waiting.set(config.url, (result) => {
           if (!result.error)
-            setSignedIn((current) => {
-              current[config.id] = true;
+            setStates((current) => {
+              current[config.id] = { mcpServerId: config.id, signedIn: true };
             });
           resolve(result);
         });
-        host.open(config.url, config.name, () => finish(config.url, { toolCount: 6, error: null }));
+        if (local) finish(config.url, { toolCount: 6, error: null });
+        else host.open(config.url, config.name, () => finish(config.url, { toolCount: 6, error: null }));
       }),
     cancel: async (url) => finish(url, { toolCount: 0, error: sourceText("error.backend.mcpSignInCancelled") }),
     signOut: async (id) =>
-      setSignedIn((current) => {
+      setStates((current) => {
         delete current[id];
       }),
   };
   const test = async (config: McpServerConfig): Promise<McpTestResult> => {
-    if (config.transport === "http" && !signedIn[config.id])
+    if (config.transport === "http" && !states[config.id]?.signedIn)
       return { toolCount: 0, error: sourceText("error.backend.mcpSignInRequired") };
     return { toolCount: 6, error: null };
   };
