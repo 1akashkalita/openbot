@@ -1429,15 +1429,26 @@ export async function createApplicationServices({
     tables,
   });
   teardown.push(TEARDOWN_ORDER.service, "the agent service", () => runCauseEffect(service.stop()));
+  /** The answer an agent gave in one turn, for routine flows, routine results and local scripts. */
+  const turnAnswer = (agentId: string, turnId: string): string | null => {
+    const threadId = store.list().find((agent) => agent.id === agentId)?.threadId;
+    if (!threadId) return null;
+    return latestTurnAnswer(store.database.readTurnAssistantMessages(agentId, threadId, turnId), turnId)?.text ?? null;
+  };
   // Listens only while an agent allows local scripts; see `AutomationServer`.
   const automation = new AutomationServer({
     root: store.automationRoot,
     listAgents: () => service.listAgents(),
+    listModels: () => service.listModels(),
     listRoutines: (agentId) => service.listRoutines(agentId),
     runRoutine: (input) => service.runRoutineFromAutomation(input),
     sendMessage: (input) => service.sendMessage(input),
     getLocalAttention: (agentId) => service.getLocalAttention(agentId),
     respondToLocalAttention: (agentId, input) => service.respondToLocalAttention(agentId, input),
+    delivery: (deliveryId) => mailbox.getDelivery(deliveryId)?.delivery ?? null,
+    turnAnswer,
+    updateAgent: (input) => service.updateAgent(input),
+    clearAgentContext: (agentId) => service.clearAgentContext(agentId),
   });
   service.on("event", (event) => {
     if (event.type === "agents-changed") Effect.runFork(automation.requestSync());
@@ -1452,13 +1463,7 @@ export async function createApplicationServices({
         const found = mailbox.getDelivery(deliveryId)?.delivery;
         return found ? { status: found.status, turnId: found.turnId, error: found.error } : null;
       },
-      turnAnswer: (agentId, turnId) => {
-        const threadId = store.list().find((agent) => agent.id === agentId)?.threadId;
-        if (!threadId) return null;
-        return (
-          latestTurnAnswer(store.database.readTurnAssistantMessages(agentId, threadId, turnId), turnId)?.text ?? null
-        );
-      },
+      turnAnswer,
       agentName: (agentId) => store.list().find((agent) => agent.id === agentId)?.name ?? agentId,
       sendHandoff: (input) => service.enqueueRoutineHandoff(input),
       // An agent event, so this window, joined clients and the web app hear it the same way.
@@ -1476,13 +1481,7 @@ export async function createApplicationServices({
         const found = mailbox.getDelivery(deliveryId)?.delivery;
         return found ? { turnId: found.turnId } : null;
       },
-      turnAnswer: (agentId, turnId) => {
-        const threadId = store.list().find((agent) => agent.id === agentId)?.threadId;
-        if (!threadId) return null;
-        return (
-          latestTurnAnswer(store.database.readTurnAssistantMessages(agentId, threadId, turnId), turnId)?.text ?? null
-        );
-      },
+      turnAnswer,
       connection: (connectionId) => {
         const record = service.messaging.store.connection(connectionId);
         return record?.enabled ? { platform: record.platform, name: record.workspaceName } : null;
