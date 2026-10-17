@@ -1,5 +1,7 @@
 import type { BrowserControlSession, BrowserPreview, BrowserTab } from "@openbot/contracts/ipc";
 import { TEAM_BROWSER_NAVIGATION_CAPABILITY } from "@openbot/contracts/team-protocol/current";
+import type { AgentProfile } from "@openbot/ui/data";
+import { browserAddressUrl } from "@openbot/ui/features/browser/browser-suggestions";
 import { currentText } from "@openbot/ui/text";
 import { createEffect, createMemo, createSignal, untrack } from "solid-js";
 import { desktopAnalytics } from "../../../analytics";
@@ -28,24 +30,6 @@ function canonicalBrowserUrl(url: string): string {
   }
 }
 
-function browserAddressUrl(value: string): string {
-  const hasProtocol = /^https?:\/\//i.test(value);
-  const candidate = hasProtocol ? value : `https://${value}`;
-  try {
-    const url = new URL(candidate);
-    if (
-      !/\s/.test(value) &&
-      (hasProtocol || url.hostname.includes(".") || url.hostname === "localhost" || url.hostname.startsWith("["))
-    ) {
-      return candidate;
-    }
-  } catch {
-    // Text that is not a web address is a search query.
-  }
-  const query = value.replace(/^https?:\/\//i, "");
-  return `https://www.google.com/search?q=${encodeURIComponent(query)}`;
-}
-
 interface BrowserPanels {
   activeRightPanel: () => RightPanelMode;
   setActiveRightPanel: (mode: RightPanelMode) => void;
@@ -56,7 +40,7 @@ export interface BrowserStoreDeps {
   browserOpenRequests: Map<
     string,
     {
-      promise: Promise<void>;
+      promise: Promise<BrowserTab | undefined>;
       serverId: string;
       agentId: string | null;
       url: string;
@@ -65,7 +49,6 @@ export interface BrowserStoreDeps {
   >;
   browserAddress: () => string;
   setBrowserAddress: (address: string) => void;
-  setBrowserAddressEditing: (editing: boolean) => void;
   /** `cause` is the failure behind `error`. The banner shows its code. */
   setComposerError: (error: string | null, targetOverride?: ConversationTarget, cause?: unknown) => void;
   panels: BrowserPanels;
@@ -79,19 +62,21 @@ export function createBrowserStore(deps: BrowserStoreDeps) {
     browserInteractionAvailable() && deps.panels.activeRightPanel() === "browser-expanded";
   const browserPipOpen = () => browserInteractionAvailable() && deps.panels.activeRightPanel() === "browser-pip";
   const screenOpen = () => browserSidebarOpen() || browserExpandedOpen() || browserPipOpen();
+  /** All tabs of the server. The full view lists them; the side panel lists only the agent's. */
+  const allBrowserTabs = createMemo(() => (deps.props.browserEnabled === false ? [] : deps.props.browserTabs));
+  const ownsTab = (agent: Pick<AgentProfile, "id" | "threadId">, tab: BrowserTab) =>
+    tab.ownerAgentId ? tab.ownerAgentId === agent.id : Boolean(agent.threadId && tab.ownerThreadId === agent.threadId);
+  const tabsOwnedBy = (agent: Pick<AgentProfile, "id" | "threadId">) =>
+    allBrowserTabs().filter((tab) => ownsTab(agent, tab));
+  /** The agent of a tab. A tab of an old agent run has only the thread. */
+  const browserTabOwner = (tab: BrowserTab) => deps.props.agents.find((agent) => ownsTab(agent, tab));
   const browserTabs = createMemo(() => {
-    if (deps.props.browserEnabled === false) return [];
     const agent = deps.props.agent;
-    if (!agent) return [];
-    return deps.props.browserTabs.filter((tab) =>
-      tab.ownerAgentId
-        ? tab.ownerAgentId === agent.id
-        : Boolean(agent.threadId && tab.ownerThreadId === agent.threadId),
-    );
+    return agent ? tabsOwnedBy(agent) : [];
   });
   const closingBrowserTabIds = new Set<string>();
   createEffect(
-    () => new Set(browserTabs().map((tab) => tab.id)),
+    () => new Set(allBrowserTabs().map((tab) => tab.id)),
     (visibleTabIds) => {
       for (const tabId of closingBrowserTabIds) {
         if (!visibleTabIds.has(tabId)) closingBrowserTabIds.delete(tabId);
@@ -281,11 +266,11 @@ export function createBrowserStore(deps: BrowserStoreDeps) {
     return control ? agentsByThreadId().get(control.threadId) : undefined;
   };
 
-  async function openBrowserAddress(address = deps.browserAddress(), newTab = false) {
+  /** Opens the address in the shown tab, or in a new tab. Resolves with the new tab, if one opened. */
+  async function openBrowserAddress(address = deps.browserAddress(), newTab = false): Promise<BrowserTab | undefined> {
     if (!browserInteractionAvailable()) return;
     const value = address.trim();
     if (!value) return;
-    deps.setBrowserAddressEditing(false);
     const targetAgentId = deps.props.agent?.id;
     const target = targetAgentId ? { agentId: targetAgentId, serverId: deps.props.server?.id ?? "local" } : undefined;
     const analytics = desktopAnalytics.scope();
@@ -319,6 +304,7 @@ export function createBrowserStore(deps: BrowserStoreDeps) {
         });
         deps.setBrowserAddress(tab.url);
         analytics.track("browser_action", { action: "open", result: "succeeded" });
+        return tab;
       } catch {
         deps.setBrowserAddress(url);
         analytics.track("browser_action", {
@@ -326,6 +312,7 @@ export function createBrowserStore(deps: BrowserStoreDeps) {
           result: "failed",
           failure_code: "browser_open_failed",
         });
+        return undefined;
       }
     })();
     const pendingRequestState = {
@@ -337,7 +324,7 @@ export function createBrowserStore(deps: BrowserStoreDeps) {
     };
     deps.browserOpenRequests.set(requestKey, pendingRequestState);
     try {
-      await request;
+      return await request;
     } finally {
       if (deps.browserOpenRequests.get(requestKey) === pendingRequestState) {
         deps.browserOpenRequests.delete(requestKey);
@@ -349,7 +336,7 @@ export function createBrowserStore(deps: BrowserStoreDeps) {
     if (
       !browserInteractionAvailable() ||
       closingBrowserTabIds.has(tabId) ||
-      !browserTabs().some((tab) => tab.id === tabId)
+      !allBrowserTabs().some((tab) => tab.id === tabId)
     ) {
       return;
     }
@@ -376,6 +363,18 @@ export function createBrowserStore(deps: BrowserStoreDeps) {
     deps.props.onActivateBrowserTab(tabId);
   }
 
+  /**
+   * Makes the tab the one that its owner shows. The conversation of the owner then activates it when it
+   * opens, so the switch to the owner's chat does not bring back the tab that the owner showed last.
+   */
+  function showBrowserTabOf(agent: Pick<AgentProfile, "id" | "threadId">, tabId: string) {
+    if (!browserInteractionAvailable() || closingBrowserTabIds.has(tabId)) return false;
+    const index = tabsOwnedBy(agent).findIndex((tab) => tab.id === tabId);
+    if (index < 0) return false;
+    lastShownTabs.set(agent.id, { id: tabId, index });
+    return true;
+  }
+
   async function reloadBrowserTab(tabId: string) {
     if (
       !browserInteractionAvailable() ||
@@ -400,6 +399,23 @@ export function createBrowserStore(deps: BrowserStoreDeps) {
     }
   }
 
+  async function stopBrowserTab(tabId: string) {
+    if (
+      !browserInteractionAvailable() ||
+      closingBrowserTabIds.has(tabId) ||
+      !browserTabs().some((tab) => tab.id === tabId)
+    ) {
+      return;
+    }
+    const agentId = deps.props.agent?.id;
+    const target = agentId ? { agentId, serverId: deps.props.server?.id ?? "local" } : undefined;
+    try {
+      await conversationRuntime(deps.props).browser.stop(tabId);
+    } catch (error) {
+      deps.setComposerError(currentText().t("browser.error.stopLoading"), target, error);
+    }
+  }
+
   async function navigateBrowserTab(tabId: string, direction: "back" | "forward") {
     if (
       !browserInteractionAvailable() ||
@@ -421,12 +437,62 @@ export function createBrowserStore(deps: BrowserStoreDeps) {
     }
   }
 
+  /** The tabs that the user took in this view. Only the full view shows the control that gives them back. */
+  const takenBrowserTabIds = new Set<string>();
+
+  /** The owning agent's browser calls on this tab wait until the release. */
+  async function takeBrowserControl(tabId: string) {
+    if (await setBrowserControl(tabId, "take")) takenBrowserTabIds.add(tabId);
+  }
+
+  async function releaseBrowserControl(tabId: string) {
+    if (await setBrowserControl(tabId, "release")) takenBrowserTabIds.delete(tabId);
+  }
+
+  // The user leaves the full view: the agents get their pages back, so no tab waits with no control in sight.
+  let fullViewWasOpen = false;
+  createEffect(browserExpandedOpen, (open) => {
+    const closed = fullViewWasOpen && !open;
+    fullViewWasOpen = open;
+    if (!closed) return;
+    const held = new Set(untrack(allBrowserTabs).flatMap((tab) => (tab.userControl ? [tab.id] : [])));
+    for (const tabId of [...takenBrowserTabIds]) {
+      if (held.has(tabId)) void releaseBrowserControl(tabId);
+      else takenBrowserTabIds.delete(tabId);
+    }
+  });
+
+  /** Whether the host took the request. */
+  async function setBrowserControl(tabId: string, action: "take" | "release"): Promise<boolean> {
+    // The user gives back a tab of any agent; the user takes only a tab of this agent.
+    const tabs = action === "take" ? browserTabs() : allBrowserTabs();
+    if (!browserInteractionAvailable() || closingBrowserTabIds.has(tabId) || !tabs.some((tab) => tab.id === tabId)) {
+      return false;
+    }
+    const agentId = deps.props.agent?.id;
+    const target = agentId ? { agentId, serverId: deps.props.server?.id ?? "local" } : undefined;
+    const browser = conversationRuntime(deps.props).browser;
+    try {
+      if (action === "take") await browser.takeControl(tabId);
+      else await browser.releaseControl(tabId);
+      return true;
+    } catch (error) {
+      deps.setComposerError(
+        currentText().t(action === "take" ? "browser.error.takeControl" : "browser.error.releaseControl"),
+        target,
+        error,
+      );
+      return false;
+    }
+  }
+
   return {
     browserInteractionAvailable,
     browserSidebarOpen,
     browserExpandedOpen,
     browserPipOpen,
     screenOpen,
+    allBrowserTabs,
     browserTabs,
     activeBrowserTab,
     browserTakeoverTab,
@@ -442,7 +508,12 @@ export function createBrowserStore(deps: BrowserStoreDeps) {
     openBrowserAddress,
     closeBrowserTab,
     activateBrowserTab,
+    showBrowserTabOf,
+    browserTabOwner,
     reloadBrowserTab,
+    stopBrowserTab,
     navigateBrowserTab,
+    takeBrowserControl,
+    releaseBrowserControl,
   };
 }

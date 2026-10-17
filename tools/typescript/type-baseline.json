@@ -68,7 +68,6 @@
     "src/main/session-configuration.ts": 1,
     "src/main/team-webrtc-bridge.ts": 3,
     "src/renderer/stories/App.stories.tsx": 2,
-    "src/renderer/stories/BrowserSecretCard.stories.tsx": 1,
     "src/renderer/stories/ChatPrimitives.stories.tsx": 1,
     "src/renderer/stories/ComputerUsePermissionHelp.stories.tsx": 1,
     "src/renderer/stories/Conversation.stories.tsx": 1,

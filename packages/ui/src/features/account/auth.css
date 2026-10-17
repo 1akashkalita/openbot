@@ -1345,8 +1345,6 @@ body,
 
 .panel-edge,
 .direct-conversation-header,
-.browser-panel-header,
-.browser-toolbar,
 .remote-desktop-header,
 .settings-panel,
 .browser-panel,
@@ -1356,7 +1354,6 @@ body,
 }
 
 .search-field,
-.browser-address-bar input,
 .composer,
 .direct-composer,
 .settings-field input,
@@ -1371,7 +1368,6 @@ body,
 }
 
 .search-field:focus-within,
-.browser-address-bar input:focus,
 .composer:focus-within,
 .direct-composer:focus-within,
 .settings-field input:focus,
@@ -1385,7 +1381,6 @@ body,
 }
 
 .search-field input::placeholder,
-.browser-address-bar input::placeholder,
 .composer-editor-placeholder,
 .direct-composer textarea::placeholder,
 .settings-field input::placeholder,
@@ -1397,8 +1392,7 @@ body,
 }
 
 .provider-picker-option-selected,
-.provider-model-option-selected,
-.browser-tab-controlled .browser-tab {
+.provider-model-option-selected {
   border-color: var(--openbot-border-focus);
   background: var(--openbot-accent-soft);
   color: var(--openbot-text-primary);

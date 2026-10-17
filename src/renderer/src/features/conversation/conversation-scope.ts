@@ -106,8 +106,6 @@ export function createConversationViewScope(props: ConversationProps) {
     setSettingsReasoning,
     browserAddress,
     setBrowserAddress,
-    browserAddressEditing,
-    setBrowserAddressEditing,
     browserPipBounds,
     setBrowserPipBounds,
     sidebarFilePreview,
@@ -314,7 +312,6 @@ export function createConversationViewScope(props: ConversationProps) {
     browserOpenRequests: resources.browserOpenRequests,
     browserAddress,
     setBrowserAddress,
-    setBrowserAddressEditing,
     setComposerError: setScopedComposerError,
     panels: { activeRightPanel, setActiveRightPanel },
   });
@@ -323,6 +320,7 @@ export function createConversationViewScope(props: ConversationProps) {
     browserExpandedOpen,
     browserPipOpen,
     screenOpen,
+    allBrowserTabs,
     browserTabs,
     activeBrowserTab,
     browserTakeoverTab,
@@ -338,8 +336,13 @@ export function createConversationViewScope(props: ConversationProps) {
     openBrowserAddress,
     closeBrowserTab,
     activateBrowserTab,
+    showBrowserTabOf,
+    browserTabOwner,
     reloadBrowserTab,
+    stopBrowserTab,
     navigateBrowserTab,
+    takeBrowserControl,
+    releaseBrowserControl,
   } = browser;
   function showBrowserPanel() {
     setActiveRightPanel("browser");
@@ -1025,15 +1028,14 @@ export function createConversationViewScope(props: ConversationProps) {
     () => ({
       agentId: props.agent?.id,
       activeTab: activeBrowserTab(),
-      addressEditing: browserAddressEditing(),
       screenOpen: screenOpen(),
       activeBrowserTabId: props.activeBrowserTabId,
       onActivateBrowserTab: activateBrowserTab,
       suspended: props.browserVisibilitySuspended,
     }),
-    ({ activeTab, addressEditing, screenOpen, activeBrowserTabId, onActivateBrowserTab, suspended }) => {
+    ({ activeTab, screenOpen, activeBrowserTabId, onActivateBrowserTab, suspended }) => {
       if (untrack(() => props.browserEnabled === false) || suspended) return;
-      if (!addressEditing) setBrowserAddress(activeTab?.url ?? "https://www.google.com");
+      setBrowserAddress(activeTab?.url ?? "https://www.google.com");
       if (screenOpen && activeTab && activeTab.id !== activeBrowserTabId) {
         onActivateBrowserTab(activeTab.id);
       }
@@ -1260,6 +1262,7 @@ export function createConversationViewScope(props: ConversationProps) {
     activeBrowserControl,
     actingBrowserControl,
     activeBrowserTab,
+    allBrowserTabs,
     browserTakeoverPreview,
     browserTakeoverResolution,
     browserTakeoverTab,
@@ -1271,6 +1274,8 @@ export function createConversationViewScope(props: ConversationProps) {
     providerUpdateRequired,
     agentActivitySpaceReserved,
     activateBrowserTab,
+    showBrowserTabOf,
+    browserTabOwner,
     attachmentAction,
     attachmentBusy,
     browserAddress,
@@ -1286,6 +1291,8 @@ export function createConversationViewScope(props: ConversationProps) {
     chatSearchQuery,
     chatSearchTotal,
     closeBrowserTab,
+    takeBrowserControl,
+    releaseBrowserControl,
     closeChatSearch,
     clearNewMessages,
     closeSidebarFilePreview,
@@ -1303,7 +1310,9 @@ export function createConversationViewScope(props: ConversationProps) {
     composerHasContent,
     copiedMessageId,
     copyMessage,
+    clearSubmittedDraft,
     currentDraft,
+    currentTarget,
     currentConversationError,
     installedSkills,
     installedSkillsLoadFailed,
@@ -1375,6 +1384,7 @@ export function createConversationViewScope(props: ConversationProps) {
     reactToMessage,
     navigateBrowserTab,
     reloadBrowserTab,
+    stopBrowserTab,
     removeAttachment,
     renderedAgentActivity,
     reorderPresentedQueue,
@@ -1394,7 +1404,6 @@ export function createConversationViewScope(props: ConversationProps) {
     openQuote,
     setActiveRightPanel,
     setBrowserAddress,
-    setBrowserAddressEditing,
     setBrowserPanelWidth,
     setChatSearchQuery,
     setComposerError: setScopedComposerError,

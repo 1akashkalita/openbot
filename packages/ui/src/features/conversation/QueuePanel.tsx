@@ -1,11 +1,11 @@
 import { expandChatTagReferences } from "@openbot/contracts/chat-tag-references";
-import type { InstalledSkill, QueueDelivery, QueueHold, QueueSteerFallback } from "@openbot/contracts/ipc";
+import type { QueueDelivery, QueueHold, QueueSteerFallback } from "@openbot/contracts/ipc";
 import type { AppTextKey } from "@openbot/i18n";
 import { Button, ConfirmDialog, LabelTooltip, LabelTooltipTrigger, Plus } from "@openbot/ui";
 import { prefersReducedMotion } from "@openbot/ui/utils";
 import { createEffect, createMemo, createSignal, For, onCleanup, Show, untrack } from "solid-js";
 import { createVerticalDragPreview } from "../../components/createVerticalDragPreview";
-import type { AgentProfile } from "../../data";
+import type { ComposerAgent, ComposerSkill } from "../../data";
 import { useText } from "../../text";
 import { fileBadge } from "./AttachmentCards";
 import { EditIcon, QueueIcon, SteerIcon, TrashIcon } from "./ConversationIcons";
@@ -15,9 +15,9 @@ interface QueuePanelProps {
   deliveries: QueueDelivery[];
   /** Why the queue is waiting, when the cause is not a turn this conversation can show. */
   hold?: QueueHold | null | undefined;
-  agents?: AgentProfile[];
-  skills?: InstalledSkill[];
-  editingDeliveryId?: string | null;
+  agents?: ComposerAgent[];
+  skills?: ComposerSkill[] | undefined;
+  editingDeliveryId?: string | null | undefined;
   canSteer: boolean;
   onSteer: (deliveryId: string) => void;
   /** Starts a separate task with a queued message. Absent where the host keeps no tasks. */
@@ -25,6 +25,8 @@ interface QueuePanelProps {
   onCancel: (deliveryId: string) => void;
   onEdit: (delivery: QueueDelivery) => void;
   onReorder: (deliveryIds: string[]) => void;
+  /** `floating` is the glass queue over a browser page, with quiet glass row actions. */
+  variant?: "docked" | "floating";
 }
 
 interface DragSlot {
@@ -378,6 +380,7 @@ export function QueuePanel(props: QueuePanelProps) {
             "agent-queue-panel-dragging": Boolean(draggedId()),
           },
         ]}
+        data-variant={props.variant ?? "docked"}
         aria-label={t("queue.label")}
         onDragOver={(event) => {
           if (!draggedId()) return;

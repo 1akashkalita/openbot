@@ -20,7 +20,17 @@ import {
   type MacPermissionId,
 } from "@openbot/contracts/ipc";
 import type { AppTranslate } from "@openbot/i18n";
-import { app, BrowserWindow, clipboard, type Display, Menu, type Point, type Rectangle, screen } from "electron";
+import {
+  app,
+  BrowserWindow,
+  clipboard,
+  type Display,
+  Menu,
+  type Point,
+  type Rectangle,
+  screen,
+  type WebContents,
+} from "electron";
 import type { AgentService } from "../backend/agent-service";
 import type { BrowserHost } from "../backend/browser-host";
 import {
@@ -176,6 +186,8 @@ export function createMainWindowController({
     });
     window.on("close", (event) => {
       rememberMainWindowBounds(window.getNormalBounds());
+      // Nobody can use a tab without the window, so the agents waiting on it continue.
+      getServices()?.browser.releaseUserControlHeldBy({ kind: "local" });
       if (process.platform === "darwin" && !isQuitting()) {
         // The hidden renderer owns the cross-host Dynamic Island coordinator and must outlive its visible window.
         event.preventDefault();
@@ -501,6 +513,13 @@ export function loadComputerUsePermissionHelpRenderer(
   url.searchParams.set("permission", permission);
   if (sunshine) url.searchParams.set("application", "sunshine");
   return window.loadURL(url.toString());
+}
+
+/** The dock over the page of the browser full view. It is a view in the main window, not a window. */
+export function loadBrowserDockRenderer(contents: WebContents): Promise<void> {
+  const url = helperRendererUrl(process.env.ELECTRON_RENDERER_URL);
+  url.searchParams.set("surface", "browser-dock");
+  return contents.loadURL(url.toString());
 }
 
 export function loadComputerUseHighlightRenderer(window: BrowserWindow): Promise<void> {

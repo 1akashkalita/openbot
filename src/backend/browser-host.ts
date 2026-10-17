@@ -33,8 +33,10 @@ import {
   type BrowserWindow,
   type BrowserWindowConstructorOptions,
   clipboard,
+  type Input,
   Menu,
   type NativeImage,
+  type Rectangle,
   type Session,
   session,
   type WebContents,
@@ -57,6 +59,7 @@ import {
   type BrowserHostTab,
   type BrowserPreviewPage,
   currentTabUrl,
+  hasHistoryEntry,
   type KeepQueueBlocked,
   restoreWebContentsFocus,
   toPublicTab,
@@ -78,6 +81,7 @@ import {
   type BrowserContextMenuItem,
   browserContextMenuItems,
   EDITABLE_FOCUS_SCRIPT,
+  isBrowserViewShortcut,
   isCloseBrowserTabShortcut,
   isCollapseBrowserShortcut,
   isGlobalSearchShortcut,
@@ -94,6 +98,8 @@ import {
   type StoredBrowserStateV2,
 } from "./browser-state";
 import {
+  BrowserToolHold,
+  BrowserUserControlHeld,
   boundEngineOperation,
   enqueueTabOperation,
   isTimeoutError,
@@ -159,8 +165,12 @@ const PREVIEW_STALE_AFTER_MS = 1_000;
 const VIEW_FRAME_QUALITY = 60;
 const VIEW_FRAME_MAX_WIDTH = 1_280;
 const VIEW_FRAME_MAX_HEIGHT = 800;
+/** The agent browser tools that read or change the agent's tab set, and not one tab. */
+const TAB_SET_TOOLS: ReadonlySet<string> = new Set(["open", "list_tabs", "status"]);
 /** How long after a live view's right-click the page's menu still belongs to that view. */
 const VIEW_CONTEXT_MENU_MS = 1_500;
+/** The `keyCode` of `sendInputEvent` for a key whose `Input.key` name is different. */
+const FORWARDED_KEY_CODES: Partial<Record<string, string>> = { ArrowLeft: "Left", ArrowRight: "Right" };
 /**
  * The download limits of one browser session, so that a page cannot fill the disk. A session
  * starts no new download while `MAX_ACTIVE_DOWNLOADS` are in progress, and a download larger
@@ -278,6 +288,21 @@ function rejectTakeoverTool(): Effect.Effect<DynamicToolResult, BrowserOperation
   );
 }
 
+/** Who controls a tab: the person at this computer, or one session of a team member. */
+export type BrowserUserControlHolder = { kind: "local" } | { kind: "member"; memberId: string; sessionId: string };
+/** The holds to release when a window, a session or a member ends. */
+export type BrowserUserControlOwner =
+  | { kind: "local" }
+  | { kind: "session"; sessionId: string }
+  | { kind: "member"; memberId: string };
+
+/** The page that the main window shows, in window pixels, and the zoom of the window. */
+export interface BrowserMainPage {
+  tabId: string;
+  bounds: Rectangle;
+  zoomFactor: number;
+}
+
 export class BrowserHost {
   static readonly CONTROL_IDLE_GRACE_MS = BrowserControlSessions.IDLE_GRACE_MS;
   readonly #window: BrowserWindow;
@@ -298,9 +323,14 @@ export class BrowserHost {
   #attachedView: WebContentsView | null = null;
   #pictureInPictureWindow: BrowserWindow | null = null;
   #pictureInPictureOverlayView: WebContentsView | null = null;
+  #mainPageListener: ((page: BrowserMainPage | null) => void) | null = null;
   #target: BrowserViewTarget = "main";
   readonly #mountedViews = new Map<WebContentsView, BrowserWindow>();
   readonly #takeoverTabIds = new Set<string>();
+  /** The tabs that a person controls, with who took each one, so a closed session releases its own. */
+  readonly #userControlTabIds = new Map<string, BrowserUserControlHolder>();
+  /** The agent tool calls that wait for the release of a tab. */
+  readonly #userControlWaiters = new Map<string, Set<Deferred.Deferred<void>>>();
   /**
    * The origins where an agent ran `evaluate`. Kept by origin, not by document: a same-origin popup,
    * opener or service worker carries the script past one document.
@@ -404,9 +434,15 @@ export class BrowserHost {
     if (!pending) return;
     tab.pendingRestore = undefined;
     tab.sleeping = undefined;
-    yield* Effect.forkIn(enqueueTabOperation(tab, pending, true).pipe(Effect.ignore), tab.scope, {
-      startImmediately: true,
-    });
+    // An agent tool can wake a tab that a person holds. The restore is the host's work, so the hold does not stop it.
+    yield* Effect.forkIn(
+      enqueueTabOperation(tab, pending, true).pipe(
+        Effect.ignore,
+        Effect.provideService(BrowserToolHold, () => false),
+      ),
+      tab.scope,
+      { startImmediately: true },
+    );
   });
 
   readonly #sleepIdleTabs = Effect.fn("BrowserHost.sleepIdleTabs")(function* (this: BrowserHost) {
@@ -446,6 +482,7 @@ export class BrowserHost {
       tab.secret !== undefined ||
       tab.secretDocument === true ||
       this.#takeoverTabIds.has(tab.id) ||
+      this.#userControlTabIds.has(tab.id) ||
       tab.contents.isCurrentlyAudible()
     );
   }
@@ -530,7 +567,10 @@ export class BrowserHost {
   listTabs(): BrowserTab[] {
     return [...this.#tabs.values()]
       .filter((tab) => !tab.closing && !tab.contents.isDestroyed())
-      .map((tab) => toPublicTab(tab));
+      .map((tab) => {
+        const publicTab = toPublicTab(tab);
+        return this.#userControlTabIds.has(tab.id) ? { ...publicTab, userControl: true as const } : publicTab;
+      });
   }
 
   /** The renderer process of each open tab, so the resource monitor can count tabs apart from windows. */
@@ -561,6 +601,30 @@ export class BrowserHost {
       if (this.#attachedView) this.#mountView(this.#attachedView, this.#window);
     }
     this.#syncAttachedView();
+  }
+
+  /**
+   * Calls `listener` each time the page of the main window moves, and with null when the main window
+   * shows no page. It runs after the page view is raised, so the listener can raise its own views above it.
+   */
+  setMainPageListener(listener: ((page: BrowserMainPage | null) => void) | null): void {
+    this.#mainPageListener = listener;
+    this.#syncAttachedView();
+  }
+
+  /**
+   * The keys of the window that work while the dock over the page has the focus: DevTools, search, and
+   * the keys of the full view. True when the window takes the key.
+   */
+  forwardDockShortcut(input: Input): boolean {
+    if (this.#window.isDestroyed()) return false;
+    if (isToggleDevToolsShortcut(input)) {
+      this.#window.webContents.toggleDevTools();
+      return true;
+    }
+    if (!isGlobalSearchShortcut(input) && !isBrowserViewShortcut(input, process.platform === "darwin")) return false;
+    this.#forwardKeyToWindow(input);
+    return true;
   }
 
   setPictureInPictureOverlayView(view: WebContentsView | null): void {
@@ -632,6 +696,7 @@ export class BrowserHost {
     return yield* Effect.gen({ self: this }, function* () {
       yield* this.#persistState();
 
+      const loadGeneration = tab.loadGeneration;
       yield* Effect.gen({ self: this }, function* () {
         yield* browserCall(() => tab.contents.loadURL(normalizedUrl, browserLoadOptions()));
         if (focus) {
@@ -642,9 +707,13 @@ export class BrowserHost {
         Effect.catch((operationFailure) =>
           Effect.gen({ self: this }, function* () {
             const error = operationFailure.cause;
+            // The user entered an address before the first page loaded: that load is the tab's page now.
+            if (this.#tabs.get(tab.id) === tab && tab.loadGeneration !== loadGeneration) return;
             if (this.#tabs.get(tab.id) === tab) {
               this.#unmountView(tab.view);
               this.#tabs.delete(tab.id);
+              this.#userControlTabIds.delete(tab.id);
+              this.#completeUserControlWaiters(tab.id);
               yield* tab.engine.destroy();
               tab.contents.close();
               if (this.#activeTabId === tab.id) {
@@ -692,7 +761,10 @@ export class BrowserHost {
   ): Effect.fn.Return<void, BrowserOperationError> {
     yield* this.#enqueue(tabId, (tab) =>
       Effect.gen({ self: this }, function* () {
-        yield* navigateAndWait(tab.contents, () => navigateHistory(tab.contents, direction));
+        yield* untilStopped(
+          tab,
+          navigateAndWait(tab.contents, () => navigateHistory(tab.contents, direction)),
+        );
       }),
     );
   }).bind(this);
@@ -707,7 +779,11 @@ export class BrowserHost {
       tabId,
       (tab) =>
         Effect.gen({ self: this }, function* () {
-          yield* navigateAndWait(tab.contents, () => tab.contents.loadURL(normalizedUrl, browserLoadOptions()));
+          tab.loadGeneration += 1;
+          yield* untilStopped(
+            tab,
+            navigateAndWait(tab.contents, () => tab.contents.loadURL(normalizedUrl, browserLoadOptions())),
+          );
           this.#focusTab(tab);
         }),
       true,
@@ -722,13 +798,30 @@ export class BrowserHost {
       tabId,
       (tab) =>
         Effect.gen({ self: this }, function* () {
-          return yield* navigateAndWait(tab.contents, () => {
-            tab.contents.reload();
-            return true;
-          });
+          return yield* untilStopped(
+            tab,
+            navigateAndWait(tab.contents, () => {
+              tab.contents.reload();
+              return true;
+            }),
+          );
         }),
       true,
     );
+  }).bind(this);
+
+  /**
+   * Stops the load of the tab now, not after the queued tab operations: a person stops a page that
+   * does not finish. The load that it ends counts as done, not as failed.
+   */
+  readonly stop = Effect.fn("BrowserHost.stop")(function* (
+    this: BrowserHost,
+    tabId: string,
+  ): Effect.fn.Return<void, BrowserOperationError> {
+    const tab = yield* this.#requireTab(tabId);
+    if (!tab.contents.isLoading()) return;
+    tab.loadGeneration += 1;
+    yield* browserSync(() => tab.contents.stop());
   }).bind(this);
 
   readonly close = Effect.fn("BrowserHost.close")(function* (
@@ -748,6 +841,8 @@ export class BrowserHost {
       .filter((child) => child.openerTabId === tabId || (signInSession && child.privateSession === signInSession))
       .map((child) => this.close(child.id));
     this.#takeoverTabIds.delete(tabId);
+    this.#userControlTabIds.delete(tabId);
+    this.#completeUserControlWaiters(tabId);
 
     if (this.#activeTabId === tabId) {
       this.#activeTabId =
@@ -819,6 +914,108 @@ export class BrowserHost {
       ),
     );
   }).bind(this);
+
+  /**
+   * A person takes the tab. The agent tool calls on it wait for the release. An operation that already
+   * runs ends first, because the take waits for its place in the tab queue.
+   */
+  readonly takeUserControl = Effect.fn("BrowserHost.takeUserControl")(function* (
+    this: BrowserHost,
+    tabId: string,
+    holder: BrowserUserControlHolder,
+  ): Effect.fn.Return<void, BrowserOperationError> {
+    const tab = this.#tabs.get(tabId);
+    if (!tab || tab.closing) return yield* browserFailure(new Error(sourceText("error.backend.browserTabNotFound")));
+    if (tab.secret) return yield* browserFailure(new Error(sourceText("error.backend.browserUserControlBusy")));
+    if (this.#userControlTabIds.has(tabId)) return;
+    tab.engine.invalidateReferences();
+    this.#userControlTabIds.set(tabId, holder);
+    tab.diagnostics.clearDiagnostics();
+    this.#emitChanged();
+    yield* this.#enqueue(tabId, () => this.#recorder.discard(tabId, "tab-closed"), true).pipe(
+      Effect.catch((operationFailure) =>
+        Effect.gen({ self: this }, function* () {
+          if (this.#userControlTabIds.get(tabId) === holder) this.#endUserControl(tabId);
+          return yield* browserFailure(operationFailure.cause);
+        }),
+      ),
+    );
+  }).bind(this);
+
+  /** Any caller that can see the tab gives it back. A tab that nobody holds stays as it is. */
+  releaseUserControl(tabId: string): void {
+    if (!this.#userControlTabIds.has(tabId)) return;
+    const tab = this.#tabs.get(tabId);
+    if (tab) {
+      tab.engine.invalidateReferences();
+      tab.diagnostics.clearDiagnostics();
+    }
+    this.#endUserControl(tabId);
+  }
+
+  /** Releases the tabs of a closed window, session or member. */
+  releaseUserControlHeldBy(owner: BrowserUserControlOwner): void {
+    for (const [tabId, holder] of [...this.#userControlTabIds]) {
+      if (
+        (owner.kind === "local" && holder.kind === "local") ||
+        (owner.kind === "session" && holder.kind === "member" && holder.sessionId === owner.sessionId) ||
+        (owner.kind === "member" && holder.kind === "member" && holder.memberId === owner.memberId)
+      )
+        this.releaseUserControl(tabId);
+    }
+  }
+
+  /**
+   * The tab of this agent tool call while a person controls it, or null. A call for the agent's tab
+   * set, such as `list_tabs`, waits while the person controls any tab that the agent can use.
+   */
+  userControlTabFor(params: DynamicToolCallParams): string | null {
+    if (TAB_SET_TOOLS.has(params.tool))
+      return (
+        this.listTabs().find((tab) => this.#userControlTabIds.has(tab.id) && this.#canUseToolTab(params, tab))?.id ??
+        null
+      );
+    const tabId = isRecord(params.arguments) ? params.arguments.tabId : undefined;
+    if (!isString(tabId) || !this.#userControlTabIds.has(tabId)) return null;
+    const tab = this.listTabs().find((candidate) => candidate.id === tabId);
+    return tab && this.#canUseToolTab(params, tab) ? tabId : null;
+  }
+
+  /** Waits until nobody controls the tab: a release, a tab close or the host shutdown. */
+  awaitUserControlRelease(tabId: string): Effect.Effect<void> {
+    return Effect.suspend(() => {
+      if (!this.#userControlTabIds.has(tabId)) return Effect.void;
+      const released = Deferred.makeUnsafe<void>();
+      const waiters = this.#userControlWaiters.get(tabId) ?? new Set<Deferred.Deferred<void>>();
+      this.#userControlWaiters.set(tabId, waiters);
+      waiters.add(released);
+      return Deferred.await(released).pipe(
+        Effect.ensuring(
+          Effect.sync(() => {
+            waiters.delete(released);
+            if (waiters.size === 0 && this.#userControlWaiters.get(tabId) === waiters)
+              this.#userControlWaiters.delete(tabId);
+          }),
+        ),
+      );
+    });
+  }
+
+  #heldByUser(tabId: string): boolean {
+    return this.#userControlTabIds.has(tabId);
+  }
+
+  #endUserControl(tabId: string): void {
+    this.#userControlTabIds.delete(tabId);
+    this.#completeUserControlWaiters(tabId);
+    this.#emitChanged();
+  }
+
+  #completeUserControlWaiters(tabId: string): void {
+    const waiters = this.#userControlWaiters.get(tabId);
+    this.#userControlWaiters.delete(tabId);
+    for (const released of waiters ?? []) Deferred.doneUnsafe(released, Exit.void);
+  }
 
   readonly prepareSecret = Effect.fn("BrowserHost.prepareSecret")(function* (
     this: BrowserHost,
@@ -1608,21 +1805,25 @@ export class BrowserHost {
     params: DynamicToolCallParams,
     hooks: BrowserDynamicToolHooks = {},
   ): Effect.fn.Return<DynamicToolResult, BrowserOperationError> {
-    return yield* Effect.gen({ self: this }, function* () {
+    const outcome = yield* Effect.gen({ self: this }, function* () {
       const call = yield* browserSync(() => parseBrowserToolCall(params.tool, params.arguments));
       yield* browserSync(() => this.#controls.begin(params, call));
-      return yield* runBrowserTool(this.#toolHandlers, call.tool, call, params, hooks);
+      return { result: yield* runBrowserTool(this.#toolHandlers, call.tool, call, params, hooks) };
     })
       .pipe(
+        Effect.provideService(BrowserToolHold, (tabId: string) => this.#heldByUser(tabId)),
         Effect.catch((operationFailure) =>
-          Effect.sync((): DynamicToolResult => {
+          Effect.sync((): { result: DynamicToolResult } | { heldTabId: string } => {
             const error = operationFailure.cause;
+            if (error instanceof BrowserUserControlHeld) return { heldTabId: error.tabId };
             return {
-              success: false,
-              // The single place every browser tool failure reaches a provider. A page exception carries
-              // the page's own message -- `throw new Error("password=hunter2")` -- so this gets the same
-              // redaction the diagnostics ring applies, and the diagnostic copy stays the redacted one.
-              contentItems: [{ type: "inputText", text: redactText(String(error)) }],
+              result: {
+                success: false,
+                // The single place every browser tool failure reaches a provider. A page exception carries
+                // the page's own message -- `throw new Error("password=hunter2")` -- so this gets the same
+                // redaction the diagnostics ring applies, and the diagnostic copy stays the redacted one.
+                contentItems: [{ type: "inputText", text: redactText(String(error)) }],
+              },
             };
           }),
         ),
@@ -1634,6 +1835,13 @@ export class BrowserHost {
           }),
         ),
       );
+    if ("result" in outcome) return outcome.result;
+    // The agent's control of the tab ended above, so the wait does not show the agent at work.
+    if (hooks.onUserControl) return yield* hooks.onUserControl(outcome.heldTabId);
+    return {
+      success: false,
+      contentItems: [{ type: "inputText", text: new BrowserUserControlHeld(outcome.heldTabId).message }],
+    };
   }).bind(this);
 
   #toolTabs(params: DynamicToolCallParams): { tabs: BrowserTab[]; activeTabId: string | null } {
@@ -1684,7 +1892,7 @@ export class BrowserHost {
         "Browser upload target resolution timed out.",
         keepQueueBlocked,
       ),
-    );
+    ).pipe(Effect.provideService(BrowserToolHold, (heldTabId: string) => this.#heldByUser(heldTabId)));
   }).bind(this);
 
   readonly destroy = Effect.fn("BrowserHost.destroy")(function* (this: BrowserHost) {
@@ -1711,6 +1919,8 @@ export class BrowserHost {
           );
         }
         this.#tabs.clear();
+        this.#userControlTabIds.clear();
+        for (const tabId of [...this.#userControlWaiters.keys()]) this.#completeUserControlWaiters(tabId);
         this.#listeners.clear();
         this.#controls.dispose();
         this.#documentListeners.clear();
@@ -1788,6 +1998,7 @@ export class BrowserHost {
       diagnostics,
       recording: false,
       captureGeneration: 0,
+      loadGeneration: 0,
       documents: 0,
       viewInvalidations: new Set(),
       viewContextMenu: null,
@@ -1954,6 +2165,15 @@ export class BrowserHost {
         this.#collapseOnEscape(tab);
         return;
       }
+      if (
+        isBrowserViewShortcut(input, process.platform === "darwin") &&
+        this.#mountedViews.get(tab.view) === this.#window
+      ) {
+        // The full view owns the tab keys: it keeps the order and the closed tabs that the keys use.
+        event.preventDefault();
+        this.#forwardKeyToWindow(input);
+        return;
+      }
       if (!isCloseBrowserTabShortcut(input)) return;
       event.preventDefault();
       setImmediate(() => void runCauseEffect(this.close(tab.id)).catch(() => undefined));
@@ -2011,7 +2231,7 @@ export class BrowserHost {
       );
     });
     contents.on("console-message", (...eventArgs) => {
-      if (this.#takeoverTabIds.has(tab.id) || tab.secret) return;
+      if (this.#takeoverTabIds.has(tab.id) || this.#userControlTabIds.has(tab.id) || tab.secret) return;
       const details = readConsoleMessage(eventArgs);
       if (!details) return;
       tab.diagnostics.add({
@@ -2158,6 +2378,20 @@ export class BrowserHost {
     });
   }
 
+  /** Sends a key press of the page to the window, with its modifiers, and gives the window the focus. */
+  #forwardKeyToWindow(input: Input): void {
+    if (this.#window.isDestroyed()) return;
+    const keyCode = FORWARDED_KEY_CODES[input.key] ?? (input.key.length === 1 ? input.key.toUpperCase() : input.key);
+    const modifiers: Array<"shift" | "control" | "alt" | "meta"> = [];
+    if (input.shift) modifiers.push("shift");
+    if (input.control) modifiers.push("control");
+    if (input.alt) modifiers.push("alt");
+    if (input.meta) modifiers.push("meta");
+    this.#window.webContents.focus();
+    this.#window.webContents.sendInputEvent({ type: "keyDown", keyCode, modifiers });
+    this.#window.webContents.sendInputEvent({ type: "keyUp", keyCode, modifiers });
+  }
+
   /**
    * Forward Escape from an embedded page to the renderer, which collapses the expanded browser back
    * to the preview sidebar. Only the visible page in the main window does this: in Picture in
@@ -2249,6 +2483,7 @@ export class BrowserHost {
       targetWindow.isDestroyed()
     ) {
       this.#attachedView?.setVisible(false);
+      this.#mainPageListener?.(null);
       return;
     }
 
@@ -2265,17 +2500,17 @@ export class BrowserHost {
     tab.view.setBorderRadius(0);
     // Renderer bounds are CSS pixels; native child views use device-independent window pixels.
     const zoomFactor = targetWindow.webContents.getZoomFactor();
-    tab.view.setBounds(
-      validateBounds({
-        x: this.#bounds.x * zoomFactor,
-        y: this.#bounds.y * zoomFactor,
-        width: this.#bounds.width * zoomFactor,
-        height: this.#bounds.height * zoomFactor,
-      }),
-    );
+    const bounds = validateBounds({
+      x: this.#bounds.x * zoomFactor,
+      y: this.#bounds.y * zoomFactor,
+      width: this.#bounds.width * zoomFactor,
+      height: this.#bounds.height * zoomFactor,
+    });
+    tab.view.setBounds(bounds);
     tab.view.setVisible(true);
     tab.contents.invalidate();
     this.#raisePictureInPictureOverlay();
+    this.#mainPageListener?.(this.#target === "main" ? { tabId: tab.id, bounds, zoomFactor } : null);
     if (tab.focusOnVisible) {
       tab.focusOnVisible = false;
       tab.contents.focus();
@@ -2344,6 +2579,7 @@ export class BrowserHost {
     if (this.#tabs.get(tabId)?.secret)
       throw new Error("Browser inspection is protected during authentication. Use takeover.");
     if (this.#takeoverTabIds.has(tabId)) throw new Error(`Browser tab is under user takeover: ${tabId}`);
+    if (this.#heldByUser(tabId)) throw new BrowserUserControlHeld(tabId);
   }
 
   #canUseToolTab(params: DynamicToolCallParams, tab: BrowserTab): boolean {
@@ -2578,13 +2814,19 @@ function boundedCaptureDataUrl(image: NativeImage): string {
     .toDataURL();
 }
 
+/** A load that `BrowserHost.stop` ended succeeds: the person chose to keep the page as it is. */
+function untilStopped(
+  tab: BrowserHostTab,
+  load: Effect.Effect<void, BrowserOperationError>,
+): Effect.Effect<void, BrowserOperationError> {
+  const generation = tab.loadGeneration;
+  return load.pipe(Effect.catch((failure) => (tab.loadGeneration === generation ? Effect.fail(failure) : Effect.void)));
+}
+
 function navigateHistory(contents: WebContents, direction: BrowserNavigationDirection): boolean {
-  const history = contents.navigationHistory;
   const offset = direction === "back" ? -1 : 1;
-  if (!history.canGoToOffset(offset)) return false;
-  const entry = history.getEntryAtIndex(history.getActiveIndex() + offset);
-  if (!entry?.url) return false;
-  history.goToOffset(offset);
+  if (!hasHistoryEntry(contents, offset)) return false;
+  contents.navigationHistory.goToOffset(offset);
   return true;
 }
 

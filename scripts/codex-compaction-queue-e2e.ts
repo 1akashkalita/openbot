@@ -181,6 +181,8 @@ const browser: AgentBrowserHost = {
   endTakeover: () => {},
   resolveUploadTarget: unused,
   handleDynamicTool: unused,
+  userControlTabFor: () => null,
+  awaitUserControlRelease: unused,
   onChanged: () => () => {},
   onControlChanged: () => () => {},
   onDocumentChanged: () => () => {},

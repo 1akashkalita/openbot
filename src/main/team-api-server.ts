@@ -30,6 +30,8 @@ import { ACP_REGISTRY_CAPABILITY } from "@openbot/contracts/team-protocol/acp-re
 import { AGENT_HIDDEN_CAPABILITY } from "@openbot/contracts/team-protocol/agent-hidden-v1";
 import { AGENT_SESSION_SETTINGS_CAPABILITY } from "@openbot/contracts/team-protocol/agent-session-settings-v1";
 import { AGENT_TASKS_CAPABILITY } from "@openbot/contracts/team-protocol/agent-tasks-v1";
+import { BROWSER_PAGE_STATE_CAPABILITY } from "@openbot/contracts/team-protocol/browser-page-state-v1";
+import { BROWSER_USER_CONTROL_CAPABILITY } from "@openbot/contracts/team-protocol/browser-user-control-v1";
 import {
   AGENT_ADMIN_CAPABILITY,
   AGENT_HOST_SETTINGS_CAPABILITY,
@@ -547,6 +549,16 @@ export class TeamApiServer {
     if (client.readyState === webSockets.WebSocket.OPEN) client.send(JSON.stringify(this.#hostRestart));
   }
 
+  #sendBrowserUserControl(client: Ws.WebSocket, connection: EventClientState): void {
+    const tabIds = this.#options.browser
+      .listTabs()
+      .filter((tab) => tab.userControl)
+      .map((tab) => tab.id);
+    // An empty list is sent too: it clears the holds that a reconnecting client still shows.
+    if (client.readyState !== webSockets.WebSocket.OPEN) return;
+    client.send(JSON.stringify(this.#eventFor(connection, { type: "browser-user-control-changed", tabIds })));
+  }
+
   listDirectThreads(memberId: string): DirectThreadSummary[] {
     return this.#requireChat().listThreads(memberId);
   }
@@ -865,6 +877,7 @@ export class TeamApiServer {
     const { remoteScreen, browserView, createInvite, updateMember, removeMember, onSessionRevoked } = this.#options;
     return routeTeam(context, {
       store: this.#options.store,
+      browser: this.#options.browser,
       ...(remoteScreen === undefined ? {} : { remoteScreen }),
       ...(browserView === undefined ? {} : { browserView }),
       ...(createInvite === undefined ? {} : { createInvite }),
@@ -1228,6 +1241,16 @@ export class TeamApiServer {
     }
   }
 
+  #sendBrowserPageState(client: Ws.WebSocket, connection: EventClientState): void {
+    const tabs = this.#options.browser.listTabs().map((tab) => ({
+      tabId: tab.id,
+      canGoBack: tab.canGoBack === true,
+      canGoForward: tab.canGoForward === true,
+    }));
+    if (client.readyState !== webSockets.WebSocket.OPEN) return;
+    client.send(JSON.stringify(this.#eventFor(connection, { type: "browser-page-state-changed", tabs })));
+  }
+
   /**
    * A member does not see an administrator's private MCP sign-in tab, the same as on the browser
    * routes. A usage reading keeps the provider's own sign-in only, as `GET /v1/agents/usage` does: a
@@ -1239,6 +1262,18 @@ export class TeamApiServer {
         ...event,
         usage: { ...event.usage, limits: event.usage.limits.filter((limit) => limit.accountId === undefined) },
       };
+    if (event.type === "browser-user-control-changed") {
+      const { browser, store } = this.#options;
+      if (!event.tabIds.some((tabId) => browser.isPrivate(tabId))) return event;
+      if (canAdministerServer(store.authenticate(connection.token)?.role)) return event;
+      return { ...event, tabIds: event.tabIds.filter((tabId) => !browser.isPrivate(tabId)) };
+    }
+    if (event.type === "browser-page-state-changed") {
+      const { browser, store } = this.#options;
+      if (!event.tabs.some((tab) => browser.isPrivate(tab.tabId))) return event;
+      if (canAdministerServer(store.authenticate(connection.token)?.role)) return event;
+      return { ...event, tabs: event.tabs.filter((tab) => !browser.isPrivate(tab.tabId)) };
+    }
     if (event.type !== "browser-changed") return event;
     const { browser, store } = this.#options;
     if (!event.tabs.some((tab) => browser.isPrivate(tab.id))) return event;
@@ -1312,12 +1347,19 @@ export class TeamApiServer {
             const restartWasSent =
               connection.capabilities.has(HOST_UPDATE_CAPABILITY) ||
               connection.capabilities.has(HOST_MEMBER_UPDATE_CAPABILITY);
+            const userControlWasSent = connection.capabilities.has(BROWSER_USER_CONTROL_CAPABILITY);
+            const pageStateWasSent = connection.capabilities.has(BROWSER_PAGE_STATE_CAPABILITY);
             connection.capabilities = new Set(event.capabilities.filter(isTeamCurrentCapability));
             if (connection.capabilities.has("agent-runtime-snapshots") && !snapshotsWereEnabled) {
               this.#sendRuntimeSnapshot(client, connection, false);
             }
             // A member that connects while a restart waits learns about it here, not at the next change.
             if (!restartWasSent && this.#hostRestart.state !== "none") this.#sendHostRestart(client, connection);
+            // The same for the tabs that a person controls now.
+            if (!userControlWasSent && connection.capabilities.has(BROWSER_USER_CONTROL_CAPABILITY))
+              this.#sendBrowserUserControl(client, connection);
+            if (!pageStateWasSent && connection.capabilities.has(BROWSER_PAGE_STATE_CAPABILITY))
+              this.#sendBrowserPageState(client, connection);
           }
           connection.includeConversationEvents = event.includeConversations;
           return;
@@ -1357,6 +1399,11 @@ export class TeamApiServer {
       const directTypingRecipientId = connection.directTypingRecipientId;
       connection.directTypingRecipientId = null;
       this.#eventClients.delete(client);
+      // A client that closes, crashes or loses the network keeps its session, so its last socket gives back
+      // the pages that the session controls. Otherwise the agent waits for a person who is not there.
+      if (sessionId && ![...this.#eventClients.values()].some((other) => other.sessionId === sessionId)) {
+        this.#options.browser.releaseUserControlHeldBy({ kind: "session", sessionId });
+      }
       if (directTypingRecipientId && !this.#hasDirectTyping(connection.memberId, directTypingRecipientId)) {
         this.#publishDirectTyping(connection.memberId, directTypingRecipientId, false);
       }
@@ -1851,6 +1898,8 @@ function eventCapability(event: AgentEvent): TeamCurrentCapability | null {
     return "channel-chats-v1";
   if (event.type === "agent-session-settings-changed") return AGENT_SESSION_SETTINGS_CAPABILITY;
   if (event.type === "hidden-agents-changed") return AGENT_HIDDEN_CAPABILITY;
+  if (event.type === "browser-user-control-changed") return BROWSER_USER_CONTROL_CAPABILITY;
+  if (event.type === "browser-page-state-changed") return BROWSER_PAGE_STATE_CAPABILITY;
   if (
     event.type === "agent-tasks-changed" ||
     event.type === "agent-task-conversation" ||
