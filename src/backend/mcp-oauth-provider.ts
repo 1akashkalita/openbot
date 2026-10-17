@@ -49,6 +49,8 @@ import { sourceText } from "@openbot/i18n/source";
 import type { Logger } from "@openbot/logging";
 import { z } from "zod";
 import { runCauseEffect } from "./effect-boundary";
+import { readLimitedBody } from "./limited-body";
+import { type AddressLookup, hostAddresses, isPublicAddress, systemAddressLookup } from "./network-address";
 import { withTimeout } from "./with-timeout";
 
 /** What one server's sign-in leaves behind, and all of it: nothing else is kept between runs. */
@@ -147,6 +149,8 @@ export interface McpOAuthOptions {
   revocationTimeoutMs?: number;
   /** Where a revocation failure is written. It is never shown to the user. */
   logger?: Pick<Logger, "warn">;
+  /** Resolves the host names of OAuth endpoints. See `secureOAuthFetch`. */
+  lookup?: AddressLookup;
 }
 
 /**
@@ -361,7 +365,7 @@ export class McpOAuth implements McpOAuthAuthority {
     const controller = new AbortController();
     // The scope owns the exchange; a caller can stop waiting without cancelling another caller's refresh.
     const operation = this.#provider(resource, null)
-      .refresh(secureOAuthFetch(controller.signal))
+      .refresh(this.#fetch(resource, controller.signal))
       .pipe(
         Effect.asVoid,
         Effect.timeoutOrElse({ duration: timeoutMs, orElse: () => Effect.void }),
@@ -375,6 +379,12 @@ export class McpOAuth implements McpOAuthAuthority {
     });
     yield* this.#awaitRefresh(exchange);
   });
+
+  /** The fetch of one exchange for this server. */
+  #fetch(resource: string, signal: AbortSignal): FetchLike {
+    const { lookup } = this.#options;
+    return secureOAuthFetch({ signal, resource, ...(lookup ? { lookup } : {}) });
+  }
 
   readonly #awaitRefresh = Effect.fn("McpOAuth.awaitRefresh")((exchange: Fiber.Fiber<void>) =>
     Fiber.join(exchange).pipe(
@@ -433,7 +443,7 @@ export class McpOAuth implements McpOAuthAuthority {
           if (cancelled || abandoned || this.#options.storage.read(resource)?.tokens) return false;
           // Discovery and the registration read only public documents; the abort ends them with this step.
           const controller = new AbortController();
-          const fetchFn = secureOAuthFetch(controller.signal);
+          const fetchFn = this.#fetch(resource, controller.signal);
           return yield* withTimeout(
             Effect.gen(function* () {
               // A server that answers without a sign-in and names no authorization server takes none:
@@ -476,7 +486,7 @@ export class McpOAuth implements McpOAuthAuthority {
                 auth(provider, {
                   serverUrl: resource,
                   authorizationCode: code,
-                  fetchFn: secureOAuthFetch(controller.signal),
+                  fetchFn: this.#fetch(resource, controller.signal),
                 }),
               ),
               this.#options.refreshTimeoutMs ?? MCP_TOKEN_TIMEOUT_MS,
@@ -596,7 +606,7 @@ export class McpOAuth implements McpOAuthAuthority {
     const origin = new URL(resource).origin;
     // Aborts what is still open when the revocation ends, so a request that never answers does not outlive it.
     const controller = new AbortController();
-    const fetchFn = secureOAuthFetch(controller.signal);
+    const fetchFn = this.#fetch(resource, controller.signal);
     // A failure is written as its kind and status only: the error text can quote the request.
     const revocation = Effect.gen(function* () {
       const metadata = yield* mcpCall(() => discoverAuthorizationServerMetadata(issuer, { fetchFn })).pipe(
@@ -1318,21 +1328,81 @@ const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
  * directly. Redirects are followed by hand for that reason - `fetch` would follow them itself and
  * never say where it went.
  */
-export function secureOAuthFetch(signal?: AbortSignal): FetchLike {
-  return (input, init) => runCauseEffect(secureOAuthRequest(input, init, signal));
+export function secureOAuthFetch(options: SecureOAuthFetchOptions = {}): FetchLike {
+  const resource = options.resource === undefined ? null : new URL(options.resource);
+  const resolve = options.lookup ?? systemAddressLookup;
+  // Resolved once for each exchange: every hop compares its addresses with this one answer.
+  let resourcePublic: Promise<boolean> | undefined;
+  const guard: OAuthAddressGuard | null = resource
+    ? {
+        resource,
+        resourcePublic: () => {
+          resourcePublic ??= hostAddresses(resource, resolve).then(
+            (addresses) => addresses.length > 0 && addresses.every(isPublicAddress),
+          );
+          return resourcePublic;
+        },
+        resolve,
+      }
+    : null;
+  const mcpTraffic = options.mcpTraffic === true ? resource : null;
+  return (input, init) => runCauseEffect(secureOAuthRequest(input, init, options.signal, guard, mcpTraffic));
 }
+
+export interface SecureOAuthFetchOptions {
+  signal?: AbortSignal;
+  /**
+   * The MCP server the exchange is for. When it is on the public internet, every OAuth endpoint
+   * must be too.
+   */
+  resource?: string;
+  /**
+   * Whether this fetch also sends MCP traffic, as the probe transport does. A request to the exact
+   * `resource` address then has no size or time limit. A sign-in, refresh or revocation sends no
+   * MCP traffic, so an endpoint at that address still has the limits.
+   */
+  mcpTraffic?: boolean;
+  /** Resolves host names for that rule. `dns.lookup` when not given. */
+  lookup?: AddressLookup;
+}
+
+interface OAuthAddressGuard {
+  resource: URL;
+  resourcePublic: () => Promise<boolean>;
+  resolve: AddressLookup;
+}
+
+/**
+ * The largest OAuth response that is read. Metadata, a registration and a token set are a few
+ * kilobytes; a larger body is not one of them, and reading it without a limit lets a server use
+ * this computer's memory.
+ */
+const OAUTH_BODY_LIMIT = 1024 * 1024;
+
+/**
+ * How long one OAuth request may take, from the request to the last byte of its body. The callers
+ * have deadlines of their own; this one stops a single endpoint that never finishes.
+ */
+const OAUTH_REQUEST_TIMEOUT_MS = 20_000;
 
 const secureOAuthRequest = Effect.fn("McpOAuth.secureFetch")(function* (
   input: Parameters<FetchLike>[0],
   init: Parameters<FetchLike>[1],
-  signal?: AbortSignal,
+  signal: AbortSignal | undefined,
+  guard: OAuthAddressGuard | null,
+  mcpServer: URL | null,
 ): Effect.fn.Return<Response, McpOperationError> {
   let url = yield* mcpSync(() => new URL(input instanceof URL ? input.toString() : input));
+  const mcpTraffic = mcpServer !== null && withoutHash(url) === withoutHash(mcpServer);
   let request: RequestInit = { ...init, ...(signal ? { signal } : {}), redirect: "manual" };
   for (let hop = 0; ; hop++) {
     if (!isSecureEndpoint(url))
       return yield* mcpFailure(new Error(sourceText("error.backend.oauthNotHttps", { origin: url.origin })));
-    const response = yield* Effect.tryPromise({
+    if (guard) yield* checkEndpointAddress(url, guard);
+    const origin = url.origin;
+    // A redirect to another origin leaves the MCP server, so that hop has the OAuth limits.
+    const unlimited = mcpTraffic && origin === mcpServer?.origin;
+    const send = Effect.tryPromise({
       try: (requestSignal) =>
         fetch(url, {
           ...request,
@@ -1340,6 +1410,20 @@ const secureOAuthRequest = Effect.fn("McpOAuth.secureFetch")(function* (
         }),
       catch: mcpFailure,
     });
+    const response = yield* unlimited
+      ? send
+      : send.pipe(
+          // Only a redirect this loop follows skips the limit: one with no `Location` goes to the SDK.
+          Effect.flatMap((answer) =>
+            REDIRECT_STATUSES.has(answer.status) && answer.headers.has("location")
+              ? Effect.succeed(answer)
+              : limited(answer, origin),
+          ),
+          Effect.timeoutOrElse({
+            duration: OAUTH_REQUEST_TIMEOUT_MS,
+            orElse: () => mcpFailure(new Error(sourceText("error.backend.oauthTimedOut", { origin }))),
+          }),
+        );
     const location = REDIRECT_STATUSES.has(response.status) ? response.headers.get("location") : null;
     if (location === null) return response;
     // Redirect response bodies are not consumed by the SDK.
@@ -1353,6 +1437,54 @@ const secureOAuthRequest = Effect.fn("McpOAuth.secureFetch")(function* (
     request = redirected(request, response.status);
   }
 });
+
+/**
+ * Refuses an OAuth endpoint on a private network when the MCP server is on the public internet.
+ *
+ * Discovery names the endpoints, and the SDK sends the code, the verifier and the refresh token to
+ * them. A public server that names `10.0.0.5` or `localhost` would make this computer send requests
+ * into its own network. A server that the user typed as a private or loopback address is not
+ * affected: its authorization server is commonly on the same network.
+ *
+ * DNS can answer differently between this check and the connection. There is no pinning: this
+ * stops a document that names a private address, not a resolver that changes its answer.
+ */
+const checkEndpointAddress = Effect.fn("McpOAuth.checkEndpointAddress")(function* (url: URL, guard: OAuthAddressGuard) {
+  if (!(yield* mcpCall(guard.resourcePublic))) return;
+  const addresses = yield* mcpCall(() => hostAddresses(url, guard.resolve));
+  if (addresses.length > 0 && addresses.every(isPublicAddress)) return;
+  return yield* mcpFailure(new Error(sourceText("error.backend.mcpOAuthPrivateEndpoint", { origin: url.origin })));
+});
+
+/** The response with its body read, up to `OAUTH_BODY_LIMIT`. */
+function limited(response: Response, origin: string): Effect.Effect<Response, McpOperationError> {
+  return readLimitedBody(response, OAUTH_BODY_LIMIT, (reason) =>
+    mcpFailure(
+      reason === "too-large"
+        ? new Error(sourceText("error.backend.oauthResponseTooLarge", { origin }))
+        : new Error(sourceText("error.backend.oauthResponseUnreadable", { origin })),
+    ),
+  ).pipe(
+    Effect.map((body) => {
+      // The body is decoded already, and its length is the one read here.
+      const headers = new Headers(response.headers);
+      headers.delete("content-encoding");
+      headers.delete("content-length");
+      return new Response(NULL_BODY_STATUSES.has(response.status) ? null : new Uint8Array(body), {
+        status: response.status,
+        statusText: response.statusText,
+        headers,
+      });
+    }),
+  );
+}
+
+/** The statuses whose response cannot have a body. */
+const NULL_BODY_STATUSES = new Set([204, 205, 304]);
+
+function withoutHash(url: URL): string {
+  return url.href.replace(/#.*$/, "");
+}
 
 /** Whether this request would hand the next origin something only the first one should have. */
 function carriesCredential(request: RequestInit): boolean {
