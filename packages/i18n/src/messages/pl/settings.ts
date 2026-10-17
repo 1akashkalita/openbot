@@ -125,6 +125,8 @@ export const messages = {
   "settings.tab.hostedServers.description": "Twórz serwery OpenBot, które działają, gdy ten komputer jest wyłączony.",
   "settings.sections.label": "Sekcje ustawień",
   "settings.panel.resize": "Zmień rozmiar prawego panelu",
+  "settings.preferences.loadFailed": "Nie udało się wczytać ustawień.",
+  "settings.preferences.saveFailed": "Nie udało się zapisać tego ustawienia. Spróbuj ponownie.",
   "settings.agentSelect.placeholder": "Wybierz agenta",
   "settings.agentSelect.empty": "Brak lokalnych agentów",
   "settings.agentSelect.label": "Zainstaluj w",
@@ -302,6 +304,9 @@ export const messages = {
   "settings.profile.sessions.disconnectLabel": "Odłącz sesję {name} z {signedIn}",
   "settings.profile.sessions.loadFailed": "Nie udało się wczytać sesji konta. Spróbuj ponownie.",
   "settings.profile.sessions.disconnectFailed": "Nie udało się odłączyć tej sesji. Spróbuj ponownie.",
+  "settings.profile.sessions.disconnectConfirm.title": "Odłączyć tę sesję?",
+  "settings.profile.sessions.disconnectConfirm.description":
+    "To urządzenie zostanie wylogowane z konta. Aby się połączyć, musi zalogować się ponownie.",
   "settings.updates.title": "Aktualizacje OpenBot",
   "settings.updates.track.title": "Kanał aktualizacji",
   "settings.updates.track.description": "Kanał Stabilny otrzymuje przetestowane wydania OpenBot.",

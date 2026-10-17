@@ -128,6 +128,9 @@ export const messages = defineMessages("settings", {
   "settings.tab.hostedServers.description": "Create OpenBot servers that run when this computer is off.",
   "settings.sections.label": "Settings sections",
   "settings.panel.resize": "Resize right panel",
+  // A failed read or save of the app preferences on the General, Notifications, Dynamic Island and Updates tabs.
+  "settings.preferences.loadFailed": "Could not load your settings.",
+  "settings.preferences.saveFailed": "Could not save this setting. Try again.",
   // The agent picker on the skill and plugin install pages.
   "settings.agentSelect.placeholder": "Choose an agent",
   "settings.agentSelect.empty": "No local agents",
@@ -301,6 +304,9 @@ export const messages = defineMessages("settings", {
   "settings.profile.sessions.disconnectLabel": "Disconnect {name} session from {signedIn}",
   "settings.profile.sessions.loadFailed": "Could not load account sessions. Please try again.",
   "settings.profile.sessions.disconnectFailed": "Could not disconnect this session. Please try again.",
+  "settings.profile.sessions.disconnectConfirm.title": "Disconnect this session?",
+  "settings.profile.sessions.disconnectConfirm.description":
+    "This device is signed out of your account. It must sign in again to connect.",
   // The Updates tab. {target} is "OpenBot v1.2.3" or settings.updates.target.latest.
   "settings.updates.title": "OpenBot updates",
   "settings.updates.track.title": "Update track",

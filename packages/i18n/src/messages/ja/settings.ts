@@ -124,6 +124,8 @@ export const messages = {
     "このコンピューターの電源が切れているときも動作する OpenBot サーバーを作成します。",
   "settings.sections.label": "設定のセクション",
   "settings.panel.resize": "右パネルのサイズを変更",
+  "settings.preferences.loadFailed": "設定を読み込めませんでした。",
+  "settings.preferences.saveFailed": "この設定を保存できませんでした。もう一度お試しください。",
   "settings.agentSelect.placeholder": "エージェントを選択",
   "settings.agentSelect.empty": "ローカルのエージェントがありません",
   "settings.agentSelect.label": "インストール先",
@@ -291,6 +293,9 @@ export const messages = {
   "settings.profile.sessions.disconnectLabel": "{signedIn} からの {name} のセッションの接続を解除",
   "settings.profile.sessions.loadFailed": "アカウントのセッションを読み込めませんでした。もう一度お試しください。",
   "settings.profile.sessions.disconnectFailed": "このセッションの接続を解除できませんでした。もう一度お試しください。",
+  "settings.profile.sessions.disconnectConfirm.title": "このセッションの接続を解除しますか？",
+  "settings.profile.sessions.disconnectConfirm.description":
+    "このデバイスはアカウントからサインアウトします。接続するには、もう一度サインインする必要があります。",
   "settings.updates.title": "OpenBot のアップデート",
   "settings.updates.track.title": "アップデートのチャンネル",
   "settings.updates.track.description": "Stable ではテスト済みの OpenBot リリースを受け取ります。",

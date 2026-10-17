@@ -127,6 +127,8 @@ export const messages = {
   "settings.tab.hostedServers.description": "Crea server OpenBot che funzionano anche quando questo computer è spento.",
   "settings.sections.label": "Sezioni delle impostazioni",
   "settings.panel.resize": "Ridimensiona il pannello destro",
+  "settings.preferences.loadFailed": "Impossibile caricare le tue impostazioni.",
+  "settings.preferences.saveFailed": "Impossibile salvare questa impostazione. Riprova.",
   "settings.agentSelect.placeholder": "Scegli un agente",
   "settings.agentSelect.empty": "Nessun agente locale",
   "settings.agentSelect.label": "Installa su",
@@ -299,6 +301,9 @@ export const messages = {
   "settings.profile.sessions.disconnectLabel": "Disconnetti la sessione di {name} del {signedIn}",
   "settings.profile.sessions.loadFailed": "Impossibile caricare le sessioni dell'account. Riprova.",
   "settings.profile.sessions.disconnectFailed": "Impossibile disconnettere questa sessione. Riprova.",
+  "settings.profile.sessions.disconnectConfirm.title": "Disconnettere questa sessione?",
+  "settings.profile.sessions.disconnectConfirm.description":
+    "Questo dispositivo esce dal tuo account. Per connettersi deve accedere di nuovo.",
   "settings.updates.title": "Aggiornamenti di OpenBot",
   "settings.updates.track.title": "Canale di aggiornamento",
   "settings.updates.track.description": "Stabile riceve le versioni di OpenBot già collaudate.",

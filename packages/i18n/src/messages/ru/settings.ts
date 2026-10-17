@@ -125,6 +125,8 @@ export const messages = {
   "settings.tab.hostedServers.description": "Серверы OpenBot, которые работают, даже когда этот компьютер выключен.",
   "settings.sections.label": "Разделы настроек",
   "settings.panel.resize": "Изменить размер правой панели",
+  "settings.preferences.loadFailed": "Не удалось загрузить настройки.",
+  "settings.preferences.saveFailed": "Не удалось сохранить эту настройку. Повторите попытку.",
   "settings.agentSelect.placeholder": "Выберите агента",
   "settings.agentSelect.empty": "Нет локальных агентов",
   "settings.agentSelect.label": "Установить для",
@@ -302,6 +304,9 @@ export const messages = {
   "settings.profile.sessions.disconnectLabel": "Отключить сеанс {name} от {signedIn}",
   "settings.profile.sessions.loadFailed": "Не удалось загрузить сеансы аккаунта. Повторите попытку.",
   "settings.profile.sessions.disconnectFailed": "Не удалось отключить этот сеанс. Повторите попытку.",
+  "settings.profile.sessions.disconnectConfirm.title": "Отключить этот сеанс?",
+  "settings.profile.sessions.disconnectConfirm.description":
+    "Это устройство выйдет из аккаунта. Чтобы подключиться, ему нужно снова войти.",
   "settings.updates.title": "Обновления OpenBot",
   "settings.updates.track.title": "Канал обновлений",
   "settings.updates.track.description": "Stable получает проверенные релизы OpenBot.",
