@@ -11,6 +11,7 @@ import { AGENT_INSTALL_CAPABILITY } from "./agent-install-v1";
 import { AGENT_MEMORIES_CAPABILITY } from "./agent-memories-v1";
 import { AGENT_PUBLISH_CAPABILITY } from "./agent-publish-v1";
 import { AGENT_SESSION_SETTINGS_CAPABILITY } from "./agent-session-settings-v1";
+import { AGENT_TASKS_CAPABILITY } from "./agent-tasks-v1";
 import { AGENT_UPDATE_CAPABILITY } from "./agent-update-v1";
 import { TEAM_BROWSER_NAVIGATION_CAPABILITY } from "./browser-navigation-v1";
 import {
@@ -101,6 +102,7 @@ export {
   AGENT_MEMORIES_CAPABILITY,
   AGENT_PUBLISH_CAPABILITY,
   AGENT_SESSION_SETTINGS_CAPABILITY,
+  AGENT_TASKS_CAPABILITY,
   AGENT_UPDATE_CAPABILITY,
   ANDROID_PUSH_NOTIFICATIONS_CAPABILITY,
   CHANNEL_DELETE_CAPABILITY,
@@ -224,6 +226,7 @@ export const TEAM_CURRENT_CAPABILITIES = [
   AGENT_HIDDEN_CAPABILITY,
   TEAM_QUEUE_WINDOW_CAPABILITY,
   TEAM_UI_BLOCKS_CAPABILITY,
+  AGENT_TASKS_CAPABILITY,
 ] as const;
 
 export type TeamCurrentCapability = (typeof TEAM_CURRENT_CAPABILITIES)[number];
@@ -314,7 +317,8 @@ export const TEAM_BOOTSTRAP_CAPABILITIES = TEAM_CURRENT_CAPABILITIES.filter(
     capability !== FOCUS_USE_CAPABILITY &&
     capability !== AGENT_HIDDEN_CAPABILITY &&
     capability !== TEAM_QUEUE_WINDOW_CAPABILITY &&
-    capability !== TEAM_UI_BLOCKS_CAPABILITY,
+    capability !== TEAM_UI_BLOCKS_CAPABILITY &&
+    capability !== AGENT_TASKS_CAPABILITY,
 );
 export function teamCapabilitiesForProtocol(protocol: number | null | undefined): readonly TeamCurrentCapability[] {
   return protocol !== null && protocol !== undefined && protocol >= 7
@@ -346,6 +350,7 @@ export function legacyTeamCapabilities(capabilities: readonly string[]): string[
       capability !== FOCUS_USE_CAPABILITY &&
       capability !== AGENT_HIDDEN_CAPABILITY &&
       capability !== TEAM_QUEUE_WINDOW_CAPABILITY &&
-      capability !== TEAM_UI_BLOCKS_CAPABILITY,
+      capability !== TEAM_UI_BLOCKS_CAPABILITY &&
+      capability !== AGENT_TASKS_CAPABILITY,
   );
 }
