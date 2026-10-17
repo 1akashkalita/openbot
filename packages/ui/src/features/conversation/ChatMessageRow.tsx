@@ -72,6 +72,7 @@ export interface ChatMessageRowProps {
   onAttachmentAction: (attachment: AttachmentSummary, action: "open" | "reveal" | "download") => void;
   onOpenSharedFile?: (path: string) => void;
   onOpenWorkspaceFile?: (path: string) => void;
+  onOpenQuote?: (messageId: string, text: string) => void;
   onDownload?: (attachment: AttachmentSummary) => void;
   /** Loads the images and media of a client that gets no `previewUrl`. */
   mediaSource?: AttachmentMediaSource | undefined;
@@ -187,6 +188,7 @@ export function ChatMessageRow(props: ChatMessageRowProps): JSX.Element {
                 onAttachmentAction={props.onAttachmentAction}
                 onOpenSharedFile={props.onOpenSharedFile}
                 onOpenWorkspaceFile={props.onOpenWorkspaceFile}
+                onOpenQuote={props.onOpenQuote}
                 onDownload={props.onDownload}
                 mediaSource={props.mediaSource}
               />
