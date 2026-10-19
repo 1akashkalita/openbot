@@ -29,7 +29,7 @@ export function Select<Option, OptGroup = never, T extends ValidComponent = "div
 
 export type SelectTriggerProps = PolymorphicProps<"button", SelectPrimitive.SelectTriggerProps<"button">> &
   Pick<ComponentProps<"button">, "class" | "children"> & {
-    size?: "sm" | "md";
+    size?: "sm" | "md" | undefined;
   };
 
 export function SelectTrigger(rawProps: SelectTriggerProps): JSX.Element {
@@ -76,7 +76,7 @@ export function SelectContent(props: SelectContentProps): JSX.Element {
   const others = omit(props, "class", "mount");
   let contentElement: HTMLElement | undefined;
   return (
-    <SelectPrimitive.Portal mount={props.mount}>
+    <SelectPrimitive.Portal mount={props.mount ?? document.body}>
       <SelectPrimitive.Content
         ref={(element) => {
           contentElement = element;

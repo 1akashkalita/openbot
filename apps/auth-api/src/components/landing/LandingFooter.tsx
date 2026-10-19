@@ -127,9 +127,13 @@ function FooterNavLink(props: { link: FooterLink }) {
       </Show>
       <Show when={page()}>
         {(link) => (
-          <Link to={link().to} hash={link().hash}>
-            {link().label}
-          </Link>
+          <Show when={link().hash} fallback={<Link to={link().to}>{link().label}</Link>}>
+            {(hash) => (
+              <Link to={link().to} hash={hash()}>
+                {link().label}
+              </Link>
+            )}
+          </Show>
         )}
       </Show>
       <Show when={article()}>

@@ -33,7 +33,7 @@ export interface ChatMessageAuthor {
   /** Missing for an author the agent list no longer holds, and for the reader's own messages. */
   agent?: AgentProfile | undefined;
   /** The face to draw when the profile is gone: the author id keeps deleted agents apart. */
-  avatarSeed?: string;
+  avatarSeed?: string | undefined;
 }
 
 export interface ChatMessageRowProps {
@@ -72,8 +72,8 @@ export interface ChatMessageRowProps {
   onAttachmentAction: (attachment: AttachmentSummary, action: "open" | "reveal" | "download") => void;
   onOpenSharedFile?: (path: string) => void;
   onOpenWorkspaceFile?: (path: string) => void;
-  onOpenQuote?: (messageId: string, text: string) => void;
-  onDownload?: (attachment: AttachmentSummary) => void;
+  onOpenQuote?: ((messageId: string, text: string) => void) | undefined;
+  onDownload?: ((attachment: AttachmentSummary) => void) | undefined;
   /** Loads the images and media of a client that gets no `previewUrl`. */
   mediaSource?: AttachmentMediaSource | undefined;
 }

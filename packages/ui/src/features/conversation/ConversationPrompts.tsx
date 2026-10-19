@@ -51,7 +51,7 @@ export function ChoiceCard(props: {
         class="choice-options"
         aria-label={props.title}
         value={selectedChoice()}
-        disabled={props.pending}
+        disabled={props.pending ?? false}
         onChange={(choice) => {
           if (choice === props.customChoice) {
             setAnswer("");
@@ -66,7 +66,7 @@ export function ChoiceCard(props: {
       >
         <For each={props.choices}>
           {(choice, index) => (
-            <RadioGroup.Item class="choice-option-item" value={choice} disabled={props.pending}>
+            <RadioGroup.Item class="choice-option-item" value={choice} disabled={props.pending ?? false}>
               <RadioGroup.ItemInput aria-label={choice} />
               <RadioGroup.ItemControl
                 class={[

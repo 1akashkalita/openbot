@@ -67,7 +67,7 @@ interface ProviderModelPickerProps {
   icon?: JSX.Element;
   reasoningEffort?: AgentReasoningEffort | undefined;
   onReasoningEffortChange?: ((effort: AgentReasoningEffort) => void) | undefined;
-  disabled?: boolean;
+  disabled?: boolean | undefined;
   /** Keep approval controls available while model and effort changes are locked. */
   modelChangesDisabled?: boolean;
   disabledReason?: string;

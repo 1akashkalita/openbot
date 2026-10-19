@@ -173,7 +173,7 @@ export function RemoteDesktopWorkspace(props: RemoteDesktopWorkspaceProps) {
   }
 
   return (
-    <Portal mount={props.mount}>
+    <Portal mount={props.mount ?? document.body}>
       <main
         ref={(element) => (workspaceElement = element)}
         class={[

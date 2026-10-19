@@ -84,8 +84,8 @@ export type RemoteTeamCommand =
       method: string;
       path: string;
       body: TeamProtocolV2Json;
-      upload?: RemoteFileUpload;
-      timeoutMs?: number;
+      upload?: RemoteFileUpload | undefined;
+      timeoutMs?: number | undefined;
     };
 
 export interface RemoteTeamBootstrapPayload {
@@ -1348,7 +1348,7 @@ export function createRemoteTeamPeer(actions: ActionsRef, options: { waitForHost
               method,
               path,
               body: payloadBody,
-              ...(bodyTransferId ? { bodyTransferId, contentType: upload?.mimeType } : {}),
+              ...(bodyTransferId && upload ? { bodyTransferId, contentType: upload.mimeType } : {}),
               capabilities: [...teamCapabilitiesForProtocol(checksConnection ? undefined : state.hostProtocol)],
             },
           }),

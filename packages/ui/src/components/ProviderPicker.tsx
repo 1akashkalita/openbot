@@ -80,7 +80,7 @@ export interface ProviderPickerOption {
    * provider signs in with a pasted key. Absent while unknown, so the row shows no badge rather
    * than a wrong one.
    */
-  keyStatus?: ProviderApiKeyStatus;
+  keyStatus?: ProviderApiKeyStatus | undefined;
   /**
    * Whether the row runs free models with no account, so a downloaded row needs no Connect.
    * Onboarding sets it for OpenCode, whose first-run choice needs no key.
@@ -895,7 +895,7 @@ export function ProviderPicker(props: ProviderPickerProps) {
                           >
                             <Ellipsis aria-hidden="true" />
                           </DropdownMenu.Trigger>
-                          <DropdownMenu.Portal mount={props.menuMount}>
+                          <DropdownMenu.Portal mount={props.menuMount ?? document.body}>
                             <DropdownMenu.Content>
                               <Show when={updateOffered()}>
                                 <DropdownMenu.Item
