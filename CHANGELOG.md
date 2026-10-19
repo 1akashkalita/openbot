@@ -8,6 +8,12 @@ All notable changes to OpenBot will be documented here. The project follows
 
 ## [0.44.1] - 2026-10-19
 
+### Added
+
+- Set "Memories per agent" for a joined server in Server settings → General → Agents. Before, the
+  setting in App Settings applied only to agents on your computer, and agents on a self-hosted
+  server kept the limit of 64. You must be an owner or admin, and the server must run this version.
+
 ### Fixed
 
 - Start OpenBot when a power loss left the joined server list or the team server settings file
@@ -37,6 +43,18 @@ All notable changes to OpenBot will be documented here. The project follows
   "Tasks" title moved the window.
 - Open Settings again. In 0.44.0, Settings showed an empty page and the app stopped responding
   until it restarted.
+- Update a provider CLI while the provider works on a turn. Before, Update and Retry showed
+  "Update failed" with "The Claude CLI is working on a turn. Wait for it to finish, then update.",
+  and you had to press Retry again later. Now the provider row shows "Waiting" and the update
+  starts by itself when the current turn ends. New turns of that provider wait for the update.
+  Cancel stops the wait.
+- Let a Claude agent answer again after you switch it to OpenCode and back. Before, each message
+  failed with "--resume requires a valid session ID", also after a restart. An agent that has this
+  fault now starts a new Claude session and keeps its conversation.
+- A provider account that is signing in now says to finish the sign-in in the browser, and its menu has Cancel sign-in. Before, the account showed "Connecting" with only Rename and Remove until the sign-in timed out.
+- A new account sign-in on a joined server's host now stops the earlier one. Before, the earlier account could stay "Connecting" for up to 10 minutes, and Cancel could not stop it.
+- Show the answer of a scheduled, script or webhook routine run one time in the chat of a Claude
+  agent. Before, after OpenBot restarted, the chat showed the same answer two times in the run.
 
 ## [0.44.0] - 2026-10-18
 
