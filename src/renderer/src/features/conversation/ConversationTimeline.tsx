@@ -229,6 +229,10 @@ export function ConversationTimeline() {
   const virtualMessageRows = createMemo(() => messageVirtualizer.getVirtualItems());
   const rail = createChatScrollRail({
     rows: timelineMessages,
+    // A change the person made in the app, such as to a routine, is a marker, not a message they wrote.
+    // In a shared chat, a message from another member is theirs.
+    question: (message) =>
+      message.author === "you" && !message.actionMarker && !otherSender(message) ? message.body : undefined,
     storedCount: () => props.messages.length,
     unloaded: () => props.unloadedHistory,
     virtualizer: messageVirtualizer,
