@@ -1,5 +1,5 @@
 import type { AnchoredEndSpaceConfig, LegendListRef } from "@legendapp/list/react-native";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Keyboard, type LayoutChangeEvent, type NativeScrollEvent } from "react-native";
 import { useKeyboardHandler } from "react-native-keyboard-controller";
 import {
@@ -129,6 +129,7 @@ export function useChatMotion(
   const [latestGeneration, setLatestGeneration] = useState(0);
   const lastRequiredInputId = useRef(requiredInputId);
   const requiredInputFrame = useRef<number | null>(null);
+  const sendScrollFrame = useRef<number | null>(null);
   const measurements = useRef({ viewport: 0, content: 0, composer: 0 });
   // Whether the list had rows when it last finished its first position. Null until it does once.
   const [placedWithRows, setPlacedWithRows] = useState<boolean | null>(null);
@@ -178,6 +179,7 @@ export function useChatMotion(
   useEffect(
     () => () => {
       if (requiredInputFrame.current !== null) cancelAnimationFrame(requiredInputFrame.current);
+      if (sendScrollFrame.current !== null) cancelAnimationFrame(sendScrollFrame.current);
     },
     [],
   );
@@ -216,7 +218,19 @@ export function useChatMotion(
       pending.current = null;
       reveal();
       // From older messages the list jumps: a long animated scroll would render every row on the way.
-      void list.scrollToEnd({ animated: !send.first && send.fromLatest && !reducedMotion });
+      const animated = !send.first && send.fromLatest && !reducedMotion;
+      if (sendScrollFrame.current !== null) cancelAnimationFrame(sendScrollFrame.current);
+      if (animated) {
+        sendScrollFrame.current = requestAnimationFrame(() => {
+          sendScrollFrame.current = requestAnimationFrame(() => {
+            sendScrollFrame.current = null;
+            void listRef.current?.scrollToEnd({ animated: true });
+          });
+        });
+      } else {
+        sendScrollFrame.current = null;
+        void list.scrollToEnd({ animated: false });
+      }
       if (!send.first || info.anchorIndex === undefined) return;
       const m = measurements.current;
       const lift = Math.max(0, keyboardHeight.get() - keyboardOffset);
@@ -278,7 +292,7 @@ export function useChatMotion(
   }));
   const responseStyle = useAnimatedStyle(() => ({ opacity: responseOpacity.get() }));
 
-  function beginSend() {
+  const beginSend = useCallback(() => {
     followLatest.current = true;
     setKeyboardLiftBehavior("whenAtEnd");
     const baseline = current.current.lastUserId;
@@ -289,90 +303,131 @@ export function useChatMotion(
       responseOpacity.set(0);
       setResponseVisible(false);
     }
-  }
-  function cancelSend() {
+  }, [firstOpacity, responseOpacity]);
+  const cancelSend = useCallback(() => {
     pending.current = null;
+    if (sendScrollFrame.current !== null) cancelAnimationFrame(sendScrollFrame.current);
+    sendScrollFrame.current = null;
     cancelAnimation(firstOffset);
     firstOffset.set(0);
     firstOpacity.set(1);
     responseOpacity.set(1);
     setResponseVisible(true);
-  }
+  }, [firstOffset, firstOpacity, responseOpacity]);
   /** The reader, not the chat, now chooses the position. */
-  function leaveLatest() {
+  const leaveLatest = useCallback(() => {
     setUserScrolled(true);
     followLatest.current = false;
     setKeyboardLiftBehavior("never");
-  }
-  function onScrollBeginDrag() {
+  }, []);
+  const onScrollBeginDrag = useCallback(() => {
     leaveLatest();
     reveal();
     cancelSend();
-  }
+  }, [leaveLatest, reveal, cancelSend]);
   /** Opens the chat with row `index` under the header, instead of at the latest message. */
-  function openAt(index: number): Promise<void> {
-    leaveLatest();
-    const scrolled = listRef.current?.scrollToIndex({ index, viewOffset: header + FOCUS_GAP, animated: false });
-    return (scrolled ?? Promise.resolve()).then(reveal, reveal);
-  }
+  const openAt = useCallback(
+    (index: number): Promise<void> => {
+      leaveLatest();
+      const scrolled = listRef.current?.scrollToIndex({ index, viewOffset: header + FOCUS_GAP, animated: false });
+      return (scrolled ?? Promise.resolve()).then(reveal, reveal);
+    },
+    [leaveLatest, header, reveal],
+  );
   /** Positions the chat at the latest message again, after the latest page replaces a window around a searched message. */
-  function returnToLatest() {
+  const returnToLatest = useCallback(() => {
     followLatest.current = true;
     setKeyboardLiftBehavior("whenAtEnd");
     setLatestGeneration((generation) => generation + 1);
-  }
-  function onScrollEndDrag(event: { nativeEvent: Pick<NativeScrollEvent, "contentOffset"> }) {
-    // Only a user scroll can resume following. Keyboard dismissal can make the
-    // reply visible without the user choosing to return to it.
-    const m = measurements.current;
-    followLatest.current = chatContentIsVisible(
-      m.content,
-      m.viewport,
-      event.nativeEvent.contentOffset.y,
-      m.composer + Math.max(0, keyboardHeight.get() - keyboardOffset),
-    );
-    setKeyboardLiftBehavior(followLatest.current ? "whenAtEnd" : "never");
-  }
-  function scrollToLatest() {
+  }, []);
+  const onScrollEndDrag = useCallback(
+    (event: { nativeEvent: Pick<NativeScrollEvent, "contentOffset"> }) => {
+      // Only a user scroll can resume following. Keyboard dismissal can make the
+      // reply visible without the user choosing to return to it.
+      const m = measurements.current;
+      followLatest.current = chatContentIsVisible(
+        m.content,
+        m.viewport,
+        event.nativeEvent.contentOffset.y,
+        m.composer + Math.max(0, keyboardHeight.get() - keyboardOffset),
+      );
+      setKeyboardLiftBehavior(followLatest.current ? "whenAtEnd" : "never");
+    },
+    [keyboardHeight, keyboardOffset],
+  );
+  const scrollToLatest = useCallback(() => {
     followLatest.current = true;
     setKeyboardLiftBehavior("whenAtEnd");
     void listRef.current?.scrollToEnd({ animated: !reducedMotion });
-  }
+  }, [reducedMotion]);
 
-  return {
-    listRef,
-    listPlaced,
-    /** While a message from search opens the chat, the list does not take the latest message. */
-    startsAtEnd: !holdOpening,
-    atLatest,
-    userScrolled,
-    historyVisible,
-    responseVisible,
-    composerHeight,
-    composerStyle,
-    keyboardHeight,
-    keyboardProgress,
-    keyboardLiftBehavior,
-    /** A question waits for the reader at the end of the chat: the list keeps it in view while it grows. */
-    followsRequiredInput: requiredInputId !== null && keyboardLiftBehavior === "whenAtEnd",
-    scrollOffset,
-    historyStyle,
-    firstMessageStyle,
-    responseStyle,
-    onListReady,
-    onAnchorReady,
-    onViewportLayout,
-    onContentSizeChange,
-    onComposerLayout,
-    onScrollBeginDrag,
-    onScrollEndDrag,
-    beginSend,
-    cancelSend,
-    scrollToLatest,
-    openAt,
-    returnToLatest,
-    latestGeneration,
-  };
+  return useMemo(
+    () => ({
+      listRef,
+      listPlaced,
+      /** While a message from search opens the chat, the list does not take the latest message. */
+      startsAtEnd: !holdOpening,
+      atLatest,
+      userScrolled,
+      historyVisible,
+      responseVisible,
+      composerHeight,
+      composerStyle,
+      keyboardHeight,
+      keyboardProgress,
+      keyboardLiftBehavior,
+      /** A question waits for the reader at the end of the chat: the list keeps it in view while it grows. */
+      followsRequiredInput: requiredInputId !== null && keyboardLiftBehavior === "whenAtEnd",
+      scrollOffset,
+      historyStyle,
+      firstMessageStyle,
+      responseStyle,
+      onListReady,
+      onAnchorReady,
+      onViewportLayout,
+      onContentSizeChange,
+      onComposerLayout,
+      onScrollBeginDrag,
+      onScrollEndDrag,
+      beginSend,
+      cancelSend,
+      scrollToLatest,
+      openAt,
+      returnToLatest,
+      latestGeneration,
+    }),
+    [
+      listPlaced,
+      holdOpening,
+      atLatest,
+      userScrolled,
+      historyVisible,
+      responseVisible,
+      composerHeight,
+      composerStyle,
+      keyboardHeight,
+      keyboardProgress,
+      keyboardLiftBehavior,
+      requiredInputId,
+      scrollOffset,
+      historyStyle,
+      firstMessageStyle,
+      responseStyle,
+      onListReady,
+      onAnchorReady,
+      onViewportLayout,
+      onContentSizeChange,
+      onComposerLayout,
+      onScrollBeginDrag,
+      onScrollEndDrag,
+      beginSend,
+      cancelSend,
+      scrollToLatest,
+      openAt,
+      returnToLatest,
+      latestGeneration,
+    ],
+  );
 }
 
 export type ChatMotion = ReturnType<typeof useChatMotion>;
