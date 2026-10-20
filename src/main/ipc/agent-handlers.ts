@@ -429,6 +429,9 @@ export function agentIpcHandlers({
           if (input.allowNewChat !== undefined) {
             throw new Error(sourceText("error.agent.newChatLocalOnly"));
           }
+          if (input.quickAcknowledgement !== undefined) {
+            throw new Error(sourceText("error.agent.quickAcknowledgementLocalOnly"));
+          }
           if (input.busyMessageMode !== undefined) {
             throw new Error(sourceText("error.agent.busyMessageModeLocalOnly"));
           }
