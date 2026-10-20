@@ -62,6 +62,7 @@ import { SIDE_QUESTION_CAPABILITY } from "./side-question-v1";
 import { SIGN_IN_RELAY_CAPABILITY } from "./sign-in-relay-v1";
 import { SKILLS_ADMIN_CAPABILITY } from "./skills-admin-v1";
 import { SKILLS_EVENTS_CAPABILITY } from "./skills-events-v1";
+import { TEAM_SUBAGENTS_CAPABILITY } from "./subagents-v1";
 import { TEAM_UI_BLOCKS_CAPABILITY } from "./ui-blocks-v1";
 import { TEAM_PROTOCOL_V7_CAPABILITIES } from "./v7";
 import { WORKSPACE_DIRECTORY_CAPABILITY } from "./workspace-directory-v1";
@@ -158,6 +159,7 @@ export {
   TEAM_BROWSER_VIEW_VIEWPORT_CAPABILITY,
   TEAM_HISTORY_EXTENT_CAPABILITY,
   TEAM_MESSAGE_CLIENT_ID_CAPABILITY,
+  TEAM_SUBAGENTS_CAPABILITY,
   TEAM_UI_BLOCKS_CAPABILITY,
   WORKSPACE_DIRECTORY_CAPABILITY,
 };
@@ -242,6 +244,7 @@ export const TEAM_CURRENT_CAPABILITIES = [
   AGENT_MEMORY_LIMIT_CAPABILITY,
   DISCORD_ACCESS_CAPABILITY,
   SIDE_QUESTION_CAPABILITY,
+  TEAM_SUBAGENTS_CAPABILITY,
 ] as const;
 
 export type TeamCurrentCapability = (typeof TEAM_CURRENT_CAPABILITIES)[number];
@@ -338,7 +341,8 @@ export const TEAM_BOOTSTRAP_CAPABILITIES = TEAM_CURRENT_CAPABILITIES.filter(
     capability !== AGENT_TASKS_CAPABILITY &&
     capability !== AGENT_MEMORY_LIMIT_CAPABILITY &&
     capability !== DISCORD_ACCESS_CAPABILITY &&
-    capability !== SIDE_QUESTION_CAPABILITY,
+    capability !== SIDE_QUESTION_CAPABILITY &&
+    capability !== TEAM_SUBAGENTS_CAPABILITY,
 );
 export function teamCapabilitiesForProtocol(protocol: number | null | undefined): readonly TeamCurrentCapability[] {
   return protocol !== null && protocol !== undefined && protocol >= 7
@@ -376,6 +380,7 @@ export function legacyTeamCapabilities(capabilities: readonly string[]): string[
       capability !== AGENT_TASKS_CAPABILITY &&
       capability !== AGENT_MEMORY_LIMIT_CAPABILITY &&
       capability !== DISCORD_ACCESS_CAPABILITY &&
-      capability !== SIDE_QUESTION_CAPABILITY,
+      capability !== SIDE_QUESTION_CAPABILITY &&
+      capability !== TEAM_SUBAGENTS_CAPABILITY,
   );
 }
