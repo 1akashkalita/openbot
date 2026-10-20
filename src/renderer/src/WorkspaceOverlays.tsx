@@ -593,6 +593,8 @@ function ServerSettings(props: { connectors: ConnectorRegistry }) {
           onSetMuted={(muted) => setServerMuted(server().id, muted)}
           onSetNotificationLevel={(level) => setServerNotificationLevel(server().id, level)}
           onCreateInvite={createServerInvite}
+          license={appPort().license}
+          onContactUs={() => void appPort().openExternal("hosted-server-contact")}
           onUpdateMember={updateServerMember}
           onRemoveMember={removeServerMember}
           onRevokeInvite={revokeServerInvite}
@@ -772,6 +774,8 @@ function AppSettings(props: AccountProps) {
         onRevokeAccountSession={auth.revokeAccountSession}
         onSignOut={platform.landingPreview ? undefined : auth.logoutCentralAccount}
         billingApi={appPort().billing}
+        licenseApi={appPort().license}
+        onContactUs={() => void appPort().openExternal("hosted-server-contact")}
         hostedServersApi={appPort().hostedServers}
         onAddHostedServer={() => {
           setAppSettingsOpen(false);

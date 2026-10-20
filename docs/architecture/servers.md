@@ -423,6 +423,48 @@ only. It decides which statuses and grace periods give a server a plan, and it c
 for a server that the paying account owns. Do not read `billing_subscriptions` or a Stripe status in
 another place.
 
+### Commercial license
+
+The license is a second Stripe product next to the server plans
+(`packages/contracts/src/license.ts`). One account has at most one open license. It is one monthly
+subscription with the lookup key `openbot_license_month` and a graduated price: the base covers 5
+users, then each extra user, up to 25. The amounts are in `LICENSE_PRICES` (EUR is the base
+currency; USD and PLN are `currency_options`). `stripe-bootstrap.ts` creates the price. The
+subscription quantity is the number of users.
+
+- Users are people, not servers or computers: the owner, plus each distinct account that is an
+  active member (`remote_memberships`) of a server that the owner owns. AI agents and chat-app
+  participants do not count.
+- While the license is open, it is a hard limit. `RemoteControlPlane` adds
+  `LICENSE_SEAT_AVAILABLE_SQL` to the member seat check of an invite accept and a reactivation, in the
+  same statement as the server plan limit. A full license refuses a new person with 409
+  `license_users_full`. A person that the license already counts can join another server of the
+  owner. Members who joined before are never removed. Without an open license, only the server plan
+  limit (`getServerEntitlement`) applies.
+- `apps/auth-api/src/server/license-service.ts` owns the `licenses` D1 table (migration `0038`).
+  The billing webhook gives a subscription with the license lookup key to `LicenseService.sync` and
+  writes nothing to `billing_subscriptions`. A Worker before the license sees an unknown plan and
+  skips the event, so an old Worker keeps working.
+- Routes: `GET /v1/me/license`, and `POST /v1/me/license/checkout`, `/users` and `/renewal`. The
+  state is `available: false` until Stripe has the license price, and the app then shows nothing.
+  An app on a Worker without these routes gets 404 and also shows nothing.
+- A Stripe customer pays in one currency, so a new license uses the currency of the account's open
+  subscriptions. Checkout cannot buy fewer users than are in use. An increase is charged at once
+  (`always_invoice`). A decrease starts at the next invoice and cannot go below the users in use or
+  below 5. The subscription metadata `openbot_paid_users` and `openbot_paid_period_end` keep the
+  users paid in the current period, so an increase after a decrease charges only the users above
+  that number.
+- Checkout keeps one open license page for each account. After it makes a page, it closes the
+  older license pages of the customer, so two requests at the same time return the same page. It
+  then reads the customer's subscriptions in Stripe, not only D1, so a license paid before its
+  webhook stops the new page with `license_exists`. A second open license can still come from the
+  Stripe Dashboard; `sync` logs a warning, and a person refunds it.
+- When the owner of a full license creates an invite, the members section asks to add 1 user and
+  shows the extra price, then adds the user and creates the invite. At 25 users it shows "Contact
+  us" and creates no invite. Admins get no step; the join tells the person that the license is full.
+- Desktop calls the `license` IPC group; the web client calls the browser routes. Both render
+  `@openbot/ui/features/billing/LicenseSection` in the license slot of `BillingPanel`.
+
 ## macOS Host Manager
 
 `scripts/macos-tenant-setup.swift` is a separate administrator command for new Standard accounts.
