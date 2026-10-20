@@ -119,6 +119,7 @@ import { HostAnalytics } from "./analytics";
 import { analyticsInventoryDayStore, collectAnalyticsInventory } from "./analytics-inventory";
 import { catalogPluginSlug, isReportedMcpServerName, loadCatalogPluginServers } from "./analytics-plugin-catalog";
 import { readAnalyticsPreference } from "./analytics-preference-store";
+import { AppBehaviorService } from "./app-behavior-service";
 import { ApprovalAutomation, readApprovalAutomation } from "./approval-automation-store";
 import { AutomationServer } from "./automation-server";
 import { BillingDesktopService } from "./billing-service";
@@ -170,6 +171,7 @@ import { loadIngressQueueKey } from "./ingress-queue-key";
 import { InstanceTransferService } from "./instance-transfer-service";
 import { LanguageService } from "./language-service";
 import { localRoutineFeedDocument } from "./local-routine-calendar";
+import { createLoginItem } from "./login-item";
 import { LogoColorService } from "./logo-color-service";
 import type { MacHapticFeedback } from "./mac-haptic-feedback";
 import {
@@ -290,6 +292,7 @@ const BUSY_MESSAGE_MODE_PREFERENCE_FILE = "openbot-busy-message-mode-v1.json";
 const AGENT_MEMORY_LIMIT_PREFERENCE_FILE = "openbot-agent-memory-limit-v1.json";
 const SERVER_TIMEZONE_PREFERENCE_FILE = "openbot-server-timezone-v1.json";
 const REMOTE_SESSION_REUSE_PREFERENCE_FILE = "openbot-remote-session-reuse-preference-v1.json";
+const APP_BEHAVIOR_PREFERENCE_FILE = "openbot-app-behavior-preference-v1.json";
 const DYNAMIC_ISLAND_PREFERENCE_FILE = "openbot-dynamic-island-preference-v1.json";
 const BROWSER_STATE_FILE = "openbot-browser-state-v1.json";
 const SIDEBAR_LAYOUT_FILE = "openbot-sidebar-layout-v1.json";
@@ -473,6 +476,7 @@ export interface ApplicationServices {
   serverTimezone: ServerTimezonePreferenceStore;
   remoteSessionReuse: RemoteSessionReusePreferenceStore;
   remoteSessionCache: RemoteSessionCache;
+  appBehavior: AppBehaviorService;
   agentInitialization: AgentInitializationGate<AgentLifecycleFailed>;
   sidebarLayout: SidebarLayoutStore;
   host: HostService;
@@ -1005,6 +1009,15 @@ export async function createApplicationServices({
     join(app.getPath("userData"), REMOTE_SESSION_REUSE_PREFERENCE_FILE),
   );
   await runCauseEffect(remoteSessionReuse.load());
+  const appBehavior = new AppBehaviorService({
+    path: join(app.getPath("userData"), APP_BEHAVIOR_PREFERENCE_FILE),
+    loginItem: createLoginItem({ appVariant, server: Boolean(hostedServer || serverModeEnvironment) }),
+    offersBackground: process.platform !== "darwin" && !hostedServer && !serverModeEnvironment,
+  });
+  await runCauseEffect(appBehavior.load());
+  void Effect.runPromise(appBehavior.refreshLoginItem()).catch((error) =>
+    logger.warn("The login item did not refresh.", toLogValue(error)),
+  );
   const remoteSessionCache = new RemoteSessionCache({
     path: join(app.getPath("userData"), REMOTE_SESSIONS_FILE),
     enabled: remoteSessionReuse.get().keepBetweenRuns,
@@ -2622,6 +2635,7 @@ export async function createApplicationServices({
     serverTimezone,
     remoteSessionReuse,
     remoteSessionCache,
+    appBehavior,
     agentInitialization,
     hostUpdateCoordinator,
     requestedUpdate: remoteUpdate,
