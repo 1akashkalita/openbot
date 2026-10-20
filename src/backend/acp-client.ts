@@ -88,6 +88,9 @@ import { TimeoutError } from "./with-timeout";
 /** How long OpenCode's second `session/load` waits after an internal service failure. */
 const OPENCODE_LOAD_RETRY_MS = 500;
 
+/** How long OpenCode's second `session/resume` waits while the new process still starts. */
+const OPENCODE_RESUME_RETRY_MS = 2_000;
+
 /** How many `session/list` pages OpenBot reads to find a session before it stops looking. */
 const OPENCODE_SESSION_LIST_PAGES = 50;
 
@@ -249,6 +252,8 @@ export interface AcpProviderOptions {
   discoveryCwd?: () => string;
   /** Models the agent runs but does not list, added after its own (`AcpModel.unlisted`). */
   additionalModels?: () => Effect.Effect<AcpModel[]>;
+  /** The name to show for a listed model, from its id and the name that the agent sent. */
+  modelName?: (id: string, name: string) => string;
   /**
    * Values to mask in every diagnostic and error this client emits, read at each use: the custom
    * agent's environment values, which have no secret name that `redactText` could know them by.
@@ -924,8 +929,10 @@ export class AcpAgentClient extends EventEmitter<ClientEvents> {
     );
     // An agent that lists no model still reports that: the additional models must not hide it.
     if (listed.length === 0) return listed;
-    const ids = new Set(listed.map((model) => model.id));
-    return [...listed, ...additional.filter((model) => !ids.has(model.id))];
+    const modelName = this.options.modelName;
+    const named = modelName ? listed.map((model) => ({ ...model, name: modelName(model.id, model.name) })) : listed;
+    const ids = new Set(named.map((model) => model.id));
+    return [...named, ...additional.filter((model) => !ids.has(model.id))];
   });
 
   readonly #initialize = Effect.fn("AcpAgentClient.initialize")(function* (
@@ -1201,6 +1208,10 @@ export class AcpAgentClient extends EventEmitter<ClientEvents> {
    * `session/resume` gets the same OpenCode check. OpenCode 1.19.3 advertises resume, and it cannot
    * read a session that OpenCode 2.0 wrote in its `session_v2` table: each resume failed this way and
    * the agent never got a new session.
+   *
+   * OpenCode 2.1.1 can fail a `session/resume` in its first seconds with "Internal service failure"
+   * and `ServiceUnavailableError`, because its plugins have not started yet (OpenCode issue #57204).
+   * The session is there, and a resume a few seconds later works, so OpenBot tries once more.
    */
 
   readonly #restoreSessionEffect = Effect.fn("AcpAgentClient.restoreSession")(function* (
@@ -1216,6 +1227,7 @@ export class AcpAgentClient extends EventEmitter<ClientEvents> {
           : current.loadSession(request),
       );
     let failure: unknown;
+    let starting = false;
     try {
       return providerResult(yield* Effect.result(restore(connection)));
     } catch (error) {
@@ -1223,8 +1235,17 @@ export class AcpAgentClient extends EventEmitter<ClientEvents> {
       if (method === "load" && isSessionNotFound(error, request.sessionId, this.provider)) {
         return yield* providerFailure(new MissingAcpSessionError(`ACP session not found: ${request.sessionId}`, error));
       }
-      if (this.provider !== "opencode" || !isOpenCodeServiceFailure(error)) return yield* providerFailure(error);
+      starting = this.provider === "opencode" && method === "resume" && isOpenCodeStarting(error);
+      if (!starting && (this.provider !== "opencode" || !isOpenCodeServiceFailure(error))) {
+        return yield* providerFailure(error);
+      }
       failure = error;
+    }
+    if (starting) {
+      yield* Effect.sleep(OPENCODE_RESUME_RETRY_MS);
+      // The process can have stopped during the wait; this reports that instead of a closed stream.
+      const current = yield* providerSync(() => this.#requireConnection());
+      return yield* restore(current);
     }
     const listing = yield* this.#sessionListingEffect(connection, request);
     if (listing === "absent")
@@ -2199,6 +2220,16 @@ function failureText(error: unknown): string {
   if (!(error instanceof RequestError)) return String(error);
   const detail = failureDetail(error);
   return detail && !error.message.includes(detail) ? `${String(error)}: ${detail}` : String(error);
+}
+
+/** OpenCode 2's error for a request that its service cannot answer yet, such as at start (#57204). */
+function isOpenCodeStarting(error: unknown): boolean {
+  return (
+    error instanceof RequestError &&
+    error.code === -32603 &&
+    isRecord(error.data) &&
+    error.data.errorName === "ServiceUnavailableError"
+  );
 }
 
 /**
