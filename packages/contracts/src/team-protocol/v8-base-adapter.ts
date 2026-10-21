@@ -12,6 +12,7 @@ import {
   toWireAgentKeys,
   toWireAgentKeysObjectForPath,
 } from "./current-agent-keys";
+import { eventHasPromptQuestions, withEventPromptMultiSelect } from "./prompt-multi-select-v1";
 import { withConversationSubagents } from "./subagents-v1";
 import { withConversationUiBlocks } from "./ui-blocks-v1";
 import {
@@ -40,12 +41,15 @@ export function decodeTeamProtocolV8BaseCurrentEvent(value: unknown): TeamProtoc
   const decodedValue: TeamProtocolV8BaseJsonValue = JSON.parse(JSON.stringify(decoded.event));
   let current: unknown;
   try {
-    current = withEventConversationPlans(
-      restoreBrowserSecretMetadata(toCurrentAgentKeys(decodedValue), value),
-      value,
-      // A host sends a UI block only under ui-blocks-v1, and the subagents only under subagents-v1,
-      // so a present one is always kept.
-      value,
+    current = withEventPromptMultiSelect(
+      withEventConversationPlans(
+        restoreBrowserSecretMetadata(toCurrentAgentKeys(decodedValue), value),
+        value,
+        // A host sends a UI block only under ui-blocks-v1, the subagents only under subagents-v1, and
+        // a multi-select flag only under prompt-multi-select-v1, so a present one is always kept.
+        value,
+        value,
+      ),
       value,
     );
   } catch {
@@ -63,6 +67,7 @@ export function encodeTeamProtocolV8BaseCurrentEvent(
     preserveBrowserSecrets?: boolean;
     uiBlocks?: boolean;
     subagents?: boolean;
+    promptMultiSelect?: boolean;
   } = {},
 ): string | null {
   // `turn-progress` bypasses the frozen codec, so it needs the vocabulary swap applied by hand.
@@ -77,15 +82,18 @@ export function encodeTeamProtocolV8BaseCurrentEvent(
   const decoded = decodeTeamProtocolV8BaseEvent(downconvertedValue);
   if (decoded.kind !== "known") return null;
   const encoded = encodeTeamProtocolV8BaseEvent(decoded.event);
-  if (!encoded || (!options.preserveBrowserSecrets && !eventConversationKey(event.type))) return encoded;
+  const promptMultiSelect = options.promptMultiSelect === true && eventHasPromptQuestions(event.type);
+  if (!encoded || (!options.preserveBrowserSecrets && !eventConversationKey(event.type) && !promptMultiSelect))
+    return encoded;
   // The block and the subagents go as written: the key swap would rename a response value under a
   // field id such as `agentId`.
-  const output = withEventConversationPlans(
+  const withPlans = withEventConversationPlans(
     JSON.parse(encoded),
     wireValue,
     options.uiBlocks ? currentValue : null,
     options.subagents ? currentValue : null,
   );
+  const output = promptMultiSelect ? withEventPromptMultiSelect(withPlans, currentValue) : withPlans;
   return JSON.stringify(options.preserveBrowserSecrets ? restoreBrowserSecretMetadata(output, wireValue) : output);
 }
 

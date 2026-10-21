@@ -376,6 +376,14 @@ export function AgentEventBridge() {
       playAgentEventSound(event);
       readDictatedReplies(event, activeServerId());
     });
+    // After a reload, a question that still waits is only in the runtime snapshot. Main drops
+    // events while the page loads, so read the snapshot once here.
+    void agentsPort()
+      .agent.getRuntimeSnapshot()
+      .then((snapshot) => {
+        if (snapshot) flush(() => handleAgentEvent({ type: "runtime-snapshot", snapshot }));
+      })
+      .catch(() => undefined);
     return () => {
       readRefresh += 1;
       unsubscribe();
