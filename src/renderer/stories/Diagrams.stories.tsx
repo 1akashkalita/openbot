@@ -23,8 +23,8 @@ import { createSignal, createStore, For, Match, onCleanup, Show, Switch, snapsho
 import { fn } from "storybook/test";
 import type { Meta, StoryObj } from "storybook-solidjs-vite";
 import { defaultSidebarLayout } from "../src/features/sidebar/sidebar-sections";
-import { CHANNEL_STORY_ROWS, ChannelStoryComposer, ChannelTranscript } from "./channel-story-support";
-import { StoryAgentConversation } from "./conversation-story-support";
+import { StoryChannelConversation } from "./channel-story-support";
+import { StoryConversation } from "./conversation-story-support";
 import { requireFixture, STORY_AGENTS } from "./fixtures";
 
 function storyAgent(id: string): AgentProfile {
@@ -896,16 +896,8 @@ function WorkspaceStage() {
               )}
             </For>
           </Match>
-          <Match when={openChannel()}>
-            {(channel) => (
-              <div class="conversation-story-frame">
-                <ChannelTranscript rows={CHANNEL_STORY_ROWS} workers={[]}>
-                  <ChannelStoryComposer channelName={channel().name} />
-                </ChannelTranscript>
-              </div>
-            )}
-          </Match>
-          <Match when={openAgent()}>{(agent) => <StoryAgentConversation agent={agent()} />}</Match>
+          <Match when={openChannel()}>{(channel) => <StoryChannelConversation name={channel().name} />}</Match>
+          <Match when={openAgent()}>{(agent) => <StoryConversation agent={agent()} />}</Match>
         </Switch>
       </div>
     </div>
