@@ -49,6 +49,8 @@ export function ServerSettingsScreen() {
     removeServer,
     refreshServer,
     hostedServerStarting,
+    canManageConnectors,
+    canManageOnePasswordConnector,
     canReadServerStorage,
   } = useMobileWorkspace();
   const server = useLiveServerRecovery(servers.find((item) => item.id === serverId));
@@ -136,6 +138,11 @@ export function ServerSettingsScreen() {
         >
           <Typography.Paragraph>{t("mobile.server.settings.members")}</Typography.Paragraph>
         </SettingsRow>
+        {canManageConnectors(serverId) || canManageOnePasswordConnector(serverId) ? (
+          <SettingsRow onPress={() => router.push({ pathname: "/server-settings/connectors", params: { serverId } })}>
+            <Typography.Paragraph>{t("mobile.server.settings.connectors")}</Typography.Paragraph>
+          </SettingsRow>
+        ) : null}
         {canReadServerStorage(serverId) ? (
           <SettingsRow onPress={() => router.push({ pathname: "/server-settings/storage", params: { serverId } })}>
             <Typography.Paragraph>{t("mobile.server.settings.storage")}</Typography.Paragraph>

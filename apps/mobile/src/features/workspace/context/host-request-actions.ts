@@ -31,6 +31,7 @@ import { AGENT_MEMORY_LIMIT_CAPABILITY } from "@openbot/contracts/team-protocol/
 import { AGENT_PUBLISH_CAPABILITY } from "@openbot/contracts/team-protocol/agent-publish-v1";
 import { AGENT_SESSION_SETTINGS_CAPABILITY } from "@openbot/contracts/team-protocol/agent-session-settings-v1";
 import { AGENT_TASKS_CAPABILITY } from "@openbot/contracts/team-protocol/agent-tasks-v1";
+import { CONNECTORS_CAPABILITY } from "@openbot/contracts/team-protocol/connectors-v1";
 import { CONTEXT_RESET_CAPABILITY } from "@openbot/contracts/team-protocol/context-reset-v1";
 import {
   CONVERSATION_FILE_SEARCH_CAPABILITY,
@@ -52,6 +53,7 @@ import { HOST_RELEASE_CAPABILITY } from "@openbot/contracts/team-protocol/host-r
 import { HOST_TIMEZONE_CAPABILITY } from "@openbot/contracts/team-protocol/host-timezone-v1";
 import { HOST_UPDATE_CAPABILITY } from "@openbot/contracts/team-protocol/host-update-v1";
 import { HOSTED_SITES_CAPABILITY } from "@openbot/contracts/team-protocol/hosted-sites-v1";
+import { ONEPASSWORD_CONNECTOR_CAPABILITY } from "@openbot/contracts/team-protocol/onepassword-connector-v1";
 import { PROVIDER_ACCOUNTS_CAPABILITY } from "@openbot/contracts/team-protocol/provider-accounts-v1";
 import { PROVIDERS_ADMIN_CAPABILITY } from "@openbot/contracts/team-protocol/providers-v1";
 import { TEAM_QUEUE_EDIT_CAPABILITY } from "@openbot/contracts/team-protocol/queue-edit-v1";
@@ -74,6 +76,8 @@ import {
   getHostReleaseStatus,
   getHostTimezone,
   getHostUpdateStatus,
+  githubConnectorRepositories,
+  githubConnectorRequest,
   installAgentTemplate,
   listAgentSkills,
   listEventActivity,
@@ -82,6 +86,14 @@ import {
   listHostedSites,
   listProviderAccounts,
   listSharedTables,
+  messagingConnectorAddOrchestrator,
+  messagingConnectorComplete,
+  messagingConnectorConnect,
+  messagingConnectorDisconnect,
+  messagingConnectorOverview,
+  messagingConnectorReconnect,
+  messagingConnectorSetEnabled,
+  onePasswordConnectorRequest,
   previewAgentTemplate,
   publishAgentTemplate,
   readAgentSessionSettings,
@@ -196,6 +208,18 @@ type HostRequestActions = Pick<
   | "setServerTimezone"
   | "loadAgentMemoryLimit"
   | "setAgentMemoryLimit"
+  | "githubConnector"
+  | "loadGitHubRepositories"
+  | "loadOnePasswordConnector"
+  | "connectOnePassword"
+  | "disconnectOnePassword"
+  | "loadMessagingConnections"
+  | "connectMessaging"
+  | "completeMessagingInstall"
+  | "reconnectMessaging"
+  | "disconnectMessaging"
+  | "setMessagingEnabled"
+  | "addMessagingOrchestrator"
   | "loadServerUpdate"
   | "checkServerUpdate"
   | "startServerUpdate"
@@ -299,6 +323,11 @@ export function createHostRequestActions({
     capabilityApi(serverId, HOST_TIMEZONE_CAPABILITY, "mobile.server.settings.timezoneUnsupported");
   const memoryLimitAdmin = (serverId: string) =>
     capabilityApi(serverId, AGENT_MEMORY_LIMIT_CAPABILITY, "mobile.server.settings.memoryLimitUnsupported");
+  /** The connectors are optional admin route sets. */
+  const connectorsAdmin = (serverId: string) =>
+    capabilityApi(serverId, CONNECTORS_CAPABILITY, "mobile.server.connectors.unsupported");
+  const onePasswordAdmin = (serverId: string) =>
+    capabilityApi(serverId, ONEPASSWORD_CONNECTOR_CAPABILITY, "mobile.server.connectors.unsupported");
   /** The OpenBot update of the host: the admin route set, or the member set that only checks and starts. */
   const updateApi = (serverId: string, access: ServerUpdateAccess) =>
     capabilityApi(
@@ -344,6 +373,29 @@ export function createHostRequestActions({
     loadAgentMemoryLimit: async (serverId) => runTeamRequest(getHostAgentMemoryLimit(memoryLimitAdmin(serverId))),
     setAgentMemoryLimit: async (limit, serverId) =>
       runTeamRequest(setHostAgentMemoryLimit(memoryLimitAdmin(serverId), limit)),
+    githubConnector: async (route, serverId) =>
+      runTeamRequest(githubConnectorRequest(connectorsAdmin(serverId), route)),
+    loadGitHubRepositories: async (serverId) => runTeamRequest(githubConnectorRepositories(connectorsAdmin(serverId))),
+    loadOnePasswordConnector: async (serverId) =>
+      runTeamRequest(onePasswordConnectorRequest(onePasswordAdmin(serverId), "status")),
+    connectOnePassword: async (token, serverId) =>
+      runTeamRequest(onePasswordConnectorRequest(onePasswordAdmin(serverId), "connect", { token })),
+    disconnectOnePassword: async (serverId) =>
+      runTeamRequest(onePasswordConnectorRequest(onePasswordAdmin(serverId), "disconnect")),
+    loadMessagingConnections: async (platform, serverId) =>
+      runTeamRequest(messagingConnectorOverview(connectorsAdmin(serverId), { platform })),
+    connectMessaging: async (input, serverId) =>
+      runTeamRequest(messagingConnectorConnect(connectorsAdmin(serverId), input)),
+    completeMessagingInstall: async (input, serverId) =>
+      runTeamRequest(messagingConnectorComplete(connectorsAdmin(serverId), input)),
+    reconnectMessaging: async (input, serverId) =>
+      runTeamRequest(messagingConnectorReconnect(connectorsAdmin(serverId), input)),
+    disconnectMessaging: async (input, serverId) =>
+      runTeamRequest(messagingConnectorDisconnect(connectorsAdmin(serverId), input)),
+    setMessagingEnabled: async (input, serverId) =>
+      runTeamRequest(messagingConnectorSetEnabled(connectorsAdmin(serverId), input)),
+    addMessagingOrchestrator: async (input, serverId) =>
+      runTeamRequest(messagingConnectorAddOrchestrator(connectorsAdmin(serverId), input)),
     loadServerUpdate: async (serverId, access) =>
       runTeamRequest(getHostUpdateStatus(updateApi(serverId, access), access === "member")),
     checkServerUpdate: async (serverId, access) =>
