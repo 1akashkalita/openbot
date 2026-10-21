@@ -31,7 +31,13 @@ export interface UsageSample {
   baseline: boolean;
   reportedCost?: number | null;
   occurredAt?: string;
-  pricingInputTokens?: number | null;
+  /** The prompt of the last request in this update, when the provider reports it. */
+  lastRequestInputTokens?: number | null;
+  /**
+   * The provider's totals before this update. A counter with no checkpoint starts from them, so its
+   * first update records only the new requests.
+   */
+  previousTokens?: UsageTokens | null;
 }
 const TOKEN_KEYS = ["uncachedInput", "cachedInput", "cacheCreation", "output"] as const;
 
@@ -88,7 +94,11 @@ export class AgentUsage {
         );
         const previousValue = previous ? databaseRow(JSON.parse(requiredStringColumn(previous, "tokens_json"))) : null;
         const previousCost = previousValue?.reportedCost;
-        const before = previous ? decodeUsageTokens(JSON.parse(requiredStringColumn(previous, "tokens_json"))) : null;
+        const before = previous
+          ? decodeUsageTokens(JSON.parse(requiredStringColumn(previous, "tokens_json")))
+          : sample.baseline
+            ? null
+            : (sample.previousTokens ?? null);
         const delta: UsageTokens = { ...tokens };
         for (const key of TOKEN_KEYS) {
           const current = tokens[key];
@@ -130,12 +140,7 @@ export class AgentUsage {
               }
             : sample.provider === "claude"
               ? { cost: null, basis: null }
-              : estimateUsageCost(
-                  sample.provider,
-                  sample.model,
-                  delta,
-                  sample.pricingInputTokens ?? (tokens.uncachedInput ?? 0) + (tokens.cachedInput ?? 0),
-                );
+              : estimateUsageCost(sample.provider, sample.model, delta, sample.lastRequestInputTokens ?? null);
         const turn = databaseRow(
           db
             .prepare("SELECT occurred_at FROM agent_usage_activity WHERE agent_id = ? AND activity_id = ?")
