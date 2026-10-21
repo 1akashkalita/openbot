@@ -59,6 +59,16 @@
       "method": "checkbox",
       "url": "https://github.com/nightly-labs/openbot/pull/2607",
       "text": "- [x] I have read the OpenBot Contributor Assignment Agreement 1.0 and I agree to it."
+    },
+    {
+      "login": "rick-schultz",
+      "userId": 60229666,
+      "version": "1.0",
+      "signedAt": "2026-10-21T10:33:41Z",
+      "pullRequest": 2653,
+      "method": "checkbox",
+      "url": "https://github.com/nightly-labs/openbot/pull/2653",
+      "text": "- [x] I have read the [OpenBot Contributor Assignment Agreement](https://github.com/nightly-labs/openbot/blob/main/CLA.md) 1.0 and I agree to it."
     }
   ]
 }
