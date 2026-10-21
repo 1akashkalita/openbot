@@ -31,7 +31,10 @@ import type {
   HostAnalyticsInput,
   HostedSiteList,
   HostProviderAccounts,
+  HostReleaseStatus,
   HostTimezoneSettings,
+  HostUpdateSettingsChange,
+  HostUpdateStatus,
   InstallAgentTemplateInput,
   InstalledSkill,
   QueuedMessageReceipt,
@@ -56,6 +59,7 @@ import type {
   UpdateAgentAdminSettingsInput,
   UpdateAgentHostSettingsInput,
   UpdateAgentInput,
+  UpdateRestartMode,
   UpdateRoutineInput,
 } from "@openbot/contracts/ipc";
 import type {
@@ -77,6 +81,9 @@ import type { MobileConversationStore } from "./conversation-store";
 import type { LiveWorkspaceStore } from "./live-workspace-store";
 
 type MobileServerKind = "local" | "remote";
+/** The route set that reaches a host's OpenBot update: the admin set or the member set. */
+export type ServerUpdateAccess = "admin" | "member";
+
 export type MobileServerState = "unknown" | "connecting" | "online" | "offline" | "error";
 export type MobileServerDirectoryState = "loading" | "ready" | "error";
 
@@ -242,6 +249,27 @@ export interface MobileWorkspaceContextValue {
   /** How many memories each agent of the server can keep, and the values that the host permits. */
   loadAgentMemoryLimit: (serverId: string) => Promise<HostAgentMemoryLimit>;
   setAgentMemoryLimit: (limit: number, serverId: string) => Promise<HostAgentMemoryLimit>;
+  /**
+   * How this user reaches the OpenBot update of an online host: an owner or admin through
+   * `host-update-v1`, any member through `host-member-update-v1`. Null when neither applies.
+   */
+  serverUpdateAccess: (serverId: string) => ServerUpdateAccess | null;
+  /** True when the host serves `host-release-v1`, which tells how its installation updates. */
+  canReadServerRelease: (serverId: string) => boolean;
+  loadServerUpdate: (serverId: string, access: ServerUpdateAccess) => Promise<HostUpdateStatus>;
+  /** The host starts the check and answers at once. Read the status again for the outcome. */
+  checkServerUpdate: (serverId: string, access: ServerUpdateAccess) => Promise<HostUpdateStatus>;
+  /** A member's update always waits for idle agents. A second start replaces the restart mode. */
+  startServerUpdate: (
+    serverId: string,
+    access: ServerUpdateAccess,
+    restart: UpdateRestartMode,
+  ) => Promise<HostUpdateStatus>;
+  /** Owners and admins only. */
+  cancelServerUpdate: (serverId: string) => Promise<HostUpdateStatus>;
+  setServerUpdateSettings: (settings: HostUpdateSettingsChange, serverId: string) => Promise<HostUpdateStatus>;
+  loadServerRelease: (serverId: string) => Promise<HostReleaseStatus>;
+  checkServerRelease: (serverId: string) => Promise<HostReleaseStatus>;
   /** An online host that serves `hosted-sites-v1`. Every member reads the sites. */
   canViewHostedSites: (serverId: string) => boolean;
   /** An owner or admin of an online host that serves `hosted-sites-v1`. The host checks the role again. */
@@ -473,6 +501,8 @@ type MobileWorkspaceStateKey =
   | "canEditServerIdentity"
   | "canManageServerTimezone"
   | "canManageAgentMemoryLimit"
+  | "serverUpdateAccess"
+  | "canReadServerRelease"
   | "canViewHostedSites"
   | "canDeleteHostedSites"
   | "canSendNotifications"
