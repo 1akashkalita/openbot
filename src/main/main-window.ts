@@ -29,7 +29,9 @@ import {
   type Point,
   type Rectangle,
   screen,
+  session,
   type WebContents,
+  webContents,
 } from "electron";
 import type { AgentService } from "../backend/agent-service";
 import type { BrowserHost } from "../backend/browser-host";
@@ -42,6 +44,7 @@ import {
 import type { HighlightDisplay } from "./computer-use-highlight-window";
 import { shouldShowDevelopmentWindow } from "./development-profile";
 import { dynamicIslandNotchSizeForDisplay } from "./dynamic-island-window";
+import { type InterfaceSizeService, type InterfaceSizeStep, interfaceSizeShortcut } from "./interface-size-service";
 import {
   createMainWindowBoundsRecorder,
   presentMainWindow,
@@ -64,6 +67,7 @@ interface MainWindowApplicationServices {
   service: AgentService;
   browser: BrowserHost;
   remoteServers: RemoteServerManager;
+  interfaceSize: InterfaceSizeService;
 }
 
 /** The two handles that outlive any one window, so `activate` can rebuild into the same slot. */
@@ -208,6 +212,12 @@ export function createMainWindowController({
     window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
     // A started navigation can still be cancelled without replacing the live renderer.
     window.webContents.on("did-navigate", onRendererLoadStarted);
+    // Chromium keeps a zoom level for each origin, and the first load sets the origin, so the saved
+    // size is applied on each navigation rather than once when the window is made.
+    window.webContents.on("did-navigate", () => {
+      const interfaceSize = getServices()?.interfaceSize;
+      if (interfaceSize) window.webContents.setZoomFactor(interfaceSize.zoomFactor);
+    });
     window.webContents.on("render-process-gone", onRendererGone);
     window.webContents.once("destroyed", onRendererGone);
     window.webContents.on("before-input-event", (event, input) => {
@@ -217,6 +227,14 @@ export function createMainWindowController({
       if (isToggleDevToolsShortcut(input)) {
         event.preventDefault();
         window.webContents.toggleDevTools();
+        return;
+      }
+      const sizeStep = interfaceSizeShortcut(input, process.platform === "darwin");
+      const interfaceSize = getServices()?.interfaceSize;
+      if (sizeStep && interfaceSize) {
+        // This also stops the View menu item with the same key, which would step the size again.
+        event.preventDefault();
+        Effect.runFork(interfaceSize.step(sizeStep));
         return;
       }
       if (isSelectAllShortcut(input)) {
@@ -606,6 +624,19 @@ export function loadDynamicIslandRenderer(window: BrowserWindow, display: Displa
 }
 
 /**
+ * A browser tab has its own session and keeps the page zoom that the default zoom roles gave it.
+ * Any other focused contents is the app, so the step changes the saved interface size.
+ */
+function zoomFocusedContents(interfaceSize: InterfaceSizeService, step: InterfaceSizeStep): void {
+  const focused = webContents.getFocusedWebContents();
+  if (!focused || focused.session === session.defaultSession) {
+    Effect.runFork(interfaceSize.step(step));
+    return;
+  }
+  focused.setZoomLevel(step === "default" ? 0 : focused.getZoomLevel() + (step === "larger" ? 0.5 : -0.5));
+}
+
+/**
  * The native application menu.
  *
  * Electron gives no way to relabel a built-in role, so the roles below stay in the system language
@@ -613,9 +644,16 @@ export function loadDynamicIslandRenderer(window: BrowserWindow, display: Displa
  * builds the menu again on a language change, because a `MenuItem` label cannot be changed in place.
  *
  * The custom `appMenu` replaces the default one, so the standard Preferences item with `Cmd + ,`
- * must be declared here: without it macOS has no Settings shortcut.
+ * must be declared here: without it macOS has no Settings shortcut. The View menu is the default
+ * `viewMenu`, but its zoom items change the saved interface size, so Settings and the next start
+ * keep the size the user chose. A website in the browser keeps the zoom of the default roles.
  */
-export function configureApplicationMenu(service: AgentService, updater: UpdateService, translate: AppTranslate): void {
+export function configureApplicationMenu(
+  service: AgentService,
+  updater: UpdateService,
+  interfaceSize: InterfaceSizeService,
+  translate: AppTranslate,
+): void {
   Menu.setApplicationMenu(
     Menu.buildFromTemplate([
       {
@@ -654,7 +692,33 @@ export function configureApplicationMenu(service: AgentService, updater: UpdateS
         ],
       },
       { role: "editMenu" },
-      { role: "viewMenu" },
+      {
+        // The role keeps the system "View" title. The submenu replaces its default items.
+        role: "viewMenu",
+        submenu: [
+          { role: "reload" },
+          { role: "forceReload" },
+          { role: "toggleDevTools" },
+          { type: "separator" },
+          {
+            label: translate("menu.actualSize"),
+            accelerator: "CommandOrControl+0",
+            click: () => zoomFocusedContents(interfaceSize, "default"),
+          },
+          {
+            label: translate("menu.zoomIn"),
+            accelerator: "CommandOrControl+=",
+            click: () => zoomFocusedContents(interfaceSize, "larger"),
+          },
+          {
+            label: translate("menu.zoomOut"),
+            accelerator: "CommandOrControl+-",
+            click: () => zoomFocusedContents(interfaceSize, "smaller"),
+          },
+          { type: "separator" },
+          { role: "togglefullscreen" },
+        ],
+      },
       { role: "windowMenu" },
     ]),
   );
