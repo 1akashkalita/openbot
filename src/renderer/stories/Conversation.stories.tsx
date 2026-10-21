@@ -33,6 +33,7 @@ import {
   STORY_ATTACHMENTS,
   STORY_PRESENCE,
   STORY_QUEUES,
+  STORY_REPLY_QUOTE_BODY,
 } from "./fixtures";
 import { createMockOpenBot } from "./mock-openbot";
 
@@ -529,6 +530,24 @@ const longPathReplyMessages: RendererAgentMessage[] = [
     ].join("\n"),
     time: "10:03",
     kind: "text",
+  },
+];
+
+const replyQuoteMessages: RendererAgentMessage[] = [
+  {
+    id: "reply-quote-agent",
+    author: "agent",
+    body: STORY_REPLY_QUOTE_BODY,
+    time: "10:02",
+    kind: "text",
+  },
+  {
+    id: "reply-quote-user",
+    author: "you",
+    body: "Approved. Tag it after the checks pass.",
+    time: "10:03",
+    kind: "text",
+    replyToMessageId: "reply-quote-agent",
   },
 ];
 
@@ -1067,6 +1086,7 @@ function MockedConversation(props: {
   voicePhase?: VoicePhase;
   takeoverStateGallery?: boolean;
   conversationError?: string;
+  replyToMessageId?: string;
 }) {
   const previousApi = window.openbot;
   const mock = createMockOpenBot();
@@ -1080,6 +1100,12 @@ function MockedConversation(props: {
       controller.setDrafts({
         [initialAgentId]: { text: "", attachments: props.initialAttachments ?? [], replyToMessageId: null },
       });
+    });
+  }
+  const replyToMessageId = props.replyToMessageId;
+  if (initialAgentId && replyToMessageId) {
+    onSettled(() => {
+      controller.setDrafts({ [initialAgentId]: { text: "", attachments: [], replyToMessageId } });
     });
   }
   if (props.voiceModelProgress !== undefined) {
@@ -1579,6 +1605,15 @@ export const LongFilePathInReply: Story = {
       <MockedConversation args={storyArgs} />
     </section>
   ),
+};
+
+/** The composer and the sent reply quote the same Markdown message, and render it the same way. */
+export const MarkdownReplyQuote: Story = {
+  name: "Markdown reply quote",
+  args: {
+    messages: replyQuoteMessages,
+  },
+  render: (storyArgs) => <MockedConversation args={storyArgs} replyToMessageId="reply-quote-agent" />,
 };
 
 export const StreamingMarkdownInChat: Story = {

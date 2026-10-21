@@ -29,7 +29,7 @@ import { messageFileReferences } from "./FileReference";
 import { ImageGeneration } from "./ImageGeneration";
 import { ImageGallery, ImageLightbox, type ImageLightboxOpening, isLightboxImage } from "./ImageLightbox";
 import { MarkdownInlineText, MarkdownMessageText, markdownImageName } from "./MarkdownMessageText";
-import { RichMessageText } from "./RichMessageText";
+import { ReplyQuote } from "./ReplyQuote";
 import {
   nextStreamingReveal,
   type StreamingRevealChunk,
@@ -450,22 +450,14 @@ export function MessageBody(props: {
               {props.referencedAuthorName ??
                 (referenced().author === "you" ? t("chat.message.you") : t("chat.message.agentFallback"))}
             </span>
-            <p id={referenceTextId} inert={referenceOpens() ? true : undefined}>
-              <RichMessageText
-                body={referenced().body || t("chat.message.attachment")}
-                agents={props.agents}
-                skills={props.skills}
-                attachments={referenced().attachments}
-                citations={referenced().citations}
-                onSelectAgent={props.onSelectAgent}
-                onOpenLink={props.onOpenLink}
-                onOpenAttachment={openAttachment}
-                onOpenSharedFile={props.onOpenSharedFile}
-                onOpenWorkspaceFile={props.onOpenWorkspaceFile}
-                onOpenQuote={props.onOpenQuote}
-                showCitationFooter={false}
-              />
-            </p>
+            <ReplyQuote
+              id={referenceTextId}
+              body={referenced().body || t("chat.message.attachment")}
+              agents={props.agents}
+              skills={props.skills}
+              attachments={referenced().attachments}
+              citations={referenced().citations}
+            />
             <Show when={props.referenceState === "loading"}>
               <LoaderCircle class="message-reply-loading" aria-hidden="true" />
             </Show>
