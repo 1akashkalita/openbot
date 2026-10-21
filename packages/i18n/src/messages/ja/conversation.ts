@@ -47,8 +47,8 @@ export const messages = {
   "conversation.header.publish": "エージェントを公開",
   "conversation.header.browserActing": "{name} がブラウザーを操作しています",
   "conversation.header.agentFallback": "エージェント",
-  "conversation.header.modelsBusy": "モデルを変更する前に、現在の作業が終わるまでお待ちください。",
-  "conversation.header.modelsUnavailable": "エージェント CLI が接続すると、モデルを選択できます。",
+  "conversation.header.providersBusy":
+    "プロバイダーまたはアカウントを変更する前に、現在の作業が終わるまでお待ちください。",
   "conversation.sidePanel.label": "サイドパネル",
   "conversation.sidePanel.open": "サイドパネルを開く",
   "conversation.sidePanel.close": "サイドパネルを閉じる",

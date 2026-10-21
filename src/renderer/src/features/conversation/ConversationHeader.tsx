@@ -45,11 +45,9 @@ export function ConversationHeader() {
         onConnectProvider: props.onConnectProvider,
         canConnectProvider: props.canConnectProvider,
         onManageProviders: props.onManageProviders,
-        modelChangesDisabled: agentActivity() === "Working",
-        disabledReason:
-          agentActivity() === "Working"
-            ? t("conversation.header.modelsBusy")
-            : t("conversation.header.modelsUnavailable"),
+        // The backend switches the model of the same provider during work: the next turn uses it.
+        providerChangesDisabled: agentActivity() === "Working",
+        disabledReason: t("conversation.header.providersBusy"),
         accountChoice: true,
         providerAccountId: props.agent?.providerAccountId,
         onChange: (model, provider, accountId) => void selectAndConfirmModel(model, provider, accountId),

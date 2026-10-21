@@ -47,8 +47,8 @@ export const messages = {
   "conversation.header.publish": "Publier l’agent",
   "conversation.header.browserActing": "{name} contrôle le navigateur",
   "conversation.header.agentFallback": "Agent",
-  "conversation.header.modelsBusy": "Attendez la fin du travail en cours avant de changer de modèle.",
-  "conversation.header.modelsUnavailable": "Les modèles sont disponibles après la connexion d’une CLI d’agent.",
+  "conversation.header.providersBusy":
+    "Attendez la fin du travail en cours avant de changer de fournisseur ou de compte.",
   "conversation.sidePanel.label": "Panneau latéral",
   "conversation.sidePanel.open": "Ouvrir le panneau latéral",
   "conversation.sidePanel.close": "Fermer le panneau latéral",

@@ -48,6 +48,16 @@ export const Disabled: Story = {
   args: { disabled: true, disabledReason: "Choose a provider first." },
 };
 
+/** While the agent works: its own models and effort stay open, other providers wait. */
+export const ProviderChangesLocked: Story = {
+  args: {
+    reasoningEffort: "medium",
+    onReasoningEffortChange: fn(),
+    providerChangesDisabled: true,
+    disabledReason: "Wait for the current work to finish before you change the provider or account.",
+  },
+};
+
 export const UnavailableProvidersOpen: Story = {
   args: {
     modelOptions: STORY_MODELS.filter((model) => model.provider === "codex"),
