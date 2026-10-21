@@ -56,7 +56,7 @@ import { voiceSupported } from "./voice-status";
 const READER_INPUT_WINDOW_MS = 250;
 
 function followConversationBottom(element: HTMLDivElement): void {
-  element.scrollTop = element.scrollHeight;
+  element.scrollTop = element.scrollHeight - element.clientHeight;
 }
 
 export function createConversationViewScope(props: ConversationProps) {
@@ -487,9 +487,7 @@ export function createConversationViewScope(props: ConversationProps) {
     chatSearchQuery,
     activeChatSearchIndex,
     scrollElement: () => scrollElement,
-    revealMatch: () => {
-      stickToLatest = false;
-    },
+    revealMatch: () => setStickToLatest(false),
     setChatSearchOpen,
     setChatSearchQuery,
     chatSearchMatches,
@@ -863,6 +861,7 @@ export function createConversationViewScope(props: ConversationProps) {
     readerInput?.addEventListener("touchend", readerTouchEnd);
     readerInput?.addEventListener("touchcancel", readerTouchEnd);
     readerInput?.addEventListener("pointerdown", readerPointerDown);
+    readerInput?.addEventListener("focusin", readerFocusIn);
     keyboardTarget.addEventListener("keydown", readerKeyDown);
     keyboardWindow.addEventListener("pointerup", endReaderDrag);
     keyboardWindow.addEventListener("pointercancel", endReaderDrag);
@@ -879,7 +878,7 @@ export function createConversationViewScope(props: ConversationProps) {
     requestAnimationFrame(() => {
       if (!scrollElement) return;
       updateVirtualScrollMargin();
-      if (stickToLatest) scrollElement.scrollTop = scrollElement.scrollHeight;
+      if (stickToLatest) followConversationBottom(scrollElement);
       updateScrollFade(scrollElement);
       updateUnreadDividerVisibility();
     });
@@ -897,6 +896,7 @@ export function createConversationViewScope(props: ConversationProps) {
       readerInput?.removeEventListener("touchend", readerTouchEnd);
       readerInput?.removeEventListener("touchcancel", readerTouchEnd);
       readerInput?.removeEventListener("pointerdown", readerPointerDown);
+      readerInput?.removeEventListener("focusin", readerFocusIn);
       keyboardTarget.removeEventListener("keydown", readerKeyDown);
       keyboardWindow.removeEventListener("pointerup", endReaderDrag);
       keyboardWindow.removeEventListener("pointercancel", endReaderDrag);
@@ -1038,10 +1038,9 @@ export function createConversationViewScope(props: ConversationProps) {
         latestScrollSettleFrame = requestAnimationFrame(() => {
           latestScrollSettleFrame = undefined;
           if (!scrollElement) return;
-          if (followLatest) {
-            stickToLatest = true;
-            followConversationBottom(scrollElement);
-          }
+          // A later layout, such as the activity line, can leave the first follow short of the
+          // bottom. Stay there only while this follow is still on; do not turn it back on.
+          if (followLatest && stickToLatest) followConversationBottom(scrollElement);
           updateScrollFade(scrollElement);
           updateUnreadDividerVisibility();
         });
@@ -1088,6 +1087,8 @@ export function createConversationViewScope(props: ConversationProps) {
       const openAtDivider = (settle: boolean) =>
         requestAnimationFrame(() => {
           if (unreadOpening !== opening || readerLeftLatest || !scrollElement) return;
+          // A scroll event that an earlier follow queued can land at the bottom before this frame.
+          stickToLatest = false;
           const divider = unreadMessagesDivider;
           if (divider?.isConnected) {
             const readRow = divider.closest(".virtual-chat-row")?.previousElementSibling;
@@ -1379,10 +1380,18 @@ export function createConversationViewScope(props: ConversationProps) {
     scrollFades.adopt(element);
     updateVirtualScrollMargin();
   };
-  /* Following the latest message again, by request or because the reader came back, ends the reader's hold. */
+  /*
+   * Following the latest message again, by request or because the reader came back, ends the reader's hold.
+   * A jump away, such as to a search match, holds the chat as a scroll up does: a smooth scroll starts at
+   * the bottom, and its first scroll events must not follow the latest message again.
+   */
   function setStickToLatest(value: boolean) {
-    stickToLatest = value;
-    if (value) readerLeftLatest = false;
+    if (!value) {
+      leaveLatest();
+      return;
+    }
+    stickToLatest = true;
+    readerLeftLatest = false;
   }
   /**
    * The reader moved up, so the chat stops following new content until the reader moves down again
@@ -1393,11 +1402,26 @@ export function createConversationViewScope(props: ConversationProps) {
    */
   function leaveLatest() {
     readerLeftLatest = true;
+    stopFollowingLatest();
+  }
+  function stopFollowingLatest() {
     stickToLatest = false;
     if (latestScrollFrame !== undefined) cancelAnimationFrame(latestScrollFrame);
     if (latestScrollSettleFrame !== undefined) cancelAnimationFrame(latestScrollSettleFrame);
     latestScrollFrame = undefined;
     latestScrollSettleFrame = undefined;
+  }
+  /**
+   * Tab or a screen reader can move the focus to a control above the view. The chat then scrolls up
+   * with no wheel, key, touch or drag, so the chat stops following, as after a jump to a search match.
+   * A return to the bottom follows again. A click focuses without a scroll. Chromium scrolls before
+   * `focusin`, so the chat is already above its last scroll event. A dialog or menu that closes gives
+   * the focus back to its opener without a scroll; the opener can be above the view by then, and the
+   * chat continues to follow.
+   */
+  function readerFocusIn() {
+    if (readerDragging || !scrollElement) return;
+    if (scrollElement.scrollTop < lastScrollTop) stopFollowingLatest();
   }
   /**
    * A scroll is the reader's when the chat moves the way that the reader's last input asked, soon after
@@ -1410,8 +1434,11 @@ export function createConversationViewScope(props: ConversationProps) {
     const intent = readerIntent && performance.now() - readerIntent.at < READER_INPUT_WINDOW_MS ? readerIntent : null;
     if (moved < 0 && (readerDragging || intent?.up === true)) leaveLatest();
     else if (moved > 0 && (readerDragging || intent?.up === false)) readerLeftLatest = false;
-    if (element.scrollHeight - element.scrollTop - element.clientHeight > 80) stickToLatest = false;
-    else if (!readerLeftLatest) stickToLatest = true;
+    // Distance only rejoins. A follow that has not yet landed, or a correction to the last row
+    // above the activity line, can sit more than 80px from the real bottom while a turn runs.
+    if (!readerLeftLatest && element.scrollHeight - element.scrollTop - element.clientHeight <= 80) {
+      stickToLatest = true;
+    }
   };
   function noteReaderIntent(up: boolean) {
     readerIntent = { up, at: performance.now() };
