@@ -245,7 +245,7 @@ export class ThreadLifecycle {
     agentId: string,
   ) {
     yield* Effect.forEach(
-      this.#conversation.loadedAgentThreads(agentId),
+      this.#conversation.openAgentThreads(agentId),
       ([externalThreadId, client]) =>
         Effect.gen({ self: this }, function* () {
           const releaseThread = client.releaseThread?.bind(client);
@@ -1068,7 +1068,7 @@ export class ThreadLifecycle {
   readonly #releaseProviderSession = Effect.fn("ThreadLifecycle.releaseProviderSession")(function* (
     this: ThreadLifecycle,
     externalThreadId: string,
-    client: AgentClient | undefined = this.#conversation.loadedClientFor(externalThreadId),
+    client: AgentClient | undefined = this.#conversation.openClientFor(externalThreadId),
   ) {
     if (!client?.releaseThread) return;
     yield* client
