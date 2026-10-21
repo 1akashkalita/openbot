@@ -13,6 +13,7 @@ export const messages = {
   "sidebar.new.channel": "新しいチャンネル",
   "sidebar.new.section": "新しいセクション",
   "sidebar.new.menu": "新しいエージェントまたはセクション",
+  "sidebar.new.menuWithChannel": "新しいエージェント、チャンネルまたはセクション",
   "sidebar.markAllRead": "すべて既読にする",
   "sidebar.topbar.openSettings": "{name} の設定を開く",
   "sidebar.topbar.localServer": "ローカル",
@@ -56,6 +57,7 @@ export const messages = {
   "sidebar.channelMenu.label": "チャンネルの操作",
   "sidebar.channelMenu.edit": "チャンネルを編集",
   "sidebar.channelMenu.delete": "チャンネルを削除",
+  "sidebar.channelMenu.restore": "チャンネルを復元",
   "sidebar.channel.noMessages": "メッセージはまだありません",
   "sidebar.channel.workingPreview": "作業中 · {preview}",
   "sidebar.channel.unread": { other: "未読メッセージ {count} 件" },
@@ -92,7 +94,7 @@ export const messages = {
   "sidebar.delete.agentDescription":
     "エージェントとその OpenBot の会話をアプリから削除します。キュー、メモリー、ルーティン、ワークスペースも削除されます。接続した CLI プロバイダーが別に保存している履歴は削除されません。",
   "sidebar.delete.channelDescription":
-    "チャンネルを停止します。履歴は「削除済みのチャンネル」にプレビュー専用で残ります。復元はできません。メンバーのエージェントは残ります。",
+    "チャンネルを停止します。履歴は「削除済みのチャンネル」にプレビュー専用で残ります。そこから復元できます。メンバーのエージェントは残ります。",
   "sidebar.delete.sectionDescription":
     "このセクションのエージェントは「未割り当て」に移動します。エージェントは削除されません。",
   "sidebar.delete.failed": "この項目を削除できませんでした。もう一度お試しください。",

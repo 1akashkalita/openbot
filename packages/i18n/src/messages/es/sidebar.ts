@@ -13,6 +13,7 @@ export const messages = {
   "sidebar.new.channel": "Nuevo canal",
   "sidebar.new.section": "Nueva sección",
   "sidebar.new.menu": "Nuevo agente o sección",
+  "sidebar.new.menuWithChannel": "Nuevo agente, canal o sección",
   "sidebar.markAllRead": "Marcar todo como leído",
   "sidebar.topbar.openSettings": "Abrir ajustes de {name}",
   "sidebar.topbar.localServer": "Local",
@@ -56,6 +57,7 @@ export const messages = {
   "sidebar.channelMenu.label": "Acciones del canal",
   "sidebar.channelMenu.edit": "Editar canal",
   "sidebar.channelMenu.delete": "Eliminar canal",
+  "sidebar.channelMenu.restore": "Restaurar canal",
   "sidebar.channel.noMessages": "Aún no hay mensajes",
   "sidebar.channel.workingPreview": "Trabajando · {preview}",
   "sidebar.channel.unread": {
@@ -113,7 +115,7 @@ export const messages = {
   "sidebar.delete.agentDescription":
     "Esto elimina de la aplicación el agente y su conversación de OpenBot. Se eliminan su cola, recuerdos, rutinas y espacio de trabajo. El historial guardado por separado por el proveedor CLI conectado no se elimina.",
   "sidebar.delete.channelDescription":
-    "Esto detiene el canal. Su historial permanece en Canales eliminados solo para consulta. No puedes restaurarlo. Los agentes miembros se conservan.",
+    "Esto detiene el canal. Su historial permanece en Canales eliminados solo para consulta. Puedes restaurarlo desde allí. Los agentes miembros se conservan.",
   "sidebar.delete.sectionDescription":
     "Los agentes de esta sección se moverán a Sin asignar. No se eliminará ningún agente.",
   "sidebar.delete.failed": "No se pudo eliminar este elemento. Vuelve a intentarlo.",

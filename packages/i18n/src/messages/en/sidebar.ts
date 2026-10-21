@@ -12,6 +12,7 @@ export const messages = defineMessages("sidebar", {
   "sidebar.new.channel": "New channel",
   "sidebar.new.section": "New section",
   "sidebar.new.menu": "New agent or section",
+  "sidebar.new.menuWithChannel": "New agent, channel or section",
   "sidebar.markAllRead": "Mark all as read",
   "sidebar.topbar.openSettings": "Open settings for {name}",
   "sidebar.topbar.localServer": "Local",
@@ -55,6 +56,7 @@ export const messages = defineMessages("sidebar", {
   "sidebar.channelMenu.label": "Channel actions",
   "sidebar.channelMenu.edit": "Edit channel",
   "sidebar.channelMenu.delete": "Delete channel",
+  "sidebar.channelMenu.restore": "Restore channel",
   "sidebar.channel.noMessages": "No messages yet",
   "sidebar.channel.workingPreview": "Working · {preview}",
   "sidebar.channel.unread": { one: "{count} unread message", other: "{count} unread messages" },
@@ -91,7 +93,7 @@ export const messages = defineMessages("sidebar", {
   "sidebar.delete.agentDescription":
     "This removes the agent and its OpenBot conversation from the app. Its queue, memories, routines, and workspace are deleted. History stored separately by the connected CLI provider is not deleted.",
   "sidebar.delete.channelDescription":
-    "This stops the channel. Its history stays in Deleted channels for preview only. You cannot restore it. Member agents are kept.",
+    "This stops the channel. Its history stays in Deleted channels for preview only. You can restore it from there. Member agents are kept.",
   "sidebar.delete.sectionDescription": "Agents in this section will move to Unassigned. No agents will be deleted.",
   "sidebar.delete.failed": "Could not delete this item. Try again.",
   "sidebar.announce.updateFailed": "Could not update the sidebar. Try again.",

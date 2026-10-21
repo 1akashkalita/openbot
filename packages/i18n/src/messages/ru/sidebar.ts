@@ -13,6 +13,7 @@ export const messages = {
   "sidebar.new.channel": "Новый канал",
   "sidebar.new.section": "Новый раздел",
   "sidebar.new.menu": "Новый агент или раздел",
+  "sidebar.new.menuWithChannel": "Новый агент, канал или раздел",
   "sidebar.markAllRead": "Отметить все прочитанными",
   "sidebar.topbar.openSettings": "Открыть настройки: {name}",
   "sidebar.topbar.localServer": "Локальный",
@@ -56,6 +57,7 @@ export const messages = {
   "sidebar.channelMenu.label": "Действия с каналом",
   "sidebar.channelMenu.edit": "Изменить канал",
   "sidebar.channelMenu.delete": "Удалить канал",
+  "sidebar.channelMenu.restore": "Восстановить канал",
   "sidebar.channel.noMessages": "Сообщений пока нет",
   "sidebar.channel.workingPreview": "Работает · {preview}",
   "sidebar.channel.unread": {
@@ -132,7 +134,7 @@ export const messages = {
   "sidebar.delete.agentDescription":
     "Агент и его диалог в OpenBot будут удалены из приложения вместе с очередью, памятью, регулярными задачами и рабочим пространством. История, которую отдельно хранит подключённый CLI-провайдер, не удаляется.",
   "sidebar.delete.channelDescription":
-    "Канал будет остановлен. Его история останется в разделе «Удалённые каналы» только для просмотра. Восстановить канал нельзя. Агенты-участники сохранятся.",
+    "Канал будет остановлен. Его история останется в разделе «Удалённые каналы» только для просмотра. Оттуда канал можно восстановить. Агенты-участники сохранятся.",
   "sidebar.delete.sectionDescription":
     "Агенты из этого раздела переместятся в «Без раздела». Ни один агент не будет удалён.",
   "sidebar.delete.failed": "Не удалось удалить. Повторите попытку.",
