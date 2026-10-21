@@ -17,6 +17,8 @@
 import {
   type AgentEvent,
   type BrowserDisplayState,
+  type ChannelSummary,
+  decodeChannelSummaries,
   IPC_ENDPOINTS,
   LOCAL_SERVER_ID,
   latestTurnAnswer,
@@ -26,14 +28,23 @@ import {
   type VoiceStreamTranscript,
 } from "@openbot/contracts/ipc";
 import { TEAM_API_ROUTES } from "@openbot/contracts/team-api-routes";
+import { CHANNEL_ROUTES } from "@openbot/contracts/team-protocol/channels-v1";
+import { TEAM_CHANNEL_ATTENTION_CAPABILITY } from "@openbot/contracts/team-protocol/current";
 import type { AppFormat, AppTranslate } from "@openbot/i18n";
 import { redactText } from "@openbot/logging";
 import {
+  type AgentNotificationChannel,
   agentEventCanNotify,
+  agentEventRequestThread,
   notificationForAgentEvent,
   notificationForUsageLimit,
   notificationRequestKey,
 } from "@openbot/team-client/agent-notifications";
+import {
+  channelForThread,
+  channelReplyNotifications,
+  newChannelReplies,
+} from "@openbot/team-client/channel-notifications";
 import { BrowserWindow, Notification } from "electron";
 import { isNoUpdateAnswer } from "../backend/agent/routine-quiet-runs";
 import type { AgentService } from "../backend/agent-service";
@@ -97,6 +108,143 @@ export function createRendererForwarders({
       bufferedLive ? { serverId, event, bufferedLive } : { serverId, event },
     );
     void notifyAgentEvent(serverId, event).catch(() => undefined);
+    if (event.type === "channels-changed") refreshChannels(serverId);
+  }
+
+  /**
+   * The newest channel list of each server. It is the baseline of the next channel reply
+   * notification, and it maps a remote prompt's thread to its channel. The list is read again on
+   * each `channels-changed`, also while the window has focus, so the baseline stays current. The
+   * first list of a server only sets the baseline. A reply streams before it completes, so its first
+   * change sets the baseline and its completion notifies.
+   */
+  const channelLists = new Map<string, ChannelSummary[]>();
+  /** The servers whose channel list is being read. True when a change came in during the read. */
+  const channelReads = new Map<string, boolean>();
+  /** The shown reply notification of each channel. A newer reply replaces it. */
+  const channelNotifications = new Map<string, Notification>();
+
+  /** The notification level of a server's channel replies, or null when none can show. */
+  function replyLevel(serverId: string) {
+    const server = getRemoteServerManager()
+      ?.list()
+      .find((candidate) => candidate.id === serverId);
+    if (!desktopNotificationsEnabled() || !server || server.notificationsMuted) return null;
+    return server.notificationLevel;
+  }
+
+  /**
+   * One read at a time for each server. A change during a read causes one more read after it. A
+   * streaming reply changes the channels on each frame, so a server whose replies cannot notify is
+   * not read: its baseline is dropped, and the next list sets a new one. A prompt reads its channel
+   * on its own when the list has none.
+   */
+  function refreshChannels(serverId: string): void {
+    if (replyLevel(serverId) !== "all") {
+      channelLists.delete(serverId);
+      return;
+    }
+    if (channelReads.has(serverId)) {
+      channelReads.set(serverId, true);
+      return;
+    }
+    channelReads.set(serverId, false);
+    void (async () => {
+      do {
+        channelReads.set(serverId, false);
+        const next = await readChannels(serverId);
+        if (next) await notifyChannelReplies(serverId, next);
+      } while (channelReads.get(serverId));
+    })()
+      .catch(() => undefined)
+      .finally(() => channelReads.delete(serverId));
+  }
+
+  /**
+   * The channel list of a server, or null when it has none to read. A remote host without
+   * channel-attention-v1 sends no author, status or threads, so its list cannot notify.
+   */
+  async function readChannels(serverId: string): Promise<ChannelSummary[] | null> {
+    if (serverId === LOCAL_SERVER_ID) return getHostService()?.listChannels() ?? null;
+    const remoteManager = getRemoteServerManager();
+    const server = remoteManager?.list().find((candidate) => candidate.id === serverId);
+    if (!remoteManager || !server?.compatibility?.capabilities.includes(TEAM_CHANNEL_ATTENTION_CAPABILITY)) return null;
+    return runCauseEffect(remoteManager.request(serverId, CHANNEL_ROUTES.list, decodeChannelSummaries));
+  }
+
+  async function notifyChannelReplies(serverId: string, next: ChannelSummary[]): Promise<void> {
+    const previous = channelLists.get(serverId) ?? null;
+    channelLists.set(serverId, next);
+    if (!previous || !Notification.isSupported()) return;
+    const level = () => {
+      const window = getMainWindow();
+      if (!window || window.isDestroyed() || window.isFocused()) return null;
+      return replyLevel(serverId);
+    };
+    // Only "all" notifies a reply. The agent lookup is skipped at the other levels, and while a
+    // reply streams, when no reply is new.
+    if (level() !== "all" || newChannelReplies(previous, next).length === 0) return;
+    const remoteManager = getRemoteServerManager();
+    const agents =
+      serverId === LOCAL_SERVER_ID
+        ? (getAgentService()?.listAgents() ?? [])
+        : remoteManager
+          ? await runCauseEffect(remoteManager.request(serverId, TEAM_API_ROUTES.agents.all, decodeAgentSummaries))
+          : [];
+    // The settings are read again: the user can change them while the lookup runs.
+    const current = level();
+    if (!current) return;
+    const replies = channelReplyNotifications(previous, next, {
+      agents,
+      translate: getTranslate(),
+      level: current,
+      redact: notificationPreviewEnabled() ? redactText : null,
+    });
+    for (const reply of replies) {
+      const key = `${serverId}\n${reply.channelId}`;
+      const notification = new Notification({ title: reply.title, body: reply.body });
+      const shown = channelNotifications.get(key);
+      if (shown) closeRetainedNotification(shown);
+      channelNotifications.set(key, notification);
+      const release = () => {
+        if (channelNotifications.get(key) === notification) channelNotifications.delete(key);
+      };
+      notification.on("close", release);
+      notification.on("failed", release);
+      notification.on("click", () => {
+        release();
+        const window = getMainWindow();
+        if (!window || window.isDestroyed()) return;
+        showMainWindow(window);
+        sendToRenderer(window, IPC_ENDPOINTS.notifications.opened, {
+          serverId,
+          agentId: reply.agentId,
+          threadId: null,
+          channelId: reply.channelId,
+        });
+      });
+      showRetainedNotification(notification);
+    }
+  }
+
+  /**
+   * The channel of a prompt, an approval or a takeover, or null when its thread is no channel's. A
+   * known channel comes back at once, so a local notification still shows before
+   * `forwardAgentEvent` returns. Only a remote thread that is not in the list waits for a read.
+   */
+  function eventChannel(
+    serverId: string,
+    event: AgentEvent,
+  ): AgentNotificationChannel | null | Promise<AgentNotificationChannel | null> {
+    const threadId = agentEventRequestThread(event);
+    if (threadId === null) return null;
+    if (serverId === LOCAL_SERVER_ID) return getHostService()?.channelForThread(threadId) ?? null;
+    const cached = channelForThread(channelLists.get(serverId) ?? [], threadId);
+    if (cached) return cached;
+    // A new channel, or a member that joined after the last list: its thread is not in the list yet.
+    return readChannels(serverId)
+      .catch(() => null)
+      .then((channels) => (channels ? channelForThread(channels, threadId) : null));
   }
 
   /**
@@ -162,6 +310,8 @@ export function createRendererForwarders({
           ? await runCauseEffect(remoteManager.request(serverId, TEAM_API_ROUTES.agents.all, decodeAgentSummaries))
           : [];
     const reply = answer ? await answer : null;
+    const lookup = eventChannel(serverId, event);
+    const channel = lookup instanceof Promise ? await lookup : lookup;
     const level = notifyLevel();
     const content = !level
       ? null
@@ -174,6 +324,7 @@ export function createRendererForwarders({
             level,
             // The switch is read again: the user can turn it off while the lookups run.
             preview && notificationPreviewEnabled() ? { reply, redact: redactText } : null,
+            channel,
           );
     // An answer from another device came in while the lookups ran.
     if (!content || (requestKey && !requestNotifications.has(requestKey))) return;
@@ -205,6 +356,7 @@ export function createRendererForwarders({
         serverId,
         agentId: content.agentId,
         threadId: content.threadId,
+        ...(content.channelId ? { channelId: content.channelId } : {}),
       });
     });
     showRetainedNotification(notification);
