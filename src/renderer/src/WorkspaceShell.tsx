@@ -28,7 +28,9 @@ import { useServers } from "./features/servers/servers-context";
 import { WorkspaceServerRail } from "./features/servers/WorkspaceServerRail";
 import { useSettings } from "./features/settings/settings-context";
 import { WorkspaceSidebar } from "./features/sidebar/WorkspaceSidebar";
+import { TasksPanel } from "./features/tasks/TasksPanel";
 import { createHostRestartToasts, type HostRestartView } from "./features/updates/host-restart-toast";
+import { useUsage } from "./features/usage/usage-context";
 import { WindowPageView } from "./features/window/WindowPageView";
 import { WorkspacePageRail } from "./features/window/WorkspacePageRail";
 import { useWindowPage } from "./features/window/window-page-context";
@@ -51,19 +53,21 @@ import { WorkspaceOverlays } from "./WorkspaceOverlays";
  *
  * The order of the children is the paint order the stylesheet expects, and the
  * middle-pane `<Show>`s are mutually exclusive by construction: a blocked remote
- * server wins over everything, then a joined server's provider step, then the
- * Agent form, then a channel, then a
- * person, then a Agent: its chat, or on the Routines view its routine canvas. The page of the rail - schedule,
- * usage or settings - sits outside that group and inerts it.
+ * server wins over everything, then the Tasks page of the rail, then a joined server's provider step,
+ * then the Agent form, then a channel, then a person, then a Agent: its chat, or on the Routines view
+ * its routine canvas. The Tasks page hides the agent list until the user shows it. A row of the list
+ * closes the page, as each row calls `showAgents`. The other pages of the rail - schedule, usage or settings - sit outside that
+ * group and inert it.
  */
 export function WorkspaceShell(props: { account: () => CentralAuthUser }) {
   const platform = usePlatform();
-  const { sourceText } = useText();
+  const { sourceText, t } = useText();
   const scope = useServerScope();
   const settings = useSettings();
   const channels = useChannels();
   const channelOpen = () => channels.state.selectedId !== null;
   const windowPage = useWindowPage();
+  const usage = useUsage();
   useAccountUsagePolling();
   const layout = useLayout();
   const {
@@ -80,14 +84,25 @@ export function WorkspaceShell(props: { account: () => CentralAuthUser }) {
   const { conversations, retryConversation } = useConversation();
   const activeConversation = () => conversations[activeAgent()?.id ?? ""];
   const { activeDirectMember } = useDirectMessages();
-  /** The pane in the middle. The Agent form wins, then a channel, then a person, then the Agent or its routines. */
+  /**
+   * The pane in the middle. The Tasks page wins, as it covered the panes when it was a page over them.
+   * Then the Agent form, then a channel, then a person, then the Agent or its routines.
+   */
   const middlePane = createMemo(() => {
+    if (windowPage.page() === "tasks") return "tasks";
     if (agentSetupOpen()) return "agent-setup";
     if (channelOpen()) return "channel";
     if (activeDirectMember()) return "direct";
     return layout.sidebarView() === "routines" ? "routines" : "agent";
   });
   const agentChatOpen = () => middlePane() === "agent";
+  /** The list stays while a connection screen covers the page: the screen does not span the sidebar. */
+  const tasksAgentsHidden = () =>
+    middlePane() === "tasks" &&
+    !windowPage.tasksAgentsOpen() &&
+    scope.loaded() &&
+    !scope.connection.panelsFailed &&
+    !blockedRemoteServer();
 
   const blockedRemoteServer = createMemo(() => {
     const server = activeServer();
@@ -219,6 +234,7 @@ export function WorkspaceShell(props: { account: () => CentralAuthUser }) {
           blockedServer={blockedRemoteServer()}
           onRetryServer={retryServerConnection}
           windowPage={windowPage.page()}
+          sidebarHidden={tasksAgentsHidden()}
           left={
             <>
               <WorkspaceServerRail />
@@ -233,7 +249,18 @@ export function WorkspaceShell(props: { account: () => CentralAuthUser }) {
             </>
           }
         >
-          <Show when={serverOnboardingOpen()}>
+          <Show when={middlePane() === "tasks" ? usage.state.serverId : null}>
+            {(serverId) => (
+              <TasksPanel
+                serverId={serverId()}
+                hostName={servers().find((server) => server.id === serverId())?.name ?? t("app.page.serverFallback")}
+                onBack={usage.closeUsage}
+                agentsOpen={!tasksAgentsHidden()}
+                onToggleAgents={() => windowPage.setTasksAgentsOpen(tasksAgentsHidden())}
+              />
+            )}
+          </Show>
+          <Show when={serverOnboardingOpen() && middlePane() !== "tasks"}>
             <WorkspaceServerOnboarding />
           </Show>
           <Show when={middlePane() === "agent-setup" && !serverOnboardingOpen()}>
