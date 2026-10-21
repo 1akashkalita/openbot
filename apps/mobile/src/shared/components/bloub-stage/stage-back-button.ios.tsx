@@ -6,21 +6,21 @@ import {
   buttonStyle,
   controlSize,
   disabled as disabledModifier,
+  foregroundStyle,
   labelStyle,
 } from "@expo/ui/swift-ui/modifiers";
 import { isLiquidGlassAvailable } from "expo-glass-effect";
 
 import { haptics } from "@/shared/lib/haptics";
-import { useText } from "@/shared/lib/text";
-import type { ScannerCloseButtonProps } from "./scanner-close-button";
+import type { StageBackButtonProps } from "./stage-back-button";
 
-export function ScannerCloseButton({ disabled, onPress }: ScannerCloseButtonProps) {
-  const { t } = useText();
+/** The back or close button on the stage: a native Liquid Glass button, bordered before iOS 26. */
+export function StageBackButton({ icon, label, color, disabled = false, onPress }: StageBackButtonProps) {
   return (
     <Host ignoreSafeArea="all" style={{ width: 44, height: 44 }}>
       <Button
-        label={t("mobile.auth.closeScanner")}
-        systemImage="xmark"
+        label={label}
+        systemImage={icon === "close" ? "xmark" : "chevron.backward"}
         onPress={() => {
           void haptics.impact("soft");
           onPress();
@@ -30,8 +30,9 @@ export function ScannerCloseButton({ disabled, onPress }: ScannerCloseButtonProp
           buttonBorderShape("circle"),
           controlSize("large"),
           labelStyle("iconOnly"),
+          foregroundStyle(color),
           disabledModifier(disabled),
-          accessibilityLabel(t("mobile.auth.closeScanner")),
+          accessibilityLabel(label),
         ]}
       />
     </Host>
