@@ -19,7 +19,6 @@ import { type DynamicRecord, isDynamicRecord, isNumber, isOneOf, isString } from
 import { sourceText } from "@openbot/i18n/source";
 import { createOpenBotLogger } from "@openbot/logging";
 import { Deferred, Effect, Exit, Fiber, Scope } from "effect";
-import { agentLaunchPath } from "./acp-agent-command";
 import { isMemoryContextBlock, type MemoryContext, memoryContextUpdate } from "./agent/developer-instructions";
 import {
   type ClaudePlanState,
@@ -60,7 +59,13 @@ import {
   claudeWorkspaceSkillPlugin,
   claudeWriteOutsideRoots,
 } from "./claude-workspace-sandbox";
-import { type ClaudeCliInfo, claudeTakesPromptSnapshotFlag, cliSpawnTarget } from "./cli";
+import {
+  type ClaudeCliInfo,
+  claudeTakesPromptSnapshotFlag,
+  cliLaunchPath,
+  cliPathEnvironment,
+  cliSpawnTarget,
+} from "./cli";
 import {
   isClaudeCompactionSummary,
   isClaudeInterruptMarker,
@@ -770,7 +775,7 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
     const stateDirectory = this.#stateDirectory;
     const skillPlugin =
       config.workspaceOnly && stateDirectory ? yield* claudeWorkspaceSkillPlugin(stateDirectory, config.cwd) : null;
-    const launchPath = yield* agentLaunchPath();
+    const launchPath = yield* cliLaunchPath(this.#cli.executable, this.#cli.source);
     // `stop()` may have run during the await: a query created now would outlive the client.
     if (!this.#running) return yield* providerFailure(new Error("Claude Agent SDK is not running."));
     if (handoff) this.#reportMcpDrops?.(this.provider, handoff.dropped);
@@ -1796,6 +1801,7 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
 function claudeEnvironment(cli: ClaudeCliInfo): NodeJS.ProcessEnv {
   return {
     ...process.env,
+    ...cliPathEnvironment(cli),
     ...(cli.source === "managed" ? { DISABLE_AUTOUPDATER: "1" } : {}),
   };
 }
