@@ -34,9 +34,9 @@ function byCurrency(build: (currency: BillingCurrency) => string): Record<Billin
 /** The largest team that the page sells to. A larger team contacts sales. */
 const PRICING_MAX_MEMBERS = Math.max(LICENSE_MAX_USERS, ...BILLING_PLANS.map((plan) => plan.memberLimit));
 
-export function pricingPageText(t: AppTranslate, plans: readonly HostedServerCatalogPlan[] | null) {
+export function pricingPageText(t: AppTranslate, plans: readonly HostedServerCatalogPlan[]) {
   const counts = Array.from({ length: LICENSE_MAX_USERS + 1 }, (_, count) => count);
-  const yearlyPercent = byCurrency((currency) => String(plans ? yearlyDiscountPercent(plans, currency) : 0));
+  const yearlyPercent = byCurrency((currency) => String(yearlyDiscountPercent(plans, currency)));
   return {
     title: t("sitePage.pricing.title"),
     description: t("sitePage.pricing.description"),
@@ -50,7 +50,6 @@ export function pricingPageText(t: AppTranslate, plans: readonly HostedServerCat
       summary: t("sitePage.pricing.server.summary"),
       none: t("sitePage.pricing.server.none"),
       noneDetail: t("sitePage.pricing.server.noneDetail"),
-      unavailable: t("sitePage.pricing.server.unavailable"),
       bestValue: t("sitePage.pricing.server.bestValue"),
       yearlySaving: byCurrency((currency) =>
         t("sitePage.pricing.server.yearlySaving", { percent: yearlyPercent[currency] }),

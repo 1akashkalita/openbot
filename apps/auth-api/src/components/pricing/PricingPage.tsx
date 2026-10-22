@@ -280,7 +280,7 @@ function SummaryLine(props: {
 export function PricingPage(props: { text: PricingPageText; offer: PricingOffer; lang: string }) {
   const [interval, setInterval] = createSignal<BillingInterval>("month");
   const [currency, setCurrency] = createSignal<BillingCurrency>("eur");
-  const plans = () => props.offer.plans ?? [];
+  const plans = () => props.offer.plans;
   // Standard is the default. Users and server members are the same people, so the Team license starts
   // with every member of the server.
   const standard = untrack(() => {
@@ -369,11 +369,9 @@ export function PricingPage(props: { text: PricingPageText; offer: PricingOffer;
             <section class="pricing-half" aria-labelledby="pricing-servers">
               <div class="pricing-half-title">
                 <h2 id="pricing-servers">{props.text.server.title}</h2>
-                <Show when={props.offer.plans}>
-                  <span class="pricing-yearly" data-active={isYearly() ? "" : undefined}>
-                    {props.text.server.yearlySaving[currency()]}
-                  </span>
-                </Show>
+                <span class="pricing-yearly" data-active={isYearly() ? "" : undefined}>
+                  {props.text.server.yearlySaving[currency()]}
+                </span>
               </div>
               <p class="pricing-half-summary">{props.text.server.summary}</p>
               <div class="pricing-choices" role="radiogroup" aria-labelledby="pricing-servers">
@@ -403,11 +401,6 @@ export function PricingPage(props: { text: PricingPageText; offer: PricingOffer;
                   )}
                 </For>
               </div>
-              <Show when={!props.offer.plans}>
-                <p class="pricing-unavailable" role="status">
-                  {props.text.server.unavailable}
-                </p>
-              </Show>
             </section>
 
             <section class="pricing-half" aria-labelledby="pricing-license">

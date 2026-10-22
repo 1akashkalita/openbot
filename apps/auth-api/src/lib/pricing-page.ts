@@ -1,7 +1,12 @@
 // The /pricing page: hosted servers and the license, as one order form. No JSX here, for the same
 // reason `content-collection.ts` holds none.
 
-import type { BillingCurrency, BillingInterval } from "@openbot/contracts/billing";
+import {
+  BILLING_PLANS,
+  type BillingCurrency,
+  type BillingInterval,
+  billingListPrices,
+} from "@openbot/contracts/billing";
 import type { HostedServerCatalogPlan } from "@openbot/contracts/hosted-servers";
 
 export const PRICING_ROUTE = "/pricing";
@@ -51,12 +56,31 @@ export function isEuCountry(country: string | undefined): boolean {
   return country !== undefined && EU_COUNTRIES.has(country.toUpperCase());
 }
 
-/** What the page sells: the server plans with their Stripe prices, and the VAT of the visitor. */
+/** What the page sells: the server plans with their prices, and the VAT of the visitor. */
 export interface PricingOffer {
-  /** Null when the prices did not load. The page then sells only the license. */
-  plans: readonly HostedServerCatalogPlan[] | null;
+  plans: readonly HostedServerCatalogPlan[];
   inEu: boolean;
 }
+
+/**
+ * The plans at their list prices. Stripe has the same amounts (`scripts/stripe-bootstrap.ts`), so the page
+ * shows these when the Stripe catalog does not load, as on a preview Worker.
+ */
+export const LIST_PRICE_PLANS: readonly HostedServerCatalogPlan[] = BILLING_PLANS.map((plan) => {
+  const month = billingListPrices(plan.id, "month");
+  const year = billingListPrices(plan.id, "year");
+  return {
+    id: plan.id,
+    diskGb: plan.storageGb,
+    memberLimit: plan.memberLimit,
+    relativeSpeed: plan.relativeSpeed,
+    prices: {
+      eur: { month: month.eur, year: year.eur },
+      usd: { month: month.usd, year: year.usd },
+      pln: { month: month.pln, year: year.pln },
+    },
+  };
+});
 
 export function formatMoney(minor: number, currency: BillingCurrency): string {
   // Polish writes the złoty after the amount: "440 zł".

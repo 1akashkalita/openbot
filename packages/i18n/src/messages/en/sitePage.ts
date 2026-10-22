@@ -100,7 +100,6 @@ export const messages = defineMessages("sitePage", {
   "sitePage.pricing.server.yearlySaving": "−{percent}% yearly",
   "sitePage.pricing.server.none": "No server",
   "sitePage.pricing.server.noneDetail": "Run OpenBot on your own computer",
-  "sitePage.pricing.server.unavailable": "Server prices did not load. Reload the page to see them.",
   "sitePage.pricing.server.bestValue": "Best value",
   "sitePage.pricing.server.bestFor.starter": "Best for one person",
   "sitePage.pricing.server.bestFor.standard": "Best for a small team",
