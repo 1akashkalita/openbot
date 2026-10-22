@@ -337,6 +337,14 @@
   cursor: pointer;
 }
 
+.pricing-page .pricing-choice[data-disabled] {
+  opacity: 0.5;
+}
+
+.pricing-page .pricing-choice[data-disabled] label {
+  cursor: not-allowed;
+}
+
 .pricing-page .pricing-choice input {
   position: absolute;
   width: 1px;

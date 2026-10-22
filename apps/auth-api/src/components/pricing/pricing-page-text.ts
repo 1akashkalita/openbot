@@ -93,7 +93,7 @@ export function pricingPageText(t: AppTranslate, plans: readonly HostedServerCat
       none: t("sitePage.pricing.license.none"),
       noneDetail: t("sitePage.pricing.license.noneDetail"),
       starter: t("sitePage.pricing.license.starter"),
-      starterDetail: t("sitePage.pricing.license.starterDetail"),
+      starterDetail: t("sitePage.pricing.memberCount", { count: 1 }),
       starterSummary: t("sitePage.pricing.summary.starterLicense"),
       yearlySaving: t("sitePage.pricing.server.yearlySaving", { percent: LICENSE_YEARLY_DISCOUNT_PERCENT }),
       bundleSaving: {
@@ -118,6 +118,8 @@ export function pricingPageText(t: AppTranslate, plans: readonly HostedServerCat
       more: t("sitePage.pricing.license.more"),
       /** Index: the number of members. */
       memberCount: counts.map((count) => t("sitePage.pricing.memberCount", { count })),
+      /** Index: the number of members of a server too small for the Team license. */
+      serverMembers: counts.map((count) => t("sitePage.pricing.license.serverMembers", { count })),
       /** Index: the number of members. */
       summaryLine: counts.map((count) => t("sitePage.pricing.summary.license", { count })),
     },

@@ -113,11 +113,14 @@ export const messages = defineMessages("sitePage", {
   "sitePage.pricing.license.none": "No license",
   "sitePage.pricing.license.noneDetail": "Personal and noncommercial use",
   "sitePage.pricing.license.starter": "Starter license",
-  "sitePage.pricing.license.starterDetail": "For one person at work",
   "sitePage.pricing.license.bundleSaving": "−{price} with your server",
   "sitePage.pricing.license.team": "Team license",
   // {included} is the number of members in the base price. {price} is the monthly price of one more member.
   "sitePage.pricing.license.teamDetail": "{included} included, +{price} for each more",
+  "sitePage.pricing.license.serverMembers": {
+    one: "Your server has {count} member",
+    other: "Your server has {count} members",
+  },
   "sitePage.pricing.license.members": "Team license members",
   "sitePage.pricing.license.fewer": "Fewer members",
   "sitePage.pricing.license.more": "More members",

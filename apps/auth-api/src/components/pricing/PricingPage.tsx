@@ -182,6 +182,7 @@ function ChoiceRow(props: {
   /** A green pill by the title, such as the bundle discount. */
   saving?: string | undefined;
   detail: string;
+  disabled?: boolean | undefined;
   price: number;
   /** The price without the yearly discount. In yearly billing it shows struck through. */
   fullPrice?: number;
@@ -190,9 +191,15 @@ function ChoiceRow(props: {
   children?: JSX.Element;
 }) {
   return (
-    <div class="pricing-choice">
+    <div class="pricing-choice" data-disabled={props.disabled ? "" : undefined}>
       <label>
-        <input type="radio" name={props.name} checked={props.checked} onChange={() => props.onSelect()} />
+        <input
+          type="radio"
+          name={props.name}
+          checked={props.checked}
+          disabled={props.disabled}
+          onChange={() => props.onSelect()}
+        />
         <span class="pricing-choice-dot" aria-hidden="true" />
         <span class="pricing-row-name">
           <strong>{props.title}</strong>
@@ -224,14 +231,20 @@ function ChoiceRow(props: {
   );
 }
 
-function MemberStepper(props: { text: PricingPageText["license"]; value: number; onChange: (value: number) => void }) {
+function MemberStepper(props: {
+  text: PricingPageText["license"];
+  value: number;
+  max: number;
+  disabled: boolean;
+  onChange: (value: number) => void;
+}) {
   return (
     <fieldset class="pricing-stepper">
       <legend class="landing-visually-hidden">{props.text.members}</legend>
       <button
         type="button"
         aria-label={props.text.fewer}
-        disabled={props.value <= LICENSE_INCLUDED_USERS}
+        disabled={props.disabled || props.value <= LICENSE_INCLUDED_USERS}
         onClick={() => props.onChange(props.value - 1)}
       >
         −
@@ -240,7 +253,7 @@ function MemberStepper(props: { text: PricingPageText["license"]; value: number;
       <button
         type="button"
         aria-label={props.text.more}
-        disabled={props.value >= LICENSE_MAX_USERS}
+        disabled={props.disabled || props.value >= props.max}
         onClick={() => props.onChange(props.value + 1)}
       >
         +
@@ -339,8 +352,15 @@ export function PricingPage(props: { text: PricingPageText; offer: PricingOffer;
   const total = () => subtotal() + vat();
   const buying = () => server() !== undefined || licensed();
   const unit = () => (isYearly() ? props.text.unit.monthBilledYearly : props.text.unit.month);
+  /** A license cannot pay for more members than the server holds, so the Team license does not fit a small server. */
+  const teamMax = () => Math.min(LICENSE_MAX_USERS, server()?.memberLimit ?? LICENSE_MAX_USERS);
+  const teamFits = () => teamMax() >= LICENSE_INCLUDED_USERS;
   const pickServer = (plan: HostedServerCatalogPlan) => {
     setServerId(plan.id);
+    if (plan.memberLimit < LICENSE_INCLUDED_USERS) {
+      if (license() === "team") setLicense("starter");
+      return;
+    }
     setMembers(Math.min(LICENSE_MAX_USERS, Math.max(LICENSE_INCLUDED_USERS, plan.memberLimit)));
   };
   const rarity = () => {
@@ -462,7 +482,12 @@ export function PricingPage(props: { text: PricingPageText; offer: PricingOffer;
                   onSelect={() => setLicense("team")}
                   title={props.text.license.team}
                   saving={bundleSaving("team")}
-                  detail={props.text.license.teamDetail[interval()][currency()]}
+                  detail={
+                    teamFits()
+                      ? props.text.license.teamDetail[interval()][currency()]
+                      : (props.text.license.serverMembers[teamMax()] ?? "")
+                  }
+                  disabled={!teamFits()}
                   price={licenseMonthlyPrice(licenseMonthly("team"), interval()) - bundleOff("team")}
                   fullPrice={licenseMonthly("team")}
                   currency={currency()}
@@ -471,6 +496,8 @@ export function PricingPage(props: { text: PricingPageText; offer: PricingOffer;
                   <MemberStepper
                     text={props.text.license}
                     value={members()}
+                    max={teamMax()}
+                    disabled={!teamFits()}
                     onChange={(value) => {
                       setMembers(value);
                       setLicense("team");
