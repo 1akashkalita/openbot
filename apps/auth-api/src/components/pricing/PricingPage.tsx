@@ -499,18 +499,34 @@ export function PricingPage(props: { text: PricingPageText; offer: PricingOffer;
                   }
                 >
                   {/* A full page load, as the header's App link. The web app reads `start` after sign-in and opens
-                      the add server dialog or Billing. */}
-                  <ButtonLink
-                    to="/app"
-                    search={{ start: server() ? "server" : "license" }}
-                    reloadDocument
-                    variant="primary"
-                    size="md"
-                    icon="arrow-right"
-                    class="pricing-cta"
-                  >
-                    {server() ? props.text.cta.server : props.text.cta.license}
-                  </ButtonLink>
+                      the add server dialog or Billing. The app sells each product in its own flow, so each
+                      chosen product has its own button. */}
+                  <Show when={server()}>
+                    <ButtonLink
+                      to="/app"
+                      search={{ start: "server" }}
+                      reloadDocument
+                      variant="primary"
+                      size="md"
+                      icon="arrow-right"
+                      class="pricing-cta"
+                    >
+                      {props.text.cta.server}
+                    </ButtonLink>
+                  </Show>
+                  <Show when={licensed()}>
+                    <ButtonLink
+                      to="/app"
+                      search={{ start: "license" }}
+                      reloadDocument
+                      variant={server() ? "secondary" : "primary"}
+                      size="md"
+                      icon="arrow-right"
+                      class="pricing-cta"
+                    >
+                      {props.text.cta.license}
+                    </ButtonLink>
+                  </Show>
                 </Show>
               </div>
             </section>
