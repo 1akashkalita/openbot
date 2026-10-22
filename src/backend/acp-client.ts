@@ -338,7 +338,9 @@ export interface AcpProviderOptions {
 }
 
 export class AcpAgentClient extends EventEmitter<ClientEvents> {
-  readonly contextCompaction = "unsupported";
+  get contextCompaction(): "handoff" | "unsupported" {
+    return this.#flavor.contextCompaction ?? "unsupported";
+  }
   get provider(): AgentProvider {
     return this.options.provider;
   }
@@ -1717,10 +1719,20 @@ export class AcpAgentClient extends EventEmitter<ClientEvents> {
     }
     // A compaction replaces the prompt that carried the instructions with a summary. The context
     // shrinks, so a large drop counts as one when the agent sends no compaction update.
+    // The update is also the context fill, not billing. Antigravity sends the last one after a turn
+    // that OpenBot already ended.
     if (update.sessionUpdate === "usage_update") {
       if (thread.contextUsed !== null && update.used < thread.contextUsed * ACP_COMPACTION_CONTEXT_RATIO)
         thread.instructionsSent = null;
       thread.contextUsed = update.used;
+      if (Number.isFinite(update.used) && update.used >= 0 && Number.isFinite(update.size) && update.size > 0)
+        this.emit("notification", {
+          method: "thread/tokenUsage/updated",
+          params: {
+            threadId: thread.id,
+            tokenUsage: { last: { totalTokens: update.used }, modelContextWindow: update.size },
+          },
+        });
       return;
     }
     if (update.sessionUpdate === "compaction_update") {
