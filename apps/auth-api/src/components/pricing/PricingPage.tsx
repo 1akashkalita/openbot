@@ -172,7 +172,10 @@ function MeasuredBeam(props: {
   );
 }
 
-/** One row of a radio group. Extra content, such as the members stepper, goes under the label. */
+/**
+ * One row of a radio group. The members stepper goes under the label. The row takes the stepper as data, not as
+ * JSX children: children here render on the server but are lost when the client hydrates.
+ */
 function ChoiceRow(props: {
   name: string;
   checked: boolean;
@@ -188,7 +191,7 @@ function ChoiceRow(props: {
   fullPrice?: number;
   currency: BillingCurrency;
   unit?: string | undefined;
-  children?: JSX.Element;
+  stepper?: MemberStepperProps | undefined;
 }) {
   return (
     <div class="pricing-choice" data-disabled={props.disabled ? "" : undefined}>
@@ -226,18 +229,30 @@ function ChoiceRow(props: {
           <RollingAmount value={props.price} currency={props.currency} />
         </Price>
       </label>
-      {props.children}
+      <Show when={props.stepper}>
+        {(stepper) => (
+          <MemberStepper
+            text={stepper().text}
+            value={stepper().value}
+            max={stepper().max}
+            disabled={stepper().disabled}
+            onChange={stepper().onChange}
+          />
+        )}
+      </Show>
     </div>
   );
 }
 
-function MemberStepper(props: {
+interface MemberStepperProps {
   text: PricingPageText["license"];
   value: number;
   max: number;
   disabled: boolean;
   onChange: (value: number) => void;
-}) {
+}
+
+function MemberStepper(props: MemberStepperProps) {
   return (
     <fieldset class="pricing-stepper">
       <legend class="landing-visually-hidden">{props.text.members}</legend>
@@ -300,10 +315,10 @@ function SummaryLine(props: {
  * under both, and one button. The beam's colour and speed follow the size of the order.
  */
 export function PricingPage(props: { text: PricingPageText; offer: PricingOffer; lang: string }) {
-  const [interval, setInterval] = createSignal<BillingInterval>("month");
+  const [interval, setInterval] = createSignal<BillingInterval>("year");
   const [currency, setCurrency] = createSignal<BillingCurrency>("eur");
   const plans = () => props.offer.plans;
-  // Standard is the default. Users and server members are the same people, so the Team license starts
+  // Yearly billing, the Standard server and the Team license are the default. Users and server members are the same people, so the Team license starts
   // with every member of the server.
   const standard = untrack(() => {
     const plan = plans().find((item) => item.id === "standard");
@@ -355,6 +370,18 @@ export function PricingPage(props: { text: PricingPageText; offer: PricingOffer;
   /** A license cannot pay for more members than the server holds, so the Team license does not fit a small server. */
   const teamMax = () => Math.min(LICENSE_MAX_USERS, server()?.memberLimit ?? LICENSE_MAX_USERS);
   const teamFits = () => teamMax() >= LICENSE_INCLUDED_USERS;
+  // A conditional in a component prop or in children compiles to a memo on the client but not on the server. That
+  // moves the hydration keys of everything after it, so each such conditional is a named function here.
+  const teamDetail = () =>
+    teamFits()
+      ? props.text.license.teamDetail[interval()][currency()]
+      : (props.text.license.serverMembers[teamMax()] ?? "");
+  const licenseLine = () =>
+    license() === "starter" ? props.text.license.starterSummary : (props.text.license.summaryLine[members()] ?? "");
+  const totalUnit = () => (buying() ? unit() : props.text.unit.free);
+  const ctaText = () => (server() ? props.text.cta.server : props.text.cta.license);
+  const bestValue = (plan: HostedServerCatalogPlan) =>
+    plan.id === "standard" ? props.text.server.bestValue : undefined;
   const pickServer = (plan: HostedServerCatalogPlan) => {
     setServerId(plan.id);
     if (plan.memberLimit < LICENSE_INCLUDED_USERS) {
@@ -434,7 +461,7 @@ export function PricingPage(props: { text: PricingPageText; offer: PricingOffer;
                       checked={serverId() === plan.id}
                       onSelect={() => pickServer(plan)}
                       title={serverText(plan)?.name ?? plan.id}
-                      badge={plan.id === "standard" ? props.text.server.bestValue : undefined}
+                      badge={bestValue(plan)}
                       detail={serverText(plan)?.detail ?? ""}
                       price={planMonthlyPrice(plan, interval(), currency())}
                       fullPrice={planMonthlyPrice(plan, "month", currency())}
@@ -482,28 +509,23 @@ export function PricingPage(props: { text: PricingPageText; offer: PricingOffer;
                   onSelect={() => setLicense("team")}
                   title={props.text.license.team}
                   saving={bundleSaving("team")}
-                  detail={
-                    teamFits()
-                      ? props.text.license.teamDetail[interval()][currency()]
-                      : (props.text.license.serverMembers[teamMax()] ?? "")
-                  }
+                  detail={teamDetail()}
                   disabled={!teamFits()}
                   price={licenseMonthlyPrice(licenseMonthly("team"), interval()) - bundleOff("team")}
                   fullPrice={licenseMonthly("team")}
                   currency={currency()}
                   unit={unit()}
-                >
-                  <MemberStepper
-                    text={props.text.license}
-                    value={members()}
-                    max={teamMax()}
-                    disabled={!teamFits()}
-                    onChange={(value) => {
+                  stepper={{
+                    text: props.text.license,
+                    value: members(),
+                    max: teamMax(),
+                    disabled: !teamFits(),
+                    onChange: (value) => {
                       setMembers(value);
                       setLicense("team");
-                    }}
-                  />
-                </ChoiceRow>
+                    },
+                  }}
+                />
               </div>
             </section>
 
@@ -531,16 +553,7 @@ export function PricingPage(props: { text: PricingPageText; offer: PricingOffer;
                 />
               </ul>
               <ul class="pricing-summary-lines pricing-summary-license">
-                <SummaryLine
-                  open={licensed()}
-                  label={
-                    license() === "starter"
-                      ? props.text.license.starterSummary
-                      : (props.text.license.summaryLine[members()] ?? "")
-                  }
-                  value={licenseFull()}
-                  currency={currency()}
-                />
+                <SummaryLine open={licensed()} label={licenseLine()} value={licenseFull()} currency={currency()} />
                 <SummaryLine
                   open={licensed() && isYearly()}
                   label={props.text.summary.licenseYearlyDiscount}
@@ -564,7 +577,7 @@ export function PricingPage(props: { text: PricingPageText; offer: PricingOffer;
               </ul>
               <div class="pricing-summary-total">
                 <span class="pricing-summary-total-label">{props.text.summary.total}</span>
-                <Price unit={buying() ? unit() : props.text.unit.free}>
+                <Price unit={totalUnit()}>
                   <RollingAmount value={total()} currency={currency()} />
                 </Price>
                 <Show
@@ -586,7 +599,7 @@ export function PricingPage(props: { text: PricingPageText; offer: PricingOffer;
                     icon="arrow-right"
                     class="pricing-cta"
                   >
-                    {server() ? props.text.cta.server : props.text.cta.license}
+                    {ctaText()}
                   </ButtonLink>
                 </Show>
               </div>
