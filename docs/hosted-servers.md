@@ -268,10 +268,11 @@ a Claude subscription on a server, read [provider terms](provider-terms.md#claud
 
 ## Members
 
-The plan sets the number of active members, owner included: Starter 3, Standard 10 and Pro 25
+The plan sets the number of active members, owner included: Starter 1, Standard 10 and Pro 25
 (`BILLING_PLANS`). A host with no plan has 3 (`DEFAULT_TEAM_MEMBER_LIMIT`). The Worker reads the plan
 with `getServerEntitlement` when a member joins or is reactivated, and refuses a member over the limit
-(`409 member_limit_reached`). This also applies to a self-hosted host that has a plan.
+(`409 member_limit_reached`). A lower limit removes no member who is already active. This also applies to a
+self-hosted host that has a plan.
 
 - A lower limit after a plan change or a plan end removes no one. Active members keep their seats.
   A new join or a reactivation waits for a free seat.

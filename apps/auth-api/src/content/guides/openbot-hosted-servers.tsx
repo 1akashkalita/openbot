@@ -33,9 +33,8 @@ export function OpenBotHostedServers() {
         server runs—not in the number of agents you can create.
       </p>
       <p>
-        Starter supports up to three team members, with 12 GB of storage and base speed. It could suit a small,
-        founder-led company where two or three people share an OpenBot workspace for research, routine admin, or client
-        work.
+        Starter supports one member, with 12 GB of storage and base speed. It could suit a founder who runs research,
+        routine admin, or client work in one OpenBot workspace.
       </p>
       <p>
         Standard supports up to 10 members, with 50 GB of storage and twice the speed of Starter. Think of a small
