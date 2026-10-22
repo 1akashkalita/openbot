@@ -16,9 +16,10 @@ export const readPricingOffer = createServerFn({ method: "GET" }).handler(async 
     import("../server/billing-errors"),
   ]);
   const inEu = isEuCountry(getRequestHeader("cf-ipcountry"));
-  const billing = requestBillingService();
-  if (!billing) return { plans: null, inEu };
   try {
+    // Building the service can throw too: a Worker without the remote ticket key (the preview) cannot make one.
+    const billing = requestBillingService();
+    if (!billing) return { plans: null, inEu };
     const catalog = await runApiEffect(billing.catalog());
     return { plans: catalog.plans, inEu };
   } catch (error) {
