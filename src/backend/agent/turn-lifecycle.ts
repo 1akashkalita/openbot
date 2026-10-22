@@ -128,6 +128,10 @@ export interface TurnHooks {
    * Null after a restart or for any other delivery.
    */
   takeRoutinePreview(deliveryId: string): { previous: string; shown: string } | null;
+  /** Ends the provider session of a routine run. Nothing for any other session, or a second time. */
+  closeRoutineSession(externalThreadId: string): Effect.Effect<void>;
+  /** Gives the answer of a routine run in its own session to the session of the agent's chat. */
+  routineAnswered(agentId: string, deliveryId: string, answer: string): Effect.Effect<void>;
 }
 
 export interface TurnLifecycleOptions {
@@ -312,8 +316,10 @@ export class TurnLifecycle {
     for (const [turnId, turn] of this.#runningTurns) {
       if (turn.client !== client) continue;
       this.#runningTurns.delete(turnId);
+      // A routine run's own session saves no history, so its turn ends now and closes the session.
       if (
         options.keepRecoverable &&
+        !this.#conversation.isRoutineSession(turn.threadId) &&
         this.#mailbox
           .findDeliveriesByTurn(turn.agentId, turnId)
           .some(({ delivery }) => delivery.status === "starting" || delivery.status === "running")
@@ -372,10 +378,14 @@ export class TurnLifecycle {
     ) {
       const agent = this.#store.list().find((entry) => entry.id === agentId);
       // A task or other side thread keeps its provider sessions under its own thread, not the agent's.
+      // A routine run's own session is not saved, so its usage has its own session id.
       const session = agent
-        ? this.#store.database
+        ? (this.#store.database
             .listProviderSessions(this.#conversation.publicThreadId(agentId, threadId))
-            .find((entry) => entry.externalSessionId === threadId && entry.provider === source.provider)
+            .find((entry) => entry.externalSessionId === threadId && entry.provider === source.provider) ??
+          (this.#conversation.isRoutineSession(threadId)
+            ? { id: `routine:${threadId}`, provider: source.provider, createdAt: new Date().toISOString() }
+            : undefined))
         : undefined;
       if (agent && session) {
         try {
@@ -742,7 +752,9 @@ export class TurnLifecycle {
       this.#memories.finishTurn(turnId, status);
       // A refused session is closed below, and a spent plan would refuse the summary turn too, so
       // neither is compacted.
-      const shouldCompact = !refused && !limited && this.#compaction.reserve(agentId, threadId);
+      // A routine run's own session closes after this turn, so it is not compacted either.
+      const routineSession = this.#conversation.isRoutineSession(threadId);
+      const shouldCompact = !refused && !limited && !routineSession && this.#compaction.reserve(agentId, threadId);
       this.#browser.endControl(this.#conversation.publicThreadId(agentId, threadId), turnId);
       const snapshot = this.#conversation.ensureSnapshot(agentId, threadId);
       snapshot.activeTurnId = null;
@@ -818,6 +830,17 @@ export class TurnLifecycle {
         this.#quietRoutineTurn(snapshot.threadId, deliveries) &&
         settleQuietRoutineTurn(snapshot, turnId, noUpdateCalled);
       const latestAssistant = latestTurnAnswer(snapshot.messages, turnId);
+      // A routine run that answered only the no-update marker, also a Test run that shows it in the
+      // chat, does not put the marker in the preview.
+      const markerAnswer =
+        latestAssistant !== undefined &&
+        deliveries.some(({ delivery }) => delivery.sender.kind === "routine") &&
+        isNoUpdateAnswer(latestAssistant.text);
+      // Before the deliveries end: until then they hold the chat's lane, so no turn of the chat
+      // starts before the digest is in its handoff.
+      const routineDelivery = deliveries[0]?.delivery.id;
+      if (routineSession && routineDelivery && outcome === "completed" && !quiet && !markerAnswer && latestAssistant)
+        yield* this.#hooks.routineAnswered(agentId, routineDelivery, latestAssistant.text);
       if (deliveries.length > 0) {
         const terminal = outcome === "failed" ? "failed" : outcome === "interrupted" ? "interrupted" : "completed";
         for (const delivery of deliveries) {
@@ -843,12 +866,6 @@ export class TurnLifecycle {
       const savedPreviews = deliveries.flatMap(({ delivery }) =>
         delivery.sender.kind === "routine" ? (this.#hooks.takeRoutinePreview(delivery.id) ?? []) : [],
       );
-      // A routine run that answered only the no-update marker, also a Test run that shows it in the
-      // chat, does not put the marker in the preview.
-      const markerAnswer =
-        latestAssistant !== undefined &&
-        deliveries.some(({ delivery }) => delivery.sender.kind === "routine") &&
-        isNoUpdateAnswer(latestAssistant.text);
       if (latestAssistant && !markerAnswer && !this.#conversation.isExecutionThread(snapshot.threadId)) {
         yield* this.#store.updatePreview(agentId, latestAssistant.text).pipe(toTurnOperationFailed);
         this.#hooks.emit({ type: "agents-changed", agents: this.#hooks.listAgents() });
@@ -891,7 +908,12 @@ export class TurnLifecycle {
             ? Effect.void
             : this.settleOrphanedTurn(agentId, threadId, turnId, status === "failed" ? "failed" : "interrupted"),
         ),
-        Effect.ensuring(Effect.sync(() => this.#completingTurns.delete(turnId))),
+        Effect.ensuring(
+          Effect.andThen(
+            Effect.sync(() => this.#completingTurns.delete(turnId)),
+            this.#hooks.closeRoutineSession(threadId),
+          ),
+        ),
       ),
   );
 
@@ -910,6 +932,7 @@ export class TurnLifecycle {
   ) {
     const report = (cause: Cause.Cause<TurnOperationFailed>) =>
       reportOriginalFailure(cause, (failure) => this.#hooks.emitError("turn_completion_failed", failure, agentId));
+    const runningThreadId = this.#runningTurns.get(turnId)?.threadId ?? threadId;
     this.#runningTurns.delete(turnId);
     this.#markEnded(turnId);
     const deliveries = yield* turnStep(() => this.#mailbox.findDeliveriesByTurn(agentId, turnId)).pipe(
@@ -974,6 +997,9 @@ export class TurnLifecycle {
       });
     }).pipe(Effect.catchCause(report));
     for (const [itemId, itemTurnId] of this.#itemTurns) if (itemTurnId === turnId) this.#itemTurns.delete(itemId);
+    // A routine run's own session ends with its turn. A task or channel turn runs in another session.
+    if (runningThreadId && this.#conversation.isRoutineSession(runningThreadId))
+      yield* this.#hooks.closeRoutineSession(runningThreadId);
     yield* turnStep(() => this.#mailboxSync.emitQueue(agentId)).pipe(Effect.catchCause(report));
     yield* turnStep(() => {
       for (const { delivery } of deliveries) {
