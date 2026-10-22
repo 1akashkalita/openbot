@@ -262,6 +262,12 @@
   animation: pricing-pop 300ms var(--pricing-spring) 80ms both;
 }
 
+.pricing-page .pricing-saving {
+  min-height: 20px;
+  padding: 0 8px;
+  font-size: 11px;
+}
+
 .pricing-page .pricing-choices {
   display: grid;
   gap: 10px;

@@ -1,8 +1,20 @@
-import { BILLING_PLANS, type BillingCurrency, type BillingPlanId } from "@openbot/contracts/billing";
+import {
+  BILLING_PLANS,
+  type BillingCurrency,
+  type BillingInterval,
+  type BillingPlanId,
+} from "@openbot/contracts/billing";
 import type { HostedServerCatalogPlan } from "@openbot/contracts/hosted-servers";
 import { LICENSE_INCLUDED_USERS, LICENSE_MAX_USERS, LICENSE_PRICES } from "@openbot/contracts/license";
 import type { AppTextKey, AppTranslate } from "@openbot/i18n";
-import { EU_VAT_PERCENT, formatMoney, yearlyDiscountPercent } from "../../lib/pricing-page";
+import {
+  EU_VAT_PERCENT,
+  formatMoney,
+  LICENSE_BUNDLE_DISCOUNT,
+  LICENSE_YEARLY_DISCOUNT_PERCENT,
+  licenseMonthlyPrice,
+  yearlyDiscountPercent,
+} from "../../lib/pricing-page";
 
 /*
  * The text of the pricing page, built from `sitePage.pricing.*` catalog keys. Loader data carries it to
@@ -37,6 +49,13 @@ const PRICING_MAX_MEMBERS = Math.max(LICENSE_MAX_USERS, ...BILLING_PLANS.map((pl
 export function pricingPageText(t: AppTranslate, plans: readonly HostedServerCatalogPlan[]) {
   const counts = Array.from({ length: LICENSE_MAX_USERS + 1 }, (_, count) => count);
   const yearlyPercent = byCurrency((currency) => String(yearlyDiscountPercent(plans, currency)));
+  const teamDetail = (interval: BillingInterval) =>
+    byCurrency((currency) =>
+      t("sitePage.pricing.license.teamDetail", {
+        included: LICENSE_INCLUDED_USERS,
+        price: formatMoney(licenseMonthlyPrice(LICENSE_PRICES[currency].extraUser, interval), currency),
+      }),
+    );
   return {
     title: t("sitePage.pricing.title"),
     description: t("sitePage.pricing.description"),
@@ -76,13 +95,24 @@ export function pricingPageText(t: AppTranslate, plans: readonly HostedServerCat
       starter: t("sitePage.pricing.license.starter"),
       starterDetail: t("sitePage.pricing.license.starterDetail"),
       starterSummary: t("sitePage.pricing.summary.starterLicense"),
+      yearlySaving: t("sitePage.pricing.server.yearlySaving", { percent: LICENSE_YEARLY_DISCOUNT_PERCENT }),
+      bundleSaving: {
+        starter: byCurrency((currency) =>
+          t("sitePage.pricing.license.bundleSaving", {
+            price: formatMoney(LICENSE_BUNDLE_DISCOUNT.starter[currency], currency),
+          }),
+        ),
+        team: byCurrency((currency) =>
+          t("sitePage.pricing.license.bundleSaving", {
+            price: formatMoney(LICENSE_BUNDLE_DISCOUNT.team[currency], currency),
+          }),
+        ),
+      },
       team: t("sitePage.pricing.license.team"),
-      teamDetail: byCurrency((currency) =>
-        t("sitePage.pricing.license.teamDetail", {
-          included: LICENSE_INCLUDED_USERS,
-          price: formatMoney(LICENSE_PRICES[currency].extraUser, currency),
-        }),
-      ),
+      teamDetail: {
+        month: teamDetail("month"),
+        year: teamDetail("year"),
+      },
       members: t("sitePage.pricing.license.members"),
       fewer: t("sitePage.pricing.license.fewer"),
       more: t("sitePage.pricing.license.more"),
@@ -96,6 +126,8 @@ export function pricingPageText(t: AppTranslate, plans: readonly HostedServerCat
       yearlyDiscount: byCurrency((currency) =>
         t("sitePage.pricing.summary.yearlyDiscount", { percent: yearlyPercent[currency] }),
       ),
+      licenseYearlyDiscount: t("sitePage.pricing.summary.yearlyDiscount", { percent: LICENSE_YEARLY_DISCOUNT_PERCENT }),
+      bundleDiscount: t("sitePage.pricing.summary.bundleDiscount"),
       personal: t("sitePage.pricing.summary.personal"),
       vat: t("sitePage.pricing.summary.vat", { percent: EU_VAT_PERCENT }),
       total: t("sitePage.pricing.summary.total"),

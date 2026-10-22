@@ -114,6 +114,7 @@ export const messages = defineMessages("sitePage", {
   "sitePage.pricing.license.noneDetail": "Personal and noncommercial use",
   "sitePage.pricing.license.starter": "Starter license",
   "sitePage.pricing.license.starterDetail": "For one person at work",
+  "sitePage.pricing.license.bundleSaving": "−{price} with your server",
   "sitePage.pricing.license.team": "Team license",
   // {included} is the number of members in the base price. {price} is the monthly price of one more member.
   "sitePage.pricing.license.teamDetail": "{included} included, +{price} for each more",
@@ -131,6 +132,7 @@ export const messages = defineMessages("sitePage", {
   "sitePage.pricing.summary.license": { one: "Team license, {count} member", other: "Team license, {count} members" },
   // {percent} is a whole number, such as 20.
   "sitePage.pricing.summary.yearlyDiscount": "Yearly discount ({percent}%)",
+  "sitePage.pricing.summary.bundleDiscount": "Bundle discount",
   "sitePage.pricing.summary.personal": "Personal use on your own computer",
   // {percent} is a whole number, such as 23.
   "sitePage.pricing.summary.vat": "VAT ({percent}%)",

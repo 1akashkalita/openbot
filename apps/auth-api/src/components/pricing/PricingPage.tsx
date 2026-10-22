@@ -9,6 +9,8 @@ import { landingAnalytics } from "../../lib/analytics";
 import {
   EU_VAT_PERCENT,
   formatMoney,
+  LICENSE_BUNDLE_DISCOUNT,
+  licenseMonthlyPrice,
   PRICING_ROUTE,
   type PricingOffer,
   planMonthlyPrice,
@@ -86,10 +88,10 @@ function RollingAmount(props: { value: number; currency: BillingCurrency }) {
   );
 }
 
-function Price(props: { amount: JSX.Element; unit?: string | undefined; class?: string }) {
+function Price(props: { children: JSX.Element; unit?: string | undefined; class?: string }) {
   return (
     <p class={cx("pricing-price", props.class)}>
-      <span class="pricing-price-amount">{props.amount}</span>
+      <span class="pricing-price-amount">{props.children}</span>
       <Show when={props.unit}>{(unit) => <span class="pricing-price-unit">{unit()}</span>}</Show>
     </p>
   );
@@ -177,6 +179,8 @@ function ChoiceRow(props: {
   onSelect: () => void;
   title: string;
   badge?: string | undefined;
+  /** A green pill by the title, such as the bundle discount. */
+  saving?: string | undefined;
   detail: string;
   price: number;
   /** The price without the yearly discount. In yearly billing it shows struck through. */
@@ -193,25 +197,27 @@ function ChoiceRow(props: {
         <span class="pricing-row-name">
           <strong>{props.title}</strong>
           <Show when={props.badge}>{(badge) => <span class="pricing-badge">{badge()}</span>}</Show>
+          <Show when={props.saving}>
+            {(saving) => (
+              <span class="pricing-yearly pricing-saving" data-active="">
+                {saving()}
+              </span>
+            )}
+          </Show>
           <span>{props.detail}</span>
         </span>
-        <Price
-          amount={
-            <>
-              <Show when={props.fullPrice}>
-                {(full) => (
-                  <span class="pricing-was" data-shown={full() > props.price ? "" : undefined} aria-hidden="true">
-                    <span>
-                      <s>{formatMoney(full(), props.currency)}</s>
-                    </span>
-                  </span>
-                )}
-              </Show>
-              <RollingAmount value={props.price} currency={props.currency} />
-            </>
-          }
-          unit={props.unit}
-        />
+        <Price unit={props.unit}>
+          <Show when={props.fullPrice}>
+            {(full) => (
+              <span class="pricing-was" data-shown={full() > props.price ? "" : undefined} aria-hidden="true">
+                <span>
+                  <s>{formatMoney(full(), props.currency)}</s>
+                </span>
+              </span>
+            )}
+          </Show>
+          <RollingAmount value={props.price} currency={props.currency} />
+        </Price>
       </label>
       {props.children}
     </div>
@@ -313,17 +319,26 @@ export function PricingPage(props: { text: PricingPageText; offer: PricingOffer;
     const plan = server();
     return plan ? planMonthlyPrice(plan, "month", currency()) : 0;
   };
-  // The license is monthly only, in both billing periods.
-  const licenseCost = () => {
-    const choice = license();
+  /** The monthly price of a license. In yearly billing the summary takes the discount off as its own line. */
+  const licenseMonthly = (choice: LicenseChoice) => {
     if (choice === "starter") return STARTER_LICENSE_MONTHLY[currency()];
     return choice === "team" ? licenseAmount(members(), currency()) : 0;
   };
-  const subtotal = () => serverCost() + licenseCost();
+  const licenseFull = () => licenseMonthly(license());
+  const licenseCost = () => licenseMonthlyPrice(licenseFull(), interval());
+  /** What a license saves with any server. Each license row shows its price less this amount. */
+  const bundleOff = (choice: "starter" | "team") => (server() ? LICENSE_BUNDLE_DISCOUNT[choice][currency()] : 0);
+  const bundleSaving = (choice: "starter" | "team") =>
+    server() ? props.text.license.bundleSaving[choice][currency()] : undefined;
+  const discount = () => {
+    const choice = license();
+    return choice === "none" ? 0 : bundleOff(choice);
+  };
+  const subtotal = () => serverCost() + licenseCost() - discount();
   const vat = () => (props.offer.inEu ? Math.round((subtotal() * EU_VAT_PERCENT) / 100) : 0);
   const total = () => subtotal() + vat();
   const buying = () => server() !== undefined || licensed();
-  const serverUnit = () => (isYearly() ? props.text.unit.monthBilledYearly : props.text.unit.month);
+  const unit = () => (isYearly() ? props.text.unit.monthBilledYearly : props.text.unit.month);
   const pickServer = (plan: HostedServerCatalogPlan) => {
     setServerId(plan.id);
     setMembers(Math.min(LICENSE_MAX_USERS, Math.max(LICENSE_INCLUDED_USERS, plan.memberLimit)));
@@ -404,7 +419,7 @@ export function PricingPage(props: { text: PricingPageText; offer: PricingOffer;
                       price={planMonthlyPrice(plan, interval(), currency())}
                       fullPrice={planMonthlyPrice(plan, "month", currency())}
                       currency={currency()}
-                      unit={serverUnit()}
+                      unit={unit()}
                     />
                   )}
                 </For>
@@ -414,6 +429,9 @@ export function PricingPage(props: { text: PricingPageText; offer: PricingOffer;
             <section class="pricing-half" aria-labelledby="pricing-license">
               <div class="pricing-half-title">
                 <h2 id="pricing-license">{props.text.license.title}</h2>
+                <span class="pricing-yearly" data-active={isYearly() ? "" : undefined}>
+                  {props.text.license.yearlySaving}
+                </span>
               </div>
               <p class="pricing-half-summary">{props.text.license.summary}</p>
               <div class="pricing-choices" role="radiogroup" aria-labelledby="pricing-license">
@@ -431,20 +449,24 @@ export function PricingPage(props: { text: PricingPageText; offer: PricingOffer;
                   checked={license() === "starter"}
                   onSelect={() => setLicense("starter")}
                   title={props.text.license.starter}
+                  saving={bundleSaving("starter")}
                   detail={props.text.license.starterDetail}
-                  price={STARTER_LICENSE_MONTHLY[currency()]}
+                  price={licenseMonthlyPrice(licenseMonthly("starter"), interval()) - bundleOff("starter")}
+                  fullPrice={licenseMonthly("starter")}
                   currency={currency()}
-                  unit={props.text.unit.month}
+                  unit={unit()}
                 />
                 <ChoiceRow
                   name="pricing-license"
                   checked={license() === "team"}
                   onSelect={() => setLicense("team")}
                   title={props.text.license.team}
-                  detail={props.text.license.teamDetail[currency()]}
-                  price={licenseAmount(members(), currency())}
+                  saving={bundleSaving("team")}
+                  detail={props.text.license.teamDetail[interval()][currency()]}
+                  price={licenseMonthlyPrice(licenseMonthly("team"), interval()) - bundleOff("team")}
+                  fullPrice={licenseMonthly("team")}
                   currency={currency()}
-                  unit={props.text.unit.month}
+                  unit={unit()}
                 >
                   <MemberStepper
                     text={props.text.license}
@@ -489,8 +511,22 @@ export function PricingPage(props: { text: PricingPageText; offer: PricingOffer;
                       ? props.text.license.starterSummary
                       : (props.text.license.summaryLine[members()] ?? "")
                   }
-                  value={licenseCost()}
+                  value={licenseFull()}
                   currency={currency()}
+                />
+                <SummaryLine
+                  open={licensed() && isYearly()}
+                  label={props.text.summary.licenseYearlyDiscount}
+                  value={licenseFull() - licenseCost()}
+                  currency={currency()}
+                  minus
+                />
+                <SummaryLine
+                  open={discount() > 0}
+                  label={props.text.summary.bundleDiscount}
+                  value={discount()}
+                  currency={currency()}
+                  minus
                 />
               </ul>
               <ul class="pricing-summary-lines pricing-summary-personal">
@@ -501,10 +537,9 @@ export function PricingPage(props: { text: PricingPageText; offer: PricingOffer;
               </ul>
               <div class="pricing-summary-total">
                 <span class="pricing-summary-total-label">{props.text.summary.total}</span>
-                <Price
-                  amount={<RollingAmount value={total()} currency={currency()} />}
-                  unit={buying() ? props.text.unit.month : props.text.unit.free}
-                />
+                <Price unit={buying() ? unit() : props.text.unit.free}>
+                  <RollingAmount value={total()} currency={currency()} />
+                </Price>
                 <Show
                   when={buying()}
                   fallback={

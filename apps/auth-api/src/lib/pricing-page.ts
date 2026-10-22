@@ -62,6 +62,21 @@ export function isEuCountry(country: string | undefined): boolean {
  */
 export const STARTER_LICENSE_MONTHLY: Readonly<Record<BillingCurrency, number>> = { eur: 3000, usd: 3600, pln: 13200 };
 
+/** Yearly billing takes this much off a license. Like the bundle discount, only this page uses it for now. */
+export const LICENSE_YEARLY_DISCOUNT_PERCENT = 10;
+
+/** A license bought with any server costs this much less a month, in minor units. */
+export const LICENSE_BUNDLE_DISCOUNT: Readonly<Record<"starter" | "team", Readonly<Record<BillingCurrency, number>>>> =
+  {
+    starter: { eur: 1000, usd: 1200, pln: 4400 },
+    team: { eur: 2000, usd: 2400, pln: 8800 },
+  };
+
+/** The price for one month of a license, in minor units, from its monthly price. */
+export function licenseMonthlyPrice(month: number, interval: BillingInterval): number {
+  return interval === "month" ? month : Math.round((month * (100 - LICENSE_YEARLY_DISCOUNT_PERCENT)) / 100);
+}
+
 /** What the page sells: the server plans with their prices, and the VAT of the visitor. */
 export interface PricingOffer {
   plans: readonly HostedServerCatalogPlan[];
