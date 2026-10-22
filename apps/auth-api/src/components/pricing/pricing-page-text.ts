@@ -73,6 +73,9 @@ export function pricingPageText(t: AppTranslate, plans: readonly HostedServerCat
       summary: t("sitePage.pricing.license.summary"),
       none: t("sitePage.pricing.license.none"),
       noneDetail: t("sitePage.pricing.license.noneDetail"),
+      starter: t("sitePage.pricing.license.starter"),
+      starterDetail: t("sitePage.pricing.license.starterDetail"),
+      starterSummary: t("sitePage.pricing.summary.starterLicense"),
       team: t("sitePage.pricing.license.team"),
       teamDetail: byCurrency((currency) =>
         t("sitePage.pricing.license.teamDetail", {

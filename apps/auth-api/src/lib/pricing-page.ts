@@ -56,6 +56,12 @@ export function isEuCountry(country: string | undefined): boolean {
   return country !== undefined && EU_COUNTRIES.has(country.toUpperCase());
 }
 
+/**
+ * The monthly price of the Starter license, for one member, in minor units. Only this page shows it:
+ * the app's Billing sells the Team license, so "Buy a license" opens that.
+ */
+export const STARTER_LICENSE_MONTHLY: Readonly<Record<BillingCurrency, number>> = { eur: 3000, usd: 3600, pln: 13200 };
+
 /** What the page sells: the server plans with their prices, and the VAT of the visitor. */
 export interface PricingOffer {
   plans: readonly HostedServerCatalogPlan[];

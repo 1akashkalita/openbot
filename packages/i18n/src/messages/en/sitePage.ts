@@ -112,6 +112,8 @@ export const messages = defineMessages("sitePage", {
   "sitePage.pricing.license.summary": "To use OpenBot at work.",
   "sitePage.pricing.license.none": "No license",
   "sitePage.pricing.license.noneDetail": "Personal and noncommercial use",
+  "sitePage.pricing.license.starter": "Starter license",
+  "sitePage.pricing.license.starterDetail": "For one person at work",
   "sitePage.pricing.license.team": "Team license",
   // {included} is the number of members in the base price. {price} is the monthly price of one more member.
   "sitePage.pricing.license.teamDetail": "{included} included, +{price} for each more",
@@ -125,6 +127,7 @@ export const messages = defineMessages("sitePage", {
     one: "{plan} server, {count} member",
     other: "{plan} server, up to {count} members",
   },
+  "sitePage.pricing.summary.starterLicense": "Starter license, 1 member",
   "sitePage.pricing.summary.license": { one: "Team license, {count} member", other: "Team license, {count} members" },
   // {percent} is a whole number, such as 20.
   "sitePage.pricing.summary.yearlyDiscount": "Yearly discount ({percent}%)",

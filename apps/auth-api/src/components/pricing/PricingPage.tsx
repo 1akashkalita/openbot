@@ -12,6 +12,7 @@ import {
   PRICING_ROUTE,
   type PricingOffer,
   planMonthlyPrice,
+  STARTER_LICENSE_MONTHLY,
 } from "../../lib/pricing-page";
 import { LandingBeam } from "../landing/LandingBeam";
 import { LandingFooter } from "../landing/LandingFooter";
@@ -36,8 +37,10 @@ const RARITY = [
   { color: "#ff6a2b", rgb: "255, 106, 43", pace: 1.9 },
 ] as const;
 
-/** The Team license moves the colour two steps, so Standard with a license is pink and Pro with a license is orange. */
-const LICENSE_RARITY_STEPS = 2;
+type LicenseChoice = "none" | "starter" | "team";
+
+/** A license moves the colour: Standard with the Team license is pink, and Pro with it is orange. */
+const LICENSE_RARITY_STEPS: Record<LicenseChoice, number> = { none: 0, starter: 1, team: 2 };
 
 function isDigit(character: string) {
   return /\d/u.test(character);
@@ -288,7 +291,8 @@ export function PricingPage(props: { text: PricingPageText; offer: PricingOffer;
     return plan ? { id: plan.id, memberLimit: plan.memberLimit } : undefined;
   });
   const [serverId, setServerId] = createSignal<string>(standard?.id ?? "none");
-  const [licensed, setLicensed] = createSignal(true);
+  const [license, setLicense] = createSignal<LicenseChoice>("team");
+  const licensed = () => license() !== "none";
   const [members, setMembers] = createSignal(
     Math.min(LICENSE_MAX_USERS, Math.max(LICENSE_INCLUDED_USERS, standard?.memberLimit ?? 0)),
   );
@@ -310,7 +314,11 @@ export function PricingPage(props: { text: PricingPageText; offer: PricingOffer;
     return plan ? planMonthlyPrice(plan, "month", currency()) : 0;
   };
   // The license is monthly only, in both billing periods.
-  const licenseCost = () => (licensed() ? licenseAmount(members(), currency()) : 0);
+  const licenseCost = () => {
+    const choice = license();
+    if (choice === "starter") return STARTER_LICENSE_MONTHLY[currency()];
+    return choice === "team" ? licenseAmount(members(), currency()) : 0;
+  };
   const subtotal = () => serverCost() + licenseCost();
   const vat = () => (props.offer.inEu ? Math.round((subtotal() * EU_VAT_PERCENT) / 100) : 0);
   const total = () => subtotal() + vat();
@@ -322,7 +330,7 @@ export function PricingPage(props: { text: PricingPageText; offer: PricingOffer;
   };
   const rarity = () => {
     const size = plans().findIndex((plan) => plan.id === serverId()) + 1;
-    const step = size + (licensed() ? LICENSE_RARITY_STEPS : 0);
+    const step = size + LICENSE_RARITY_STEPS[license()];
     return RARITY[Math.min(RARITY.length - 1, step)] ?? RARITY[0];
   };
 
@@ -411,8 +419,8 @@ export function PricingPage(props: { text: PricingPageText; offer: PricingOffer;
               <div class="pricing-choices" role="radiogroup" aria-labelledby="pricing-license">
                 <ChoiceRow
                   name="pricing-license"
-                  checked={!licensed()}
-                  onSelect={() => setLicensed(false)}
+                  checked={license() === "none"}
+                  onSelect={() => setLicense("none")}
                   title={props.text.license.none}
                   detail={props.text.license.noneDetail}
                   price={0}
@@ -420,8 +428,18 @@ export function PricingPage(props: { text: PricingPageText; offer: PricingOffer;
                 />
                 <ChoiceRow
                   name="pricing-license"
-                  checked={licensed()}
-                  onSelect={() => setLicensed(true)}
+                  checked={license() === "starter"}
+                  onSelect={() => setLicense("starter")}
+                  title={props.text.license.starter}
+                  detail={props.text.license.starterDetail}
+                  price={STARTER_LICENSE_MONTHLY[currency()]}
+                  currency={currency()}
+                  unit={props.text.unit.month}
+                />
+                <ChoiceRow
+                  name="pricing-license"
+                  checked={license() === "team"}
+                  onSelect={() => setLicense("team")}
                   title={props.text.license.team}
                   detail={props.text.license.teamDetail[currency()]}
                   price={licenseAmount(members(), currency())}
@@ -433,7 +451,7 @@ export function PricingPage(props: { text: PricingPageText; offer: PricingOffer;
                     value={members()}
                     onChange={(value) => {
                       setMembers(value);
-                      setLicensed(true);
+                      setLicense("team");
                     }}
                   />
                 </ChoiceRow>
@@ -466,7 +484,11 @@ export function PricingPage(props: { text: PricingPageText; offer: PricingOffer;
               <ul class="pricing-summary-lines pricing-summary-license">
                 <SummaryLine
                   open={licensed()}
-                  label={props.text.license.summaryLine[members()] ?? ""}
+                  label={
+                    license() === "starter"
+                      ? props.text.license.starterSummary
+                      : (props.text.license.summaryLine[members()] ?? "")
+                  }
                   value={licenseCost()}
                   currency={currency()}
                 />
