@@ -261,6 +261,7 @@ export const HOSTED_SERVER_ENTRY_POINTS = [
   "checkout_resume",
   "drawer",
   "onboarding",
+  "pricing_page",
 ] as const;
 export type HostedServerEntryPoint = (typeof HOSTED_SERVER_ENTRY_POINTS)[number];
 

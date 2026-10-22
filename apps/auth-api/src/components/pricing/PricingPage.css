@@ -1,0 +1,731 @@
+/* The /pricing page. Every rule is scoped under `.pricing-page`. */
+
+.pricing-page {
+  /* The rolling digits of the app (`src/renderer/src/styles.css`). The public site does not load them. */
+  --pricing-digit-dur: 500ms;
+  --pricing-digit-distance: 12px;
+  --pricing-digit-stagger: 70ms;
+  --pricing-digit-blur: 2px;
+  --pricing-digit-ease: cubic-bezier(0.34, 1.45, 0.64, 1);
+  --pricing-spring: cubic-bezier(0.34, 1.36, 0.64, 1);
+}
+
+.pricing-page .pricing-hero {
+  /* The beam colour as channels. The page sets it from the size of the order. */
+  --pricing-beam: 236, 72, 153;
+  padding-bottom: clamp(72px, 8vw, 120px);
+}
+
+/* The heading on the left and the switches on the right, so the beam falls between them. */
+.pricing-page .pricing-split {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px 48px;
+}
+
+.pricing-page .pricing-heading {
+  max-width: 520px;
+}
+
+/* Month or year, and the currency: the same pill switch as the app's billing switch. */
+.pricing-page .pricing-controls {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.pricing-page .pricing-segment {
+  position: relative;
+  display: inline-grid;
+  grid-template-columns: repeat(var(--pricing-count, 2), minmax(0, 1fr));
+  min-width: 0;
+  margin: 0;
+  padding: 3px;
+  /* The same frosted glass as the header buttons: the beam shows through, blurred. */
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: var(--openbot-radius-pill);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.03));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.04),
+    0 8px 24px -12px rgba(0, 0, 0, 0.6);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  backdrop-filter: blur(20px) saturate(180%);
+}
+
+/* The light pill under the pressed option. It slides with the app's spring, as in its billing switch. */
+.pricing-page .pricing-segment::before {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 3px;
+  width: calc((100% - 6px) / var(--pricing-count, 2));
+  border-radius: var(--openbot-radius-pill);
+  background: var(--openbot-surface-light);
+  content: "";
+  transform: translateX(calc(var(--pricing-index, 0) * 100%));
+  transition: transform 300ms var(--pricing-spring);
+}
+
+.pricing-page .pricing-segment button {
+  position: relative;
+  z-index: 1;
+  min-height: 32px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: var(--openbot-radius-pill);
+  background: transparent;
+  /* Primary text: the beam behind the glass can be bright. */
+  color: var(--openbot-text-primary);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 200ms ease;
+}
+
+.pricing-page .pricing-segment button[aria-pressed="true"] {
+  color: var(--openbot-text-on-light);
+}
+
+.pricing-page .pricing-segment button:focus-visible {
+  outline: 2px solid var(--openbot-accent-strong);
+  outline-offset: 2px;
+}
+
+@keyframes pricing-pop {
+  0% {
+    transform: scale(1);
+  }
+
+  50% {
+    transform: scale(1.1);
+  }
+
+  100% {
+    transform: scale(1);
+  }
+}
+
+.pricing-page .pricing-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 9px;
+  border-radius: var(--openbot-radius-pill);
+  background: rgba(var(--pricing-beam), 0.18);
+  color: var(--openbot-logo-production);
+  font-family: var(--openbot-font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.pricing-page .pricing-price {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  margin: 0;
+}
+
+.pricing-page .pricing-price-amount {
+  color: var(--openbot-text-primary);
+  font-size: clamp(34px, 3.2vw, 44px);
+  font-weight: 600;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.pricing-page .pricing-price-unit {
+  color: var(--openbot-text-muted);
+  font-size: 14px;
+}
+
+/* Rolling digits, copied from the app's `t-digit` transition. A rise comes up from below; a fall comes down from above. */
+@keyframes pricing-digit-in {
+  0% {
+    transform: translateY(calc(var(--pricing-digit-distance) * var(--pricing-digit-dir, 1)));
+    opacity: 0;
+    filter: blur(var(--pricing-digit-blur));
+  }
+
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+
+.pricing-page .pricing-digits {
+  display: inline-flex;
+}
+
+.pricing-page .pricing-digit {
+  display: inline-block;
+}
+
+.pricing-page .pricing-digits.is-animating .pricing-digit {
+  animation: pricing-digit-in var(--pricing-digit-dur) var(--pricing-digit-ease) both;
+}
+
+.pricing-page .pricing-digits.is-animating .pricing-digit[data-stagger="1"] {
+  animation-delay: var(--pricing-digit-stagger);
+}
+
+.pricing-page .pricing-digits.is-animating .pricing-digit[data-stagger="2"] {
+  animation-delay: calc(var(--pricing-digit-stagger) * 2);
+}
+
+/* The order form: the surface the beam strikes. It is opaque, above the beam, and lit along its edge once the beam lands. */
+.pricing-page .pricing-frame {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: clamp(32px, 4vw, 48px);
+  border: 1px solid var(--openbot-border);
+  border-radius: 24px;
+  background: var(--openbot-bg-surface);
+  overflow: hidden;
+  transition:
+    border-color 600ms var(--openbot-ease-out),
+    box-shadow 600ms var(--openbot-ease-out);
+}
+
+.pricing-page .pricing-frame[data-struck] {
+  border-color: rgba(var(--pricing-beam), 0.6);
+  box-shadow:
+    0 0 0 1px rgba(var(--pricing-beam), 0.18),
+    0 -12px 60px -24px rgba(var(--pricing-beam), 0.7);
+}
+
+.pricing-page .pricing-half {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  padding: clamp(24px, 3vw, 36px);
+}
+
+.pricing-page .pricing-half + .pricing-half {
+  border-left: 1px solid var(--openbot-border);
+}
+
+/* The yearly discount of the servers: a green pill by the heading, lit when yearly billing is on. */
+.pricing-page .pricing-half-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.pricing-page :is(.pricing-half h2, .pricing-enterprise h2) {
+  margin: 0;
+  color: var(--openbot-text-primary);
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.pricing-page .pricing-half-summary {
+  margin: 8px 0 0;
+  color: var(--openbot-text-muted);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.pricing-page .pricing-yearly {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 10px;
+  border-radius: var(--openbot-radius-pill);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--openbot-success) 30%, var(--openbot-transparent));
+  color: var(--openbot-success-text);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: background-color 200ms ease;
+}
+
+.pricing-page .pricing-yearly[data-active] {
+  background: color-mix(in srgb, var(--openbot-success) 14%, var(--openbot-transparent));
+  animation: pricing-pop 300ms var(--pricing-spring) 80ms both;
+}
+
+.pricing-page .pricing-choices {
+  display: grid;
+  gap: 10px;
+  margin-top: 24px;
+}
+
+.pricing-page .pricing-unavailable {
+  margin: 16px 0 0;
+  color: var(--openbot-text-secondary);
+  font-size: 14px;
+}
+
+.pricing-page .pricing-choice {
+  position: relative;
+  border: 1px solid var(--openbot-border);
+  border-radius: 14px;
+  background: var(--openbot-bg-surface);
+  transition:
+    border-color 200ms ease,
+    background-color 200ms ease;
+}
+
+.pricing-page .pricing-choice:hover {
+  border-color: var(--openbot-border-strong);
+}
+
+/* The chosen row: four corner marks in the beam colour close in around it, like a selection in a game. */
+.pricing-page .pricing-choice:has(input:checked) {
+  border-color: rgba(var(--pricing-beam), 0.25);
+  background-color: color-mix(in srgb, rgb(var(--pricing-beam)) 5%, var(--openbot-bg-surface));
+}
+
+.pricing-page .pricing-choice::before {
+  --pricing-mark: linear-gradient(rgb(var(--pricing-beam)) 0 0);
+  position: absolute;
+  inset: -5px;
+  background:
+    var(--pricing-mark) top left / 14px 2px,
+    var(--pricing-mark) top left / 2px 14px,
+    var(--pricing-mark) top right / 14px 2px,
+    var(--pricing-mark) top right / 2px 14px,
+    var(--pricing-mark) bottom left / 14px 2px,
+    var(--pricing-mark) bottom left / 2px 14px,
+    var(--pricing-mark) bottom right / 14px 2px,
+    var(--pricing-mark) bottom right / 2px 14px;
+  background-repeat: no-repeat;
+  content: "";
+  filter: drop-shadow(0 0 4px rgba(var(--pricing-beam), 0.8));
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(1.04);
+  transition:
+    opacity 200ms ease,
+    transform 300ms var(--pricing-spring);
+}
+
+.pricing-page .pricing-choice:has(input:checked)::before {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.pricing-page .pricing-choice:has(input:focus-visible) {
+  outline: 2px solid var(--openbot-accent-strong);
+  outline-offset: 2px;
+}
+
+.pricing-page .pricing-choice label {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px;
+  cursor: pointer;
+}
+
+.pricing-page .pricing-choice input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+.pricing-page .pricing-choice-dot {
+  position: relative;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border: 1.5px solid var(--openbot-border-strong);
+  border-radius: 50%;
+  transition: border-color 200ms ease;
+}
+
+.pricing-page .pricing-choice-dot::after {
+  position: absolute;
+  inset: 3px;
+  border-radius: 50%;
+  background: rgb(var(--pricing-beam));
+  content: "";
+  transform: scale(0);
+  transition: transform 300ms var(--pricing-spring);
+}
+
+.pricing-page .pricing-choice:has(input:checked) .pricing-choice-dot {
+  border-color: rgb(var(--pricing-beam));
+}
+
+.pricing-page .pricing-choice:has(input:checked) .pricing-choice-dot::after {
+  transform: scale(1);
+}
+
+.pricing-page .pricing-row-name {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+
+.pricing-page .pricing-row-name strong {
+  color: var(--openbot-text-primary);
+  font-size: 16px;
+}
+
+.pricing-page .pricing-row-name span:last-child {
+  flex-basis: 100%;
+  color: var(--openbot-text-muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.pricing-page .pricing-choice .pricing-price {
+  flex: none;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  text-align: right;
+}
+
+.pricing-page .pricing-choice .pricing-price-amount {
+  display: inline-flex;
+  align-items: center;
+  font-size: 26px;
+}
+
+.pricing-page .pricing-choice .pricing-price-unit {
+  font-size: 12px;
+}
+
+/* The monthly price, struck through in yearly billing. It opens to its own width, so the price beside it moves smoothly. */
+.pricing-page .pricing-was {
+  display: inline-grid;
+  grid-template-columns: 0fr;
+  opacity: 0;
+  transition:
+    grid-template-columns 300ms ease,
+    opacity 200ms ease;
+}
+
+.pricing-page .pricing-was[data-shown] {
+  grid-template-columns: 1fr;
+  opacity: 1;
+}
+
+.pricing-page .pricing-was > span {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.pricing-page .pricing-was s {
+  display: inline-block;
+  margin-right: 8px;
+  color: var(--openbot-text-muted);
+  font-size: 16px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+
+.pricing-page .pricing-stepper {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  margin: 0;
+  border: 0;
+  align-items: center;
+  gap: 12px;
+  padding: 0 18px 16px 50px;
+  color: var(--openbot-text-primary);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.pricing-page .pricing-stepper span {
+  min-width: 84px;
+  text-align: center;
+}
+
+.pricing-page .pricing-stepper button {
+  display: inline-grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 1px solid var(--openbot-border-strong);
+  border-radius: 50%;
+  background: var(--openbot-bg-surface);
+  color: var(--openbot-text-primary);
+  font: inherit;
+  font-size: 16px;
+  cursor: pointer;
+  transition:
+    background-color 150ms ease,
+    opacity 150ms ease,
+    transform 150ms ease;
+}
+
+.pricing-page .pricing-stepper button:hover:not(:disabled) {
+  background: var(--openbot-bg-surface-raised);
+}
+
+.pricing-page .pricing-stepper button:active:not(:disabled) {
+  transform: scale(0.94);
+}
+
+.pricing-page .pricing-stepper button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.pricing-page .pricing-stepper button:focus-visible {
+  outline: 2px solid var(--openbot-accent-strong);
+  outline-offset: 2px;
+}
+
+/* The summary: each part under its own half, then the total and the button in one row under both. */
+.pricing-page .pricing-summary {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border-top: 1px solid var(--openbot-border);
+}
+
+.pricing-page .pricing-summary-lines {
+  display: grid;
+  grid-row: 1;
+  align-content: start;
+  margin: 0;
+  padding: 14px clamp(24px, 3vw, 36px);
+  list-style: none;
+  transition: padding 300ms ease;
+}
+
+/* A half with nothing chosen takes no room. */
+.pricing-page .pricing-summary-lines:not(:has([data-open])) {
+  padding-block: 0;
+}
+
+.pricing-page .pricing-summary-server {
+  grid-column: 1;
+}
+
+.pricing-page .pricing-summary-license {
+  grid-column: 2;
+}
+
+.pricing-page .pricing-summary-license:has([data-open]) {
+  border-left: 1px solid var(--openbot-border);
+}
+
+.pricing-page .pricing-summary-personal {
+  grid-column: 1 / -1;
+}
+
+/* VAT comes off the sum of both halves, so its line runs under both. */
+.pricing-page .pricing-summary-vat {
+  grid-column: 1 / -1;
+  grid-row: 2;
+}
+
+.pricing-page .pricing-summary-vat:has([data-open]) {
+  border-top: 1px solid var(--openbot-border);
+}
+
+/* A line opens to its own height and closes to none, so the total moves smoothly. */
+.pricing-page .pricing-summary-line {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition:
+    grid-template-rows 300ms ease,
+    opacity 200ms ease;
+}
+
+.pricing-page .pricing-summary-line[data-open] {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+
+.pricing-page .pricing-summary-line > div {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.pricing-page .pricing-summary-line > div > div {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 24px;
+  padding: 6px 0;
+  color: var(--openbot-text-secondary);
+  font-size: 15px;
+}
+
+.pricing-page .pricing-summary-line > div > div > span:last-child {
+  color: var(--openbot-text-primary);
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Discounts are smaller, green lines under the part that they come off. */
+.pricing-page .pricing-summary-line[data-minus] > div > div {
+  padding: 2px 0;
+  font-size: 14px;
+}
+
+.pricing-page .pricing-summary-line[data-minus] > div > div > span:last-child {
+  color: var(--openbot-success);
+  font-size: 14px;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+/* The VAT line is small, like the discounts, but not green. */
+.pricing-page .pricing-summary-vat .pricing-summary-line > div > div {
+  font-size: 14px;
+}
+
+.pricing-page .pricing-summary-vat .pricing-summary-line > div > div > span:last-child {
+  font-size: 14px;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+.pricing-page .pricing-summary-total {
+  display: flex;
+  grid-column: 1 / -1;
+  grid-row: 3;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px 24px;
+  padding: 20px clamp(24px, 3vw, 36px);
+  border-top: 1px solid var(--openbot-border);
+  background: var(--openbot-bg-surface-raised);
+}
+
+.pricing-page .pricing-summary-total-label {
+  color: var(--openbot-text-secondary);
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.pricing-page .pricing-summary-total .pricing-price {
+  margin-right: auto;
+}
+
+.pricing-page .pricing-cta {
+  min-width: 240px;
+}
+
+.pricing-page .pricing-enterprise {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 20px;
+  padding: 22px 24px;
+  border: 1px solid var(--openbot-border);
+  border-radius: 18px;
+}
+
+.pricing-page .pricing-enterprise .pricing-half-summary {
+  margin-top: 4px;
+}
+
+@media (max-width: 760px) {
+  .pricing-page .pricing-controls {
+    justify-content: flex-start;
+  }
+
+  .pricing-page .pricing-frame {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .pricing-page .pricing-half + .pricing-half {
+    border-top: 1px solid var(--openbot-border);
+    border-left: 0;
+  }
+
+  .pricing-page .pricing-summary {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .pricing-page .pricing-summary-lines {
+    grid-column: 1;
+    grid-row: auto;
+  }
+
+  .pricing-page .pricing-summary-license:has([data-open]) {
+    border-top: 1px solid var(--openbot-border);
+    border-left: 0;
+  }
+
+  .pricing-page .pricing-summary-total {
+    grid-row: auto;
+  }
+
+  .pricing-page .pricing-cta {
+    width: 100%;
+  }
+
+  .pricing-page .pricing-choice label {
+    padding: 14px;
+  }
+
+  .pricing-page .pricing-choice .pricing-price-amount {
+    flex-direction: column;
+    align-items: flex-end;
+  }
+
+  .pricing-page .pricing-was s {
+    margin-right: 0;
+    font-size: 13px;
+  }
+
+  .pricing-page .pricing-choice .pricing-price-unit {
+    max-width: 84px;
+  }
+
+  .pricing-page .pricing-stepper {
+    padding: 0 14px 14px 46px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pricing-page .pricing-segment::before,
+  .pricing-page .pricing-segment button,
+  .pricing-page .pricing-frame,
+  .pricing-page .pricing-choice,
+  .pricing-page .pricing-choice::before,
+  .pricing-page .pricing-choice-dot::after,
+  .pricing-page .pricing-summary-lines,
+  .pricing-page .pricing-summary-line,
+  .pricing-page .pricing-yearly,
+  .pricing-page .pricing-was {
+    transition: none;
+  }
+
+  .pricing-page .pricing-yearly[data-active],
+  .pricing-page .pricing-digits.is-animating .pricing-digit {
+    animation: none;
+  }
+}
