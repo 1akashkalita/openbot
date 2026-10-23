@@ -8,6 +8,7 @@ export const messages = {
   "error.billing.planRequired": "Тариф этого сервера закончился. Продлите его, чтобы запустить сервер.",
   "error.billing.licenseExists": "У этого аккаунта уже есть лицензия. Вместо этого измените число пользователей.",
   "error.billing.licenseCurrency": "Лицензия должна использовать валюту ваших других планов.",
+  "error.billing.planCurrency": "Новый план должен использовать валюту ваших других планов.",
   "error.billing.licenseUsersInUse":
     "В лицензии не может быть меньше пользователей, чем людей, которые сейчас ею пользуются.",
   "error.billing.licensePaymentFailed":

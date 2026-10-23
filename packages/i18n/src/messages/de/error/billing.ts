@@ -9,6 +9,7 @@ export const messages = {
   "error.billing.planRequired": "Der Tarif dieses Servers ist abgelaufen. Verlängere ihn, um den Server zu starten.",
   "error.billing.licenseExists": "Dieses Konto hat bereits eine Lizenz. Ändern Sie stattdessen ihre Nutzerzahl.",
   "error.billing.licenseCurrency": "Die Lizenz muss die Währung Ihrer anderen Pläne verwenden.",
+  "error.billing.planCurrency": "Ein neuer Plan muss die Währung Ihrer anderen Pläne verwenden.",
   "error.billing.licenseUsersInUse":
     "Die Lizenz kann nicht weniger Nutzer haben als die Personen, die sie jetzt nutzen.",
   "error.billing.licensePaymentFailed":

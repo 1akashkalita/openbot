@@ -54,10 +54,11 @@ const checkoutSessionSchema = Schema.Struct({
   url: Schema.NullOr(Schema.String),
   status: Schema.NullOr(Schema.String),
   subscription: Schema.optional(Schema.NullOr(Schema.String)),
+  metadata: Metadata,
 });
 export type StripeCheckoutSession = typeof checkoutSessionSchema.Type;
 const checkoutSessionListSchema = Schema.Struct({
-  data: Schema.Array(Schema.Struct({ ...checkoutSessionSchema.fields, created: Schema.Int, metadata: Metadata })),
+  data: Schema.Array(Schema.Struct({ ...checkoutSessionSchema.fields, created: Schema.Int })),
 });
 export type StripeOpenCheckoutSession = (typeof checkoutSessionListSchema.Type)["data"][number];
 const priceSchema = Schema.Struct({
@@ -294,6 +295,8 @@ export class StripeClient {
       extraItems?: readonly { priceId: string; quantity: number }[];
       /** More metadata for the session and the subscription. */
       metadata?: Readonly<Record<string, string>>;
+      /** Metadata for the session only, such as the order that a later page for the same server repeats. */
+      sessionMetadata?: Readonly<Record<string, string>>;
       successUrl: string;
       cancelUrl: string;
       nowSeconds: number;
@@ -321,6 +324,7 @@ export class StripeClient {
       if (input.serverId) body.set(`${prefix}[${BILLING_METADATA.serverId}]`, input.serverId);
       for (const [key, value] of Object.entries(input.metadata ?? {})) body.set(`${prefix}[${key}]`, value);
     }
+    for (const [key, value] of Object.entries(input.sessionMetadata ?? {})) body.set(`metadata[${key}]`, value);
     const session = yield* this.#requestEffect("POST", "/v1/checkout/sessions", body, checkoutSessionSchema);
     if (!session.url) return yield* new StripeRequestError(200, "invalid_response", "missing_url");
     return { id: session.id, url: session.url };

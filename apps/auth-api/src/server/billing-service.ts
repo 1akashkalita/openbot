@@ -27,6 +27,7 @@ import {
   LICENSE_METADATA_KIND,
   type LicenseOrder,
   licensePeriodAmount,
+  parseLicenseOrder,
 } from "@openbot/contracts/license";
 import { isDynamicRecord, isOneOf, isString } from "@openbot/contracts/runtime-values";
 import { sourceText } from "@openbot/i18n/source";
@@ -140,6 +141,15 @@ export interface FirstPlanStart {
   plan: BillingPlanId;
   serverName: string;
 }
+
+/**
+ * The license order of a server Checkout page, on the session only. A later page for the same server
+ * reads it from the page that it closes, so it sells the same license.
+ */
+const ORDER_METADATA = { licenseTier: "openbot_order_license_tier", licenseUsers: "openbot_order_license_users" };
+
+/** A closed Checkout page. `paid` when the user paid on it, so no second page must open. */
+export type ClosedCheckout = { status: "paid" } | { status: "closed"; license: LicenseOrder | null };
 
 /** The stored state of a subscription before a sync, to find the change that the sync made. */
 interface StoredSubscription {
@@ -319,7 +329,8 @@ export class BillingService {
       const licensePrice = licensePlan ? yield* this.license.price(licensePlan) : null;
       if (licensePlan && !licensePrice)
         return yield* new BillingError(503, "license_unavailable", sourceText("error.billing.licenseUnavailable"));
-      if (order) yield* this.license.assertNoLicense(request.user.id);
+      if (order) yield* this.license.assertCanOrder(request.user.id, order.users);
+      yield* this.license.assertCurrency(request.user.id, request.currency);
       const customerId = yield* this.ensureCustomer(request.user);
       const returnUrl = checkoutReturnUrl(request.origin, request.target, request.serverId);
       const returnToken = this.#sales ? crypto.randomUUID() : null;
@@ -330,7 +341,15 @@ export class BillingService {
           currency: request.currency,
           userId: request.user.id,
           serverId: request.serverId,
-          ...(order && licensePrice ? { extraItems: [{ priceId: licensePrice.id, quantity: order.users }] } : {}),
+          ...(order && licensePrice
+            ? {
+                extraItems: [{ priceId: licensePrice.id, quantity: order.users }],
+                sessionMetadata: {
+                  [ORDER_METADATA.licenseTier]: order.tier,
+                  [ORDER_METADATA.licenseUsers]: String(order.users),
+                },
+              }
+            : {}),
           // Stripe puts the session ID in the URL. The desktop return page sends it with the first
           // website visit of the browser, so that the saved checkout names the account.
           successUrl:
@@ -404,18 +423,26 @@ export class BillingService {
   ).bind(this);
 
   /**
-   * Closes a Checkout page. `paid` when the user paid on it, so no second page must open. The plan of a
-   * paid page is stored now: its webhook can be late, or can fail each time.
+   * Closes a Checkout page. The plan of a paid page is stored now: its webhook can be late, or can fail
+   * each time. A closed page returns its license order, unless the account got a license after it opened.
    */
 
   readonly closeCheckout = Effect.fn("BillingService.closeCheckout")(
     function* (
       this: BillingService,
       sessionId: string,
-    ): Effect.fn.Return<"closed" | "paid", BillingError | BillingOperationError, BillingDependencies> {
+    ): Effect.fn.Return<ClosedCheckout, BillingError | BillingOperationError, BillingDependencies> {
       const dependencies = yield* BillingDependencies;
       const session = yield* this.#stripeCall(() => dependencies.stripe.expireCheckoutSession(sessionId));
-      if (session.status !== "complete") return "closed";
+      if (session.status !== "complete") {
+        const users = Number(session.metadata[ORDER_METADATA.licenseUsers]);
+        const license = parseLicenseOrder({ tier: session.metadata[ORDER_METADATA.licenseTier], users });
+        const userId = session.metadata[BILLING_METADATA.userId];
+        return {
+          status: "closed",
+          license: license && userId && !(yield* this.license.hasLicense(userId)) ? license : null,
+        };
+      }
       const subscriptionId = session.subscription;
       if (subscriptionId) {
         // The webhook or the next close stores it. A Stripe failure is logged by `#stripeCall`.
@@ -427,7 +454,7 @@ export class BillingService {
           ),
         );
       }
-      return "paid";
+      return { status: "paid" };
     },
     (operation) => operation.pipe(Effect.provide(this.#layer)),
   ).bind(this);

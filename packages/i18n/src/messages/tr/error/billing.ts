@@ -9,6 +9,7 @@ export const messages = {
   // Masaüstü ve web istemcilerinin oluşturduğu faturalandırma hataları.
   "error.billing.licenseExists": "Bu hesabın zaten bir lisansı var. Bunun yerine kullanıcı sayısını değiştirin.",
   "error.billing.licenseCurrency": "Lisans, diğer planlarınızın para birimini kullanmalıdır.",
+  "error.billing.planCurrency": "Yeni bir plan, diğer planlarınızın para birimini kullanmalıdır.",
   "error.billing.licenseUsersInUse": "Lisans, şu anda onu kullanan kişilerden daha az kullanıcıya sahip olamaz.",
   "error.billing.licensePaymentFailed":
     "Eklenen kullanıcıların ödemesi başarısız oldu. Ödeme yöntemini güncelleyip tekrar deneyin.",

@@ -148,24 +148,6 @@
   gap: var(--openbot-space-2);
 }
 
-.billing-license-buy {
-  display: flex;
-  flex-direction: column;
-  gap: var(--openbot-space-3);
-  padding: var(--openbot-space-3) var(--openbot-space-4);
-}
-
-.billing-license-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--openbot-space-2);
-}
-
-.billing-license-link.ui-button {
-  height: auto;
-  padding: 0;
-}
-
 .billing-license-divider {
   width: 100%;
   margin: var(--openbot-space-2) 0;

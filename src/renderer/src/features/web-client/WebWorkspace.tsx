@@ -401,7 +401,6 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     onHostingReturnConsumed: () => props.onHostingReturnConsumed?.(),
     onJoin: () => setJoinOpen(true),
   });
-  const loadHostedPlans = async () => (await hostedServers.calls.plans()).plans;
   const [creating, setCreating] = createSignal(false);
   /** The new agent form's avatar. The first-agent row in an empty sidebar shows it. */
   const [agentAvatar, setAgentAvatar] = createSignal(newAgentAvatar());
@@ -808,7 +807,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     },
   );
   const [billingOpen, setBillingOpen] = createSignal(false);
-  /** `/app?start=license` opens Billing with the order form open. */
+  /** `/app?start=license` opens Billing with the license dialog open. */
   const [licenseStart, setLicenseStart] = createSignal(false);
   const billingCalls = createWebBillingCalls(props.accountFetch);
   const billing = createBillingStore(() => billingCalls, billingOpen);
@@ -1739,7 +1738,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                   servers={servers()}
                   onRefreshServers={workspace.retryHosts}
                   resume={hostedServers.addServer()?.resume}
-                  order={hostedServers.addServer()?.order}
+                  license={licenseCalls}
                   onClose={hostedServers.closeAddServer}
                   onOpenServer={(serverId) => {
                     hostedServers.closeAddServer();
@@ -1962,16 +1961,6 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                       onManagePayment={() => void billing.openPortal({ flow: "manage" })}
                       onContactUs={licenseContactUs(() => window.location.assign(HOSTED_SERVER_CONTACT_URL))}
                       startBuying={licenseStart()}
-                      loadPlans={hostedServers.available() ? loadHostedPlans : undefined}
-                      onOrderServer={
-                        hostedServers.available()
-                          ? (order) => {
-                              setBillingOpen(false);
-                              setLicenseStart(false);
-                              hostedServers.openAddServer("settings_billing", order);
-                            }
-                          : undefined
-                      }
                     />
                   }
                 />

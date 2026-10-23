@@ -258,6 +258,13 @@ export interface LicenseOrder {
   users: number;
 }
 
+/** The license for this many people at work: 1 is Starter; more is Team, which bills at least its included users. */
+export function licenseOrderFor(people: number): LicenseOrder {
+  return people === 1
+    ? { tier: "starter", users: 1 }
+    : { tier: "team", users: Math.max(LICENSE_INCLUDED_USERS, people) };
+}
+
 export interface License {
   /** The Stripe subscription id. */
   subscriptionId: string;

@@ -9,6 +9,7 @@ export const messages = {
   "error.billing.planRequired": "Il piano di questo server è terminato. Rinnovalo per avviare il server.",
   "error.billing.licenseExists": "Questo account ha già una licenza. Modifica invece i suoi utenti.",
   "error.billing.licenseCurrency": "La licenza deve usare la valuta degli altri piani.",
+  "error.billing.planCurrency": "Un nuovo piano deve usare la valuta degli altri piani.",
   "error.billing.licenseUsersInUse": "La licenza non può avere meno utenti delle persone che la usano ora.",
   "error.billing.licensePaymentFailed":
     "Il pagamento per gli utenti aggiunti non è riuscito. Aggiorna il metodo di pagamento e riprova.",

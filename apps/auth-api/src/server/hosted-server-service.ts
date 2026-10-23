@@ -497,13 +497,15 @@ export class HostedServerService {
           .first<HostedServerRow>(),
       );
       if (!row) return yield* notFound();
-      // A second page for a server that still waits for its first payment continues the same purchase.
+      // A second page for a server that still waits for its first payment continues the same purchase,
+      // with the license of the page that it closes.
       const resumed = row.observed_state === "awaiting_payment" && row.desired_state === "running";
       return yield* this.#checkout(
         row,
         user,
         billing,
         resumed ? { ...returnTo, entryPoint: "checkout_resume" } : returnTo,
+        resumed ? "previous" : undefined,
       );
     },
     (operation) => operation.pipe(Effect.provide(this.#layer)),
@@ -1335,7 +1337,8 @@ export class HostedServerService {
 
   /**
    * A Checkout page for a server that waits for payment, or none when the server needs no page. A license
-   * order adds a second line to the page. The row does not keep the order, so a later page has no license.
+   * order adds a second line to the page. The row does not keep the order: `previous` reads it from the
+   * page that closes, so a later page sells the same license.
    */
   readonly #checkout = Effect.fn("HostedServerService.checkout")(function* (
     this: HostedServerService,
@@ -1343,7 +1346,7 @@ export class HostedServerService {
     user: AuthUser,
     billing: HostedServerBilling,
     returnTo: CheckoutReturn,
-    license?: LicenseOrder,
+    order?: LicenseOrder | "previous",
   ): Effect.fn.Return<HostedServerCheckout, HostedFailure, HostedServerDependencies> {
     const dependencies = yield* HostedServerDependencies;
     // A scheduled deletion must be withdrawn before a replacement plan can be purchased.
@@ -1363,9 +1366,11 @@ export class HostedServerService {
     }
     const previous = row.checkout_session_id;
     // Only one page can be open, so a user cannot pay twice for one server.
-    if (previous && (yield* billing.closeCheckout(previous).pipe(Effect.mapError(hostedFailure))) === "paid") {
+    const closed = previous ? yield* billing.closeCheckout(previous).pipe(Effect.mapError(hostedFailure)) : null;
+    if (closed?.status === "paid") {
       return { server: summary(yield* this.#requireRow(row.server_id)), checkoutUrl: null };
     }
+    const license = order === "previous" ? closed?.license : order;
     const session = yield* billing
       .createCheckout({
         user: { id: user.id, email: user.email },
@@ -1416,7 +1421,7 @@ export class HostedServerService {
   ): Effect.fn.Return<HostedServerCheckout, HostedFailure, HostedServerDependencies> {
     const dependencies = yield* HostedServerDependencies;
     const previous = row.checkout_session_id;
-    if (previous && (yield* billing.closeCheckout(previous).pipe(Effect.mapError(hostedFailure))) === "paid") {
+    if (previous && (yield* billing.closeCheckout(previous).pipe(Effect.mapError(hostedFailure))).status === "paid") {
       // A retry of this request then returns the same server, and does not add a second one.
       yield* hostedCall(() =>
         dependencies.database
@@ -1729,7 +1734,7 @@ export class HostedServerService {
     if (
       checkoutId &&
       dependencies.billing &&
-      (yield* dependencies.billing.closeCheckout(checkoutId).pipe(Effect.mapError(hostedFailure))) === "paid"
+      (yield* dependencies.billing.closeCheckout(checkoutId).pipe(Effect.mapError(hostedFailure))).status === "paid"
     ) {
       return false;
     }
@@ -2016,7 +2021,7 @@ export class HostedServerService {
     const dependencies = yield* HostedServerDependencies;
     return yield* Effect.gen({ self: this }, function* () {
       return dependencies.billing
-        ? yield* dependencies.billing.closeCheckout(sessionId).pipe(Effect.mapError(hostedFailure))
+        ? (yield* dependencies.billing.closeCheckout(sessionId).pipe(Effect.mapError(hostedFailure))).status
         : null;
     }).pipe(
       Effect.catch((error) =>

@@ -10,6 +10,7 @@ export const messages = {
   // Billing errors.
   "error.billing.licenseExists": "このアカウントにはすでにライセンスがあります。代わりにユーザー数を変更してください。",
   "error.billing.licenseCurrency": "ライセンスは他のプランと同じ通貨を使う必要があります。",
+  "error.billing.planCurrency": "新しいプランは他のプランと同じ通貨を使う必要があります。",
   "error.billing.licenseUsersInUse": "ライセンスのユーザー数を、現在使っている人数より少なくすることはできません。",
   "error.billing.licensePaymentFailed":
     "追加ユーザーの支払いに失敗しました。支払い方法を更新して、もう一度お試しください。",

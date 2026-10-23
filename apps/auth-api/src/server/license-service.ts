@@ -541,23 +541,33 @@ export class LicenseService {
       const license =
         listed.find((candidate) => candidate.metadata[LICENSE_METADATA.orderSubscription] === subscription.id) ??
         (yield* this.#stripeCall(() =>
-          dependencies.stripe.createSubscription(
-            {
-              customerId,
-              priceId: item.price.id,
-              quantity: item.quantity ?? 1,
-              currency,
-              anchorSeconds: Math.floor(periodEnd / 1_000),
-              paymentMethodId: subscriptionPaymentMethodId(subscription),
-              metadata: {
-                [BILLING_METADATA.userId]: ownerId,
-                ...licenseMetadata(licensePlanFromPrice(item.price)),
-                [LICENSE_METADATA.orderSubscription]: subscription.id,
+          dependencies.stripe
+            .createSubscription(
+              {
+                customerId,
+                priceId: item.price.id,
+                quantity: item.quantity ?? 1,
+                currency,
+                anchorSeconds: Math.floor(periodEnd / 1_000),
+                paymentMethodId: subscriptionPaymentMethodId(subscription),
+                metadata: {
+                  [BILLING_METADATA.userId]: ownerId,
+                  ...licenseMetadata(licensePlanFromPrice(item.price)),
+                  [LICENSE_METADATA.orderSubscription]: subscription.id,
+                },
               },
-            },
-            `license-split:${subscription.id}`,
-          ),
+              `license-split:${subscription.id}`,
+            )
+            .pipe(
+              // `checkout.session.completed` and `invoice.paid` come at the same time. The webhook that
+              // makes the license now also finishes the split.
+              Effect.catchIf(
+                (error) => error instanceof StripeRequestError && error.code === "idempotency_key_in_use",
+                () => Effect.succeed(null),
+              ),
+            ),
         ));
+      if (!license) return;
       yield* this.#stripeCall(() => dependencies.stripe.deleteSubscriptionItem(item.id));
       yield* this.sync(license, ownerId, readAt);
     },
@@ -575,13 +585,45 @@ export class LicenseService {
     (operation) => operation.pipe(Effect.provide(this.#layer)),
   ).bind(this);
 
-  /** Fails with `license_exists` when the account has an open license, so a server order cannot buy another. */
-  readonly assertNoLicense = Effect.fn("LicenseService.assertNoLicense")(
+  /**
+   * Fails when a server order cannot buy this license: the account has an open license, or the license
+   * has fewer users than the people that it counts now, as a license checkout refuses.
+   */
+  readonly assertCanOrder = Effect.fn("LicenseService.assertCanOrder")(
     function* (
       this: LicenseService,
       userId: string,
+      users: number,
     ): Effect.fn.Return<void, BillingError | BillingOperationError, LicenseDependencies> {
-      if (yield* this.#openLicense(userId)) return yield* licenseExists();
+      if (yield* this.hasLicense(userId)) return yield* licenseExists();
+      const { used } = yield* this.getState(userId);
+      if (users < used)
+        return yield* new BillingError(409, "license_users_in_use", sourceText("error.billing.licenseUsersInUse"));
+    },
+    (operation) => operation.pipe(Effect.provide(this.#layer)),
+  ).bind(this);
+
+  /** Fails when the account's open plans use another currency. A Stripe customer pays in one currency. */
+  readonly assertCurrency = Effect.fn("LicenseService.assertCurrency")(
+    function* (
+      this: LicenseService,
+      userId: string,
+      currency: BillingCurrency,
+    ): Effect.fn.Return<void, BillingError | BillingOperationError, LicenseDependencies> {
+      const locked = yield* this.#lockedCurrency(userId);
+      if (locked && locked !== currency)
+        return yield* new BillingError(409, "billing_currency", sourceText("error.billing.planCurrency"));
+    },
+    (operation) => operation.pipe(Effect.provide(this.#layer)),
+  ).bind(this);
+
+  /** True when the account has an open license. */
+  readonly hasLicense = Effect.fn("LicenseService.hasLicense")(
+    function* (
+      this: LicenseService,
+      userId: string,
+    ): Effect.fn.Return<boolean, BillingError | BillingOperationError, LicenseDependencies> {
+      return (yield* this.#openLicense(userId)) !== null;
     },
     (operation) => operation.pipe(Effect.provide(this.#layer)),
   ).bind(this);

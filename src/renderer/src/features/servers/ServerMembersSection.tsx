@@ -49,7 +49,7 @@ import {
   Trash2,
   UserRound,
 } from "@openbot/ui";
-import { formatLicenseMoney } from "@openbot/ui/features/billing/LicenseSection";
+import { formatMinorMoney } from "@openbot/ui/features/billing/LicenseSection";
 import { MemberRoleMenu } from "@openbot/ui/features/servers/ServerRoles";
 import { teamMemberName } from "@openbot/ui/features/team/TeamPersonAvatar";
 import { useText } from "@openbot/ui/text";
@@ -973,7 +973,7 @@ export function createServerMembersSection(
               description={
                 <Show when={price()} fallback={t("billing.license.invite.max", { count: LICENSE_MAX_USERS })}>
                   {(amount) => {
-                    const money = formatLicenseMoney(format, amount(), step().license.currency);
+                    const money = formatMinorMoney(format, amount(), step().license.currency);
                     return toTeam()
                       ? t("billing.license.invite.oneUser", { users: format.number(users()), price: money })
                       : t("billing.license.invite.description", { price: money });

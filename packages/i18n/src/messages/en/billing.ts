@@ -89,6 +89,8 @@ export const messages = defineMessages("billing", {
   "billing.license.status.ended": "Ended",
   "billing.license.ended": "The license ended on {date}.",
   "billing.license.buy": "Buy a license",
+  "billing.license.buy.description": "How many people use OpenBot at work? AI agents are not users.",
+  "billing.license.buy.confirm": "Continue to payment",
   // {used} people use the license; it is paid for {users}.
   "billing.license.work.used": "{used} of {users} users",
   "billing.license.tier.starter.title": "Starter license",
@@ -101,7 +103,6 @@ export const messages = defineMessages("billing", {
   // {currency} is a currency code, for example "EUR".
   "billing.license.total.month": "/ month, {currency}",
   "billing.license.total.year": "/ year, {currency}",
-  "billing.license.contact.question": { one: "More than {count} user?", other: "More than {count} users?" },
   "billing.license.contact.action": "Contact us",
   "billing.license.action.menu": "License actions",
   "billing.license.action.users": "Users",

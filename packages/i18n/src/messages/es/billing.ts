@@ -97,7 +97,6 @@ export const messages = {
   "billing.license.line.extra": "{extra} más × {price}",
   "billing.license.total.month": "/ mes, {currency}",
   "billing.license.total.year": "/ año, {currency}",
-  "billing.license.contact.question": { one: "¿Más de {count} usuario?", other: "¿Más de {count} usuarios?" },
   "billing.license.contact.action": "Contáctanos",
   "billing.license.action.menu": "Acciones de la licencia",
   "billing.license.action.users": "Usuarios",

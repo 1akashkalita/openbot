@@ -27,7 +27,6 @@ import { BillingPanel } from "@openbot/ui/features/billing/BillingPanel";
 import { createBillingStore } from "@openbot/ui/features/billing/billing-store";
 import { LicenseSection } from "@openbot/ui/features/billing/LicenseSection";
 import { createLicenseStore } from "@openbot/ui/features/billing/license-store";
-import type { ServerOrder } from "@openbot/ui/features/billing/OrderForm";
 import type { GeneralSettingsValue } from "@openbot/ui/features/settings/app-settings";
 import { SettingsDialogShell, type SettingsPagePlacement } from "@openbot/ui/features/settings/SettingsDialogShell";
 import { SettingsMobileConnectTab } from "@openbot/ui/features/settings/SettingsMobileConnectTab";
@@ -93,8 +92,6 @@ export interface SettingsModalProps {
   hostedServersApi?: HostedServersDesktopApi | undefined;
   /** Opens the add server dialog from the Hosted servers tab. */
   onAddHostedServer?: (() => void) | undefined;
-  /** Opens the add server dialog with the server and license that Billing's order form chose. */
-  onOrderHostedServer?: ((order: ServerOrder) => void) | undefined;
   /** A hosted server that the server menu asked to delete. Each nonce opens its confirmation once. */
   hostedServerDeleteRequest?: { serverId: string; nonce: number } | null;
   onTestNotification?: () => void | Promise<void>;
@@ -139,7 +136,6 @@ export function SettingsModal(props: SettingsModalProps) {
     trackLicenseEvent,
   );
   const hostedServers = createSettingsHostedServersStore(props, () => activeTab() === "billing");
-  const loadHostedPlans = async () => (await props.hostedServersApi?.plans())?.plans ?? [];
   const voice = createSettingsVoiceStore(() => props.open && activeTab() === "voice");
   let handledHostedServerDeleteNonce = 0;
   createEffect(
@@ -325,8 +321,6 @@ export function SettingsModal(props: SettingsModalProps) {
                 store={license}
                 onManagePayment={() => void billing.openPortal({ flow: "manage" })}
                 onContactUs={licenseContactUs(props.onContactUs)}
-                loadPlans={hostedServers.state.available ? loadHostedPlans : undefined}
-                onOrderServer={hostedServers.state.available ? props.onOrderHostedServer : undefined}
               />
             }
           />

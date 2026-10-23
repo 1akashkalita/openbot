@@ -8,6 +8,7 @@ export const messages = {
   "error.billing.planRequired": "Plan tego serwera się skończył. Odnów go, aby uruchomić serwer.",
   "error.billing.licenseExists": "To konto ma już licencję. Zamiast tego zmień liczbę jej użytkowników.",
   "error.billing.licenseCurrency": "Licencja musi używać waluty Twoich innych planów.",
+  "error.billing.planCurrency": "Nowy plan musi używać waluty Twoich innych planów.",
   "error.billing.licenseUsersInUse":
     "Licencja nie może mieć mniej użytkowników niż osób, które teraz z niej korzystają.",
   "error.billing.licensePaymentFailed":

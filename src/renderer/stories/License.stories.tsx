@@ -6,7 +6,6 @@ import { LicenseSection } from "@openbot/ui/features/billing/LicenseSection";
 import { createLicenseStore } from "@openbot/ui/features/billing/license-store";
 import type { Meta, StoryObj } from "storybook-solidjs-vite";
 import { createMockBilling, previewBillingServers } from "../src/preview/mock-billing";
-import { MOCK_HOSTED_SERVER_CATALOG } from "../src/preview/mock-hosted-servers";
 import { createMockLicense, previewLicenseUsers } from "../src/preview/mock-license";
 
 const DAY = 24 * 60 * 60_000;
@@ -48,15 +47,7 @@ function LicenseStory(props: { calls: LicenseDesktopApi }) {
       <BillingPanel
         store={billing}
         available
-        license={
-          <LicenseSection
-            store={store}
-            onManagePayment={() => undefined}
-            onContactUs={() => undefined}
-            loadPlans={async () => MOCK_HOSTED_SERVER_CATALOG.plans}
-            onOrderServer={() => undefined}
-          />
-        }
+        license={<LicenseSection store={store} onManagePayment={() => undefined} onContactUs={() => undefined} />}
       />
     </main>
   );
@@ -76,13 +67,10 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-/**
- * No license, and 4 people use the owner's servers. "Buy a license" opens the order form with the
- * servers and the license. Starter is not available.
- */
+/** No license, and 4 people use the owner's servers. "Buy a license" opens the slider dialog at 4 people. */
 export const Buy: Story = story({});
 
-/** No license, and only the owner. The order form starts on the Starter license. */
+/** No license, and only the owner. The dialog starts on the Starter license. */
 export const BuyStarter: Story = story({ used: 1, users: previewLicenseUsers().slice(0, 1) });
 
 /** No license, and the account pays for a server. Each license has the bundle price. */
@@ -92,7 +80,7 @@ export const BuyWithServer: Story = story({
   bundle: true,
 });
 
-/** No license and no open subscription. The order form has a currency choice. */
+/** No license and no open subscription. The dialog uses the currency of the time zone. */
 export const BuyNewCustomer: Story = story({ currency: null, used: 1, users: previewLicenseUsers().slice(0, 1) });
 
 /** No license, and the account pays in złoty. */

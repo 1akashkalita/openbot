@@ -97,7 +97,6 @@ export const messages = {
   "billing.license.line.extra": "追加 {extra} 人 × {price}",
   "billing.license.total.month": "/ 月、{currency}",
   "billing.license.total.year": "/ 年、{currency}",
-  "billing.license.contact.question": { other: "{count} 人を超える場合は？" },
   "billing.license.contact.action": "お問い合わせ",
   "billing.license.action.menu": "ライセンスの操作",
   "billing.license.action.users": "ユーザー",

@@ -103,7 +103,6 @@ export const messages = {
   // {currency} is a currency code, for example "EUR".
   "billing.license.total.month": "/ mese, {currency}",
   "billing.license.total.year": "/ anno, {currency}",
-  "billing.license.contact.question": { one: "Più di {count} utente?", other: "Più di {count} utenti?" },
   "billing.license.contact.action": "Contattaci",
   "billing.license.action.menu": "Azioni sulla licenza",
   "billing.license.action.users": "Utenti",

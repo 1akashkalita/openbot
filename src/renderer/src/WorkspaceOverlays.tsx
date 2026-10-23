@@ -203,8 +203,7 @@ function JoinServer(props: AccountProps) {
 
 /** A hosted server: the plans, the payment, then the setup. */
 function AddServer() {
-  const { servers, addServerOpen, addServerEntryPoint, addServerOrder, setAddServerOpen, setJoinServerOpen } =
-    useServers();
+  const { servers, addServerOpen, addServerEntryPoint, setAddServerOpen, setJoinServerOpen } = useServers();
   const { select } = useServerActions();
   const { openAppSettings } = useSettings();
 
@@ -212,8 +211,8 @@ function AddServer() {
     <AddServerOverlay
       open={addServerOpen()}
       entryPoint={addServerEntryPoint() ?? undefined}
-      order={addServerOrder()}
       calls={appPort().hostedServers}
+      license={appPort().license}
       servers={servers()}
       onClose={() => setAddServerOpen(false)}
       onOpenServer={(serverId) => {
@@ -796,10 +795,6 @@ function AppSettings(props: AccountProps) {
         onAddHostedServer={() => {
           setAppSettingsOpen(false);
           setAddServerOpen(true, "settings_billing");
-        }}
-        onOrderHostedServer={(order) => {
-          setAppSettingsOpen(false);
-          setAddServerOpen(true, "settings_billing", order);
         }}
         onTestNotification={sendTestNotification}
         onOpenNotificationSettings={openNotificationSettings}

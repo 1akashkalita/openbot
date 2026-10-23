@@ -17,7 +17,7 @@ import {
   licenseListMonthly,
   licenseMonthlyPrice,
 } from "@openbot/contracts/license";
-import type { AppFormat, AppTextKey } from "@openbot/i18n";
+import type { AppTextKey } from "@openbot/i18n";
 import { Button } from "@openbot/ui/button";
 import { RadioGroup } from "@openbot/ui/complex";
 import type { JSX } from "@solidjs/web";
@@ -25,6 +25,7 @@ import { type Accessor, createEffect, createMemo, createSignal, createUniqueId, 
 import { RollingPrice } from "../../rolling-price";
 import { useText } from "../../text";
 import { cx } from "../../utils";
+import { formatMinorMoney } from "./money";
 import "./order-form.css";
 
 /** What the order form buys. A null server or license is not bought. */
@@ -32,14 +33,6 @@ export interface OrderFormOrder {
   interval: BillingInterval;
   currency: BillingCurrency;
   server: BillingPlanId | null;
-  license: LicenseOrder | null;
-}
-
-/** An order with a server. The add server flow creates the server, and the license with it when there is one. */
-export interface ServerOrder {
-  plan: BillingPlanId;
-  interval: BillingInterval;
-  currency: BillingCurrency;
   license: LicenseOrder | null;
 }
 
@@ -86,17 +79,6 @@ function noBreak(text: string): string {
   return text.replaceAll(" ", " ");
 }
 
-/** A money amount in minor units, with the narrow currency sign, and cents only when it has them. */
-export function formatOrderMoney(format: AppFormat, minor: number, currency: BillingCurrency): string {
-  return format.number(minor / 100, {
-    style: "currency",
-    currency: currency.toUpperCase(),
-    currencyDisplay: "narrowSymbol",
-    minimumFractionDigits: minor % 100 === 0 ? 0 : 2,
-    maximumFractionDigits: minor % 100 === 0 ? 0 : 2,
-  });
-}
-
 /** The price for one month of a plan, in minor units. On yearly billing it is the yearly price divided by 12. */
 export function planMonthlyPrice(
   plan: HostedServerCatalogPlan,
@@ -130,7 +112,7 @@ function Price(props: { value: number; currency: BillingCurrency; unit?: string 
       <RollingPrice
         class="order-form-price-amount"
         value={props.value}
-        format={(value) => formatOrderMoney(format, value, props.currency)}
+        format={(value) => formatMinorMoney(format, value, props.currency)}
       />
       <Show when={props.unit}>{(unit) => <span class="order-form-price-unit">{unit()}</span>}</Show>
     </p>
@@ -225,7 +207,7 @@ function ChoiceRow(props: {
               {(full) => (
                 <span class="order-form-was" data-shown={full() > props.price ? "" : undefined} aria-hidden="true">
                   <span>
-                    <s>{formatOrderMoney(format, full(), props.currency)}</s>
+                    <s>{formatMinorMoney(format, full(), props.currency)}</s>
                   </span>
                 </span>
               )}
@@ -233,7 +215,7 @@ function ChoiceRow(props: {
             <RollingPrice
               class="order-form-digits"
               value={props.price}
-              format={(value) => formatOrderMoney(format, value, props.currency)}
+              format={(value) => formatMinorMoney(format, value, props.currency)}
             />
           </span>
           <Show when={props.unit}>{(unit) => <span class="order-form-price-unit">{unit()}</span>}</Show>
@@ -317,7 +299,7 @@ function SummaryLine(props: {
             <RollingPrice
               class="order-form-digits"
               value={shown().value}
-              format={(value) => formatOrderMoney(format, value, props.currency)}
+              format={(value) => formatMinorMoney(format, value, props.currency)}
             />
           </span>
         </div>
@@ -376,7 +358,7 @@ export function OrderForm(props: OrderFormProps) {
   const bundleSaving = (choice: LicenseTier) =>
     bundled()
       ? t("billing.order.license.bundleSaving", {
-          price: formatOrderMoney(format, LICENSE_BUNDLE_DISCOUNT[choice][currency()], currency()),
+          price: formatMinorMoney(format, LICENSE_BUNDLE_DISCOUNT[choice][currency()], currency()),
         })
       : undefined;
   const discount = () => {
@@ -396,7 +378,7 @@ export function OrderForm(props: OrderFormProps) {
     teamFits()
       ? t("billing.order.license.teamDetail", {
           included: LICENSE_INCLUDED_USERS,
-          price: formatOrderMoney(
+          price: formatMinorMoney(
             format,
             licenseMonthlyPrice(LICENSE_PRICES[currency()].extraUser, interval()),
             currency(),

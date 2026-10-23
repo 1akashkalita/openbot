@@ -8,6 +8,7 @@ export const messages = defineMessages("error.billing", {
   // License errors.
   "error.billing.licenseExists": "This account already has a license. Change its users instead.",
   "error.billing.licenseCurrency": "The license must use the currency of your other plans.",
+  "error.billing.planCurrency": "A new plan must use the currency of your other plans.",
   "error.billing.licenseUsersInUse": "The license cannot have fewer users than the people who use it now.",
   "error.billing.licensePaymentFailed":
     "The payment for the added users failed. Update the payment method and try again.",

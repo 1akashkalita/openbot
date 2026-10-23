@@ -518,7 +518,8 @@ the tiers used the same lookup key. The license terms allow 3 devices for each u
 - A server create can order a license (`license: {tier, users}` in `POST /v2/hosting/servers`). The
   Worker refuses a Team license on a Starter server, and more Team users than the server plan has
   members (400 `invalid_hosted_server_request`). An account with an open license gets 409
-  `license_exists`. One Checkout page then has 2 line items: the server price, and the license bundle
+  `license_exists`, and fewer users than the people in use get 409 `license_users_in_use`, as a
+  license checkout does. One Checkout page then has 2 line items: the server price, and the license bundle
   price for the same interval and currency, with the users as its quantity. The customer pays one
   invoice. On the first sync of the paid subscription, `LicenseService.splitOrder` makes a license
   subscription with the metadata `openbot_order_subscription` (the server subscription), anchored at
@@ -526,8 +527,8 @@ the tiers used the same lookup key. The license terms allow 3 devices for each u
   license item from the server subscription, also with no proration. Each later sync runs the split
   again until it is done, and the metadata stops a second license subscription. The sales ledger
   divides the order invoice into a server fact and a license fact, and ignores the 0 invoice of the
-  split. Only the create request carries the order: "Open the payment page again" makes a page for the
-  server only.
+  split. The Checkout session metadata keeps the order, so "Open the payment page again" makes a page
+  with the same license, unless the account has a license by then.
 - The 1-user tier refuses `POST /v1/me/license/users` with 409 `license_one_user`.
   `POST /v1/me/license/plan` sells upgrades only: Starter to Team monthly or yearly, and
   Team monthly to yearly. It bills the difference now (`always_invoice`,
@@ -554,7 +555,8 @@ the tiers used the same lookup key. The license terms allow 3 devices for each u
   `license_unavailable`, and the app shows a toast with the sales address. An app on a Worker
   without these routes gets 404 and also shows nothing.
 - A Stripe customer pays in one currency, so a new license uses the currency of the account's open
-  subscriptions. Checkout cannot buy fewer users than are in use. An increase is charged at once
+  subscriptions, and a server checkout in another currency gets 409 `billing_currency`. Add server
+  opens in that currency and does not let the user change it. Checkout cannot buy fewer users than are in use. An increase is charged at once
   (`always_invoice`). A decrease starts at the next invoice and cannot go below the users in use or
   below 5. The subscription metadata `openbot_paid_users` and `openbot_paid_period_end` keep the
   users paid in the current period, so an increase after a decrease charges only the users above

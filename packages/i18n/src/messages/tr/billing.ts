@@ -96,10 +96,6 @@ export const messages = {
   "billing.license.line.extra": "{extra} ek kullanıcı × {price}",
   "billing.license.total.month": "/ ay, {currency}",
   "billing.license.total.year": "/ yıl, {currency}",
-  "billing.license.contact.question": {
-    one: "{count} kullanıcıdan fazla mı?",
-    other: "{count} kullanıcıdan fazla mı?",
-  },
   "billing.license.contact.action": "Bize ulaşın",
   "billing.license.action.menu": "Lisans işlemleri",
   "billing.license.action.users": "Kullanıcılar",

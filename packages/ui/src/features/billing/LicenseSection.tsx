@@ -4,7 +4,6 @@ import {
   type BillingSubscriptionStatus,
   isOpenBillingStatus,
 } from "@openbot/contracts/billing";
-import type { HostedServerCatalogPlan } from "@openbot/contracts/hosted-servers";
 import {
   LICENSE_INCLUDED_USERS,
   LICENSE_MAX_USERS,
@@ -16,11 +15,14 @@ import {
   type LicenseTier,
   type LicenseUser,
   licenseIncludedUsers,
+  licenseListMonthly,
+  licenseOrderFor,
+  licenseOrderMonthly,
   licensePeriodAmount,
   licensePlanOf,
   licensePlanPrice,
 } from "@openbot/contracts/license";
-import type { AppFormat, AppTextKey } from "@openbot/i18n";
+import type { AppTextKey } from "@openbot/i18n";
 import {
   Alert,
   AlertActions,
@@ -54,11 +56,11 @@ import {
   Zap,
 } from "@openbot/ui";
 import type { JSX } from "@solidjs/web";
-import { type Accessor, createEffect, createSignal, For, Match, Show, Switch, untrack } from "solid-js";
+import { createEffect, createSignal, For, Match, Show, Switch, untrack } from "solid-js";
 import { useText } from "../../text";
 import { guessHostedCurrency, HOSTED_BILLING_CURRENCY, HostedBillingSwitch } from "../servers/HostedServerPricing";
 import type { LicenseStore } from "./license-store";
-import { OrderForm, type OrderFormOrder, type ServerOrder } from "./OrderForm";
+import { formatMinorMoney } from "./money";
 
 export interface LicenseSectionProps {
   store: LicenseStore;
@@ -66,22 +68,11 @@ export interface LicenseSectionProps {
   onManagePayment?: (() => void) | undefined;
   /** Opens the sales contact, for a team with more than `LICENSE_MAX_USERS` users. */
   onContactUs?: (() => void) | undefined;
-  /** The hosted server plans, so the order form sells a server with the license. Without it, the form sells the license only. */
-  loadPlans?: (() => Promise<readonly HostedServerCatalogPlan[]>) | undefined;
-  /** Opens the add server flow, which creates the server of the order and its license. */
-  onOrderServer?: ((order: ServerOrder) => void) | undefined;
-  /** Opens the order form at once, as `/app?start=license` does. */
+  /** Opens the license dialog at once, as `/app?start=license` does. */
   startBuying?: boolean | undefined;
 }
 
-/** A price in minor units. A whole amount shows no cents. */
-export function formatLicenseMoney(format: AppFormat, amount: number, currency: BillingCurrency): string {
-  return format.number(amount / 100, {
-    style: "currency",
-    currency: currency.toUpperCase(),
-    minimumFractionDigits: amount % 100 === 0 ? 0 : 2,
-  });
-}
+export { formatMinorMoney } from "./money";
 
 /** The fewest users that the owner can set: the included users, or the people who use the license now. */
 export function licenseMinimumUsers(state: LicenseState): number {
@@ -165,8 +156,6 @@ export function LicenseSection(props: LicenseSectionProps): JSX.Element {
                     state={current()}
                     store={props.store}
                     startBuying={props.startBuying ?? false}
-                    loadPlans={props.loadPlans}
-                    onOrderServer={props.onOrderServer}
                     onContactUs={props.onContactUs}
                   />
                 }
@@ -343,11 +332,11 @@ function ActiveLicenseRow(props: {
   const price = () => {
     if (plan().interval === "month") {
       return t("billing.server.price.month", {
-        amount: formatLicenseMoney(format, props.license.amount, props.license.currency),
+        amount: formatMinorMoney(format, props.license.amount, props.license.currency),
       });
     }
     const amount = licensePeriodAmount(plan(), props.license.users, props.license.currency);
-    return t("billing.server.price.year", { amount: formatLicenseMoney(format, amount, props.license.currency) });
+    return t("billing.server.price.year", { amount: formatMinorMoney(format, amount, props.license.currency) });
   };
   const periodEnd = () => {
     const end = props.license.currentPeriodEnd;
@@ -441,14 +430,12 @@ function ActiveLicenseRow(props: {
 
 /**
  * The row of an account with no open license: personal use, an ended license, or the license of a
- * server owner that covers this account. "Buy a license" opens the order form in the lower part of the same card.
+ * server owner that covers this account. "Buy a license" opens the license dialog.
  */
 function LicenseOffer(props: {
   state: LicenseState;
   store: LicenseStore;
   startBuying: boolean;
-  loadPlans: (() => Promise<readonly HostedServerCatalogPlan[]>) | undefined;
-  onOrderServer: ((order: ServerOrder) => void) | undefined;
   onContactUs: (() => void) | undefined;
 }): JSX.Element {
   const { t, format } = useText();
@@ -491,29 +478,25 @@ function LicenseOffer(props: {
             </ItemContent>
           </Match>
         </Switch>
-        <Show when={!buying()}>
-          <ItemActions>
-            <Button
-              type="button"
-              size="sm"
-              variant={owners().length > 0 ? "outline" : "default"}
-              aria-expanded="false"
-              onClick={() => {
-                setBuying(true);
-                props.store.track("buy_opened");
-              }}
-            >
-              {t("billing.license.buy")}
-            </Button>
-          </ItemActions>
-        </Show>
+        <ItemActions>
+          <Button
+            type="button"
+            size="sm"
+            variant={owners().length > 0 ? "outline" : "default"}
+            aria-haspopup="dialog"
+            onClick={() => {
+              setBuying(true);
+              props.store.track("buy_opened");
+            }}
+          >
+            {t("billing.license.buy")}
+          </Button>
+        </ItemActions>
       </Item>
       <Show when={buying()}>
-        <LicenseOrderForm
+        <BuyLicenseDialog
           state={props.state}
           store={props.store}
-          loadPlans={props.onOrderServer ? props.loadPlans : undefined}
-          onOrderServer={props.onOrderServer}
           onContactUs={props.onContactUs}
           onClose={() => setBuying(false)}
         />
@@ -523,100 +506,108 @@ function LicenseOffer(props: {
 }
 
 /**
- * The order form of the pricing page, in the license card. An order with a server goes to the add server
- * flow, which creates the server with its license. A license alone goes to the license checkout.
+ * Buys a license without a server. The slider sets the people at work; after the maximum, the dialog
+ * sends the team to the sales contact. A server with its license is sold in the add server dialog.
  */
-function LicenseOrderForm(props: {
+function BuyLicenseDialog(props: {
   state: LicenseState;
   store: LicenseStore;
-  loadPlans: (() => Promise<readonly HostedServerCatalogPlan[]>) | undefined;
-  onOrderServer: ((order: ServerOrder) => void) | undefined;
   onContactUs: (() => void) | undefined;
   onClose: () => void;
 }): JSX.Element {
-  const { t } = useText();
-  const load = untrack(() => props.loadPlans);
-  // Without a plan catalog, the form sells only the license.
-  const [plans, setPlans] = createSignal<readonly HostedServerCatalogPlan[] | null>(load ? null : []);
-  if (load) void load().then(setPlans, () => setPlans([]));
+  const { t, format } = useText();
+  const [people, setPeople] = createSignal(untrack(() => Math.max(1, props.state.used)));
+  const [interval, setInterval] = createSignal<BillingInterval>("year");
   // A Stripe customer pays all its subscriptions in one currency.
   const currency = untrack(() => props.state.currency ?? HOSTED_BILLING_CURRENCY[guessHostedCurrency()]);
-  const checkingOut = () => props.store.state.pending === "checkout";
-
-  async function submit(order: OrderFormOrder): Promise<void> {
-    if (order.server && props.onOrderServer) {
-      props.onOrderServer({
-        plan: order.server,
-        interval: order.interval,
-        currency: order.currency,
-        license: order.license,
-      });
-      return;
-    }
-    if (!order.license) return;
-    const request: LicenseCheckoutRequest = {
-      users: order.license.users,
-      currency: order.currency,
-      tier: order.license.tier,
-      interval: order.interval,
-    };
-    if (await props.store.openCheckout(request)) props.onClose();
-  }
-
-  const action = (order: Accessor<OrderFormOrder>) => (
-    <div class="billing-license-actions">
-      <Button type="button" size="sm" variant="ghost" disabled={checkingOut()} onClick={() => props.onClose()}>
-        {t("common.cancel")}
-      </Button>
-      <Button
-        type="button"
-        size="sm"
-        disabled={props.store.state.pending !== null || (order().server === null && order().license === null)}
-        aria-busy={checkingOut() ? "true" : undefined}
-        onClick={() => void submit(order())}
-      >
-        <Switch fallback={t("billing.order.cta.license")}>
-          <Match when={checkingOut()}>{t("billing.opening")}</Match>
-          <Match when={order().server !== null}>{t("billing.order.cta.server")}</Match>
-        </Switch>
-      </Button>
-    </div>
-  );
-
+  const contact = () => people() > LICENSE_MAX_USERS;
+  const order = () => licenseOrderFor(people());
+  const plan = (): LicensePlan => ({ tier: order().tier, interval: interval(), bundle: props.state.bundle ?? false });
+  const list = () => licenseListMonthly(order().tier, order().users, currency);
+  const monthly = () => licenseOrderMonthly(plan(), order().users, currency);
+  const money = (amount: number) => formatMinorMoney(format, amount, currency);
   return (
-    <section class="billing-license-buy" aria-label={t("billing.license.buy")}>
-      <Show when={plans()} fallback={<Spinner size="sm" label={t("common.loading")} />}>
-        {(loaded) => (
-          <OrderForm
-            plans={loaded()}
-            currency={currency}
-            currencyLocked={props.state.currency !== null}
-            ownedServer={props.state.bundle ?? false}
-            used={props.state.used}
-            initialServer={null}
-            initialLicense={props.state.used <= 1 ? "starter" : "team"}
-            action={action}
-          />
-        )}
-      </Show>
-      <ContactLine onContactUs={props.onContactUs} />
-    </section>
-  );
-}
-
-function ContactLine(props: { onContactUs: (() => void) | undefined }): JSX.Element {
-  const { t } = useText();
-  return (
-    <Text variant="caption" tone="muted">
-      {t("billing.license.contact.question", { count: LICENSE_MAX_USERS })}{" "}
-      <Show when={props.onContactUs}>
-        {(contact) => (
-          <Button type="button" variant="link" size="xs" class="billing-license-link" onClick={() => contact()()}>
-            {t("billing.license.contact.action")}
-          </Button>
-        )}
-      </Show>
-    </Text>
+    <ConfirmDialog
+      open
+      tone="default"
+      icon={<ShieldCheck />}
+      title={t("billing.license.buy")}
+      description={t("billing.license.buy.description")}
+      confirmLabel={contact() ? t("billing.license.contact.action") : t("billing.license.buy.confirm")}
+      pendingLabel={t("billing.opening")}
+      pending={props.store.state.pending === "checkout"}
+      error={props.store.state.actionError ?? undefined}
+      onCancel={() => {
+        props.store.clearActionError();
+        props.onClose();
+      }}
+      onConfirm={async () => {
+        if (contact()) {
+          props.onContactUs?.();
+          return;
+        }
+        const request: LicenseCheckoutRequest = {
+          users: order().users,
+          currency,
+          tier: order().tier,
+          interval: interval(),
+        };
+        if (await props.store.openCheckout(request)) props.onClose();
+      }}
+    >
+      <div class="billing-license-change">
+        <HostedBillingSwitch
+          billing={interval() === "year" ? "yearly" : "monthly"}
+          discountPercent={LICENSE_YEAR_DISCOUNT_PERCENT}
+          disabled={props.store.state.pending !== null}
+          onChange={(billing) => setInterval(billing === "yearly" ? "year" : "month")}
+        />
+        <SliderField
+          label={t("billing.license.users.label")}
+          value={people()}
+          minValue={1}
+          maxValue={SLIDER_MAX}
+          disabled={props.store.state.pending !== null}
+          formatValue={(value) =>
+            value > LICENSE_MAX_USERS
+              ? t("billing.license.change.more", { count: LICENSE_MAX_USERS })
+              : format.number(value)
+          }
+          onChange={setPeople}
+        />
+        <div class="billing-license-quote">
+          <Show
+            when={!contact()}
+            fallback={
+              <p class="billing-license-total">
+                <span class="billing-license-total-amount">{t("billing.license.change.custom")}</span>
+              </p>
+            }
+          >
+            <dl class="billing-license-lines">
+              <div>
+                <dt>
+                  <Show when={order().tier === "team"} fallback={t("billing.order.summary.starterLicense")}>
+                    {t("billing.order.summary.license", { count: order().users })}
+                  </Show>
+                </dt>
+                <dd>
+                  <Show when={list() !== monthly()}>
+                    <s>{money(list())}</s>
+                  </Show>
+                </dd>
+              </div>
+            </dl>
+            <p class="billing-license-total">
+              <span class="billing-license-total-amount">{money(monthly())}</span>
+              <Text as="span" variant="caption" tone="muted">
+                {interval() === "year" ? t("billing.order.unit.monthBilledYearly") : t("billing.order.unit.month")}
+              </Text>
+            </p>
+          </Show>
+        </div>
+      </div>
+    </ConfirmDialog>
   );
 }
 
@@ -626,7 +617,7 @@ function Quote(props: { plan: LicensePlan; users: number; currency: BillingCurre
   const included = () => licenseIncludedUsers(props.plan.tier);
   const extra = () => props.users - included();
   const price = () => licensePlanPrice(props.plan, props.currency);
-  const money = (amount: number) => formatLicenseMoney(format, amount, props.currency);
+  const money = (amount: number) => formatMinorMoney(format, amount, props.currency);
   return (
     <div class="billing-license-quote">
       <dl class="billing-license-lines">
@@ -675,7 +666,7 @@ function ChangeUsersDialog(props: {
   const { t, format } = useText();
   const [users, setUsers] = createSignal(untrack(() => Math.max(props.license.users, props.minimum)));
   const contact = () => users() > LICENSE_MAX_USERS;
-  const money = (amount: number) => formatLicenseMoney(format, amount, props.license.currency);
+  const money = (amount: number) => formatMinorMoney(format, amount, props.license.currency);
   return (
     <ConfirmDialog
       open

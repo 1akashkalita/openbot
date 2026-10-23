@@ -412,13 +412,18 @@ export async function bootstrapStripe(options: StripeBootstrapOptions): Promise<
   }
   const stripe = new StripeAdmin(secretKey);
 
-  const query = new URLSearchParams({ limit: "100" });
-  for (const plan of BILLING_PLAN_IDS) {
-    for (const interval of BILLING_INTERVALS) query.append("lookup_keys[]", billingLookupKey(plan, interval));
+  const lookupKeys = [
+    ...BILLING_PLAN_IDS.flatMap((plan) => BILLING_INTERVALS.map((interval) => billingLookupKey(plan, interval))),
+    ...LICENSE_LOOKUP_KEYS,
+  ];
+  const existing: Price[] = [];
+  // Stripe accepts at most 10 lookup keys in one list request.
+  for (let start = 0; start < lookupKeys.length; start += 10) {
+    const query = new URLSearchParams({ limit: "100" });
+    for (const key of lookupKeys.slice(start, start + 10)) query.append("lookup_keys[]", key);
+    query.append("expand[]", "data.currency_options");
+    existing.push(...(await stripe.request("GET", `/v1/prices?${query}`, null, priceListSchema)).data);
   }
-  for (const key of LICENSE_LOOKUP_KEYS) query.append("lookup_keys[]", key);
-  query.append("expand[]", "data.currency_options");
-  const existing = (await stripe.request("GET", `/v1/prices?${query}`, null, priceListSchema)).data;
 
   const prices: Record<BillingPlanId, string[]> = { starter: [], standard: [], pro: [] };
   for (const plan of BILLING_PLAN_IDS) {

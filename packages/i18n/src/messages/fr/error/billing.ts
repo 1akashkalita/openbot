@@ -10,6 +10,7 @@ export const messages = {
   // Billing errors.
   "error.billing.licenseExists": "Ce compte a déjà une licence. Modifiez plutôt son nombre d'utilisateurs.",
   "error.billing.licenseCurrency": "La licence doit utiliser la devise de vos autres forfaits.",
+  "error.billing.planCurrency": "Un nouveau forfait doit utiliser la devise de vos autres forfaits.",
   "error.billing.licenseUsersInUse":
     "La licence ne peut pas avoir moins d'utilisateurs que les personnes qui l'utilisent maintenant.",
   "error.billing.licensePaymentFailed":
