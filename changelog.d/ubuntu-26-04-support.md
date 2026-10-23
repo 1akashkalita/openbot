@@ -5,6 +5,7 @@
 
 ### Fixed
 
-- Remote desktop now starts on Ubuntu 26.04 LTS with the x64 AppImage and on a self-hosted server.
-  Before, its runtime needed `libminiupnpc.so.17` and `libicuuc.so.74`, which Ubuntu 26.04 does not
-  have. The server install now also installs `libnuma1`, which remote desktop needs.
+- The x64 remote desktop runtime now finds all its libraries on Ubuntu 26.04 LTS. Before, it
+  needed `libminiupnpc.so.17` and `libicuuc.so.74`, which Ubuntu 26.04 does not have. The server
+  install now also installs `libnuma1`, which the runtime needs. A remote desktop session on Ubuntu
+  26.04 was not tested.
