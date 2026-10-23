@@ -1433,6 +1433,11 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     void select(agentId);
     setSettingsRequest({ agentId, nonce: Date.now(), routine: "new" });
   }
+  /** As on desktop: the empty canvas opens the agent's chat with a new routine in its settings. */
+  function createCanvasRoutine(agentId: string): void {
+    layout.setSidebarView("agents");
+    createRoutine(agentId);
+  }
   const unavailable = async (): Promise<never> => {
     throw new Error(t("webClient.error.desktopOnly"));
   };
@@ -2221,6 +2226,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                           agents={workspace.profiles()}
                           newAgentModels={newAgentModels()}
                           createAgent={createCanvasAgent}
+                          onCreateRoutine={createCanvasRoutine}
                         />
                       </Loading>
                     )}
