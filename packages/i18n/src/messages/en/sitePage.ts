@@ -137,11 +137,12 @@ export const messages = defineMessages("sitePage", {
   "sitePage.pricing.summary.yearlyDiscount": "Yearly discount ({percent}%)",
   "sitePage.pricing.summary.bundleDiscount": "Bundle discount",
   "sitePage.pricing.summary.personal": "Personal use on your own computer",
-  // {percent} is a whole number, such as 23.
-  "sitePage.pricing.summary.vat": "VAT ({percent}%)",
   "sitePage.pricing.summary.total": "Total",
   "sitePage.pricing.unit.month": "a month",
   "sitePage.pricing.unit.monthBilledYearly": "a month, billed yearly",
+  // The unit beside the total for a visitor in the EU: the prices do not include VAT.
+  "sitePage.pricing.unit.monthExclVat": "a month, excl. VAT",
+  "sitePage.pricing.unit.monthBilledYearlyExclVat": "a month, billed yearly, excl. VAT",
   "sitePage.pricing.unit.free": "forever",
   "sitePage.pricing.cta.server": "Create a server",
   "sitePage.pricing.cta.license": "Buy a license",

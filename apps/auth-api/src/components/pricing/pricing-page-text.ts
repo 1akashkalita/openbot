@@ -8,7 +8,6 @@ import type { HostedServerCatalogPlan } from "@openbot/contracts/hosted-servers"
 import { LICENSE_INCLUDED_USERS, LICENSE_MAX_USERS, LICENSE_PRICES } from "@openbot/contracts/license";
 import type { AppTextKey, AppTranslate } from "@openbot/i18n";
 import {
-  EU_VAT_PERCENT,
   formatMoney,
   LICENSE_BUNDLE_DISCOUNT,
   LICENSE_YEARLY_DISCOUNT_PERCENT,
@@ -131,12 +130,13 @@ export function pricingPageText(t: AppTranslate, plans: readonly HostedServerCat
       licenseYearlyDiscount: t("sitePage.pricing.summary.yearlyDiscount", { percent: LICENSE_YEARLY_DISCOUNT_PERCENT }),
       bundleDiscount: t("sitePage.pricing.summary.bundleDiscount"),
       personal: t("sitePage.pricing.summary.personal"),
-      vat: t("sitePage.pricing.summary.vat", { percent: EU_VAT_PERCENT }),
       total: t("sitePage.pricing.summary.total"),
     },
     unit: {
       month: t("sitePage.pricing.unit.month"),
       monthBilledYearly: t("sitePage.pricing.unit.monthBilledYearly"),
+      monthExclVat: t("sitePage.pricing.unit.monthExclVat"),
+      monthBilledYearlyExclVat: t("sitePage.pricing.unit.monthBilledYearlyExclVat"),
       free: t("sitePage.pricing.unit.free"),
     },
     cta: {

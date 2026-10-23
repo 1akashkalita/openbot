@@ -53,10 +53,10 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-/** A visitor outside the EU: no VAT line. */
+/** A visitor outside the EU: the total has no VAT text. */
 export const OutsideEu: Story = {};
 
-/** A visitor in the EU: the summary adds 23% VAT. */
+/** A visitor in the EU: the unit beside the total says "excl. VAT". */
 export const InEu: Story = {
   args: { offer: { plans: LIST_PRICE_PLANS, inEu: true } },
 };

@@ -12,13 +12,7 @@ import type { HostedServerCatalogPlan } from "@openbot/contracts/hosted-servers"
 export const PRICING_ROUTE = "/pricing";
 
 /** The sitemap date of the page. Change it when its text changes. */
-export const PRICING_PAGE_UPDATED_AT = "2026-10-22";
-
-/**
- * The VAT that the page adds for a visitor in the EU. Every buyer in the EU pays Polish VAT, with no
- * VAT ID check. A buyer outside the EU pays none. Checkout does not charge it yet.
- */
-export const EU_VAT_PERCENT = 23;
+export const PRICING_PAGE_UPDATED_AT = "2026-10-23";
 
 /** The EU member states, as the ISO 3166-1 alpha-2 codes of the `CF-IPCountry` header. */
 const EU_COUNTRIES: ReadonlySet<string> = new Set([
@@ -77,9 +71,10 @@ export function licenseMonthlyPrice(month: number, interval: BillingInterval): n
   return interval === "month" ? month : Math.round((month * (100 - LICENSE_YEARLY_DISCOUNT_PERCENT)) / 100);
 }
 
-/** What the page sells: the server plans with their prices, and the VAT of the visitor. */
+/** What the page sells: the server plans with their prices. */
 export interface PricingOffer {
   plans: readonly HostedServerCatalogPlan[];
+  /** A visitor in the EU sees "excl. VAT" beside the total. */
   inEu: boolean;
 }
 

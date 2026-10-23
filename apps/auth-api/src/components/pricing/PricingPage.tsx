@@ -7,7 +7,6 @@ import type { JSX } from "@solidjs/web";
 import { createMemo, createSignal, For, onSettled, Show, untrack } from "solid-js";
 import { landingAnalytics } from "../../lib/analytics";
 import {
-  EU_VAT_PERCENT,
   formatMoney,
   LICENSE_BUNDLE_DISCOUNT,
   licenseMonthlyPrice,
@@ -16,7 +15,6 @@ import {
   planMonthlyPrice,
   STARTER_LICENSE_MONTHLY,
 } from "../../lib/pricing-page";
-import { LandingBeam } from "../landing/LandingBeam";
 import { LandingFooter } from "../landing/LandingFooter";
 import { LandingGlow } from "../landing/LandingGlow";
 import { SiteHeader } from "../landing/SiteHeader";
@@ -27,16 +25,16 @@ import "./PricingPage.css";
 const CURRENCY_LABEL: Record<BillingCurrency, string> = { eur: "EUR", usd: "USD", pln: "PLN" };
 
 /**
- * Like loot rarity in a game: a bigger order gives a faster beam in a rarer colour. The laser palette
- * has no green or yellow, so the steps are silver, sky, blue, violet, pink and orange.
+ * Like loot rarity in a game: a bigger order gives a rarer colour to the glow of the form. The steps are silver,
+ * sky, blue, violet, pink and orange.
  */
 const RARITY = [
-  { color: "#9aa3b8", rgb: "154, 163, 184", pace: 0.55 },
-  { color: "#38a8ff", rgb: "56, 168, 255", pace: 0.8 },
-  { color: "#3847ff", rgb: "56, 71, 255", pace: 1.05 },
-  { color: "#a46cf5", rgb: "164, 108, 245", pace: 1.3 },
-  { color: "#ec4899", rgb: "236, 72, 153", pace: 1.6 },
-  { color: "#ff6a2b", rgb: "255, 106, 43", pace: 1.9 },
+  { rgb: "154, 163, 184" },
+  { rgb: "56, 168, 255" },
+  { rgb: "56, 71, 255" },
+  { rgb: "164, 108, 245" },
+  { rgb: "236, 72, 153" },
+  { rgb: "255, 106, 43" },
 ] as const;
 
 type LicenseChoice = "none" | "starter" | "team";
@@ -124,51 +122,6 @@ function Segment<T extends string>(props: {
         )}
       </For>
     </fieldset>
-  );
-}
-
-/** The beam's position as a share of the page width: the centre of `surface`, clear of its corners. */
-function beamPosition(surface: HTMLElement): number {
-  const box = surface.getBoundingClientRect();
-  const margin = Math.min(48, box.width / 4);
-  const x = Math.min(box.right - margin, Math.max(box.left + margin, box.left + box.width / 2));
-  return x / document.documentElement.clientWidth;
-}
-
-/**
- * The beam on the order form. It mounts only after the first measurement of the form, because the laser can
- * stop drawing frames on a slow device and then would not show a later position. It measures again when the
- * page changes size.
- */
-function MeasuredBeam(props: {
-  surface: () => HTMLElement | undefined;
-  onImpact: () => void;
-  tint: () => string;
-  pace: () => number;
-}) {
-  const [position, setPosition] = createSignal<number | undefined>();
-  onSettled(() => {
-    const measure = () => {
-      const surface = props.surface();
-      if (surface) setPosition(beamPosition(surface));
-    };
-    const observer = new ResizeObserver(measure);
-    observer.observe(document.documentElement);
-    return () => observer.disconnect();
-  });
-  return (
-    <Show when={position()}>
-      {(beam) => (
-        <LandingBeam
-          surface={props.surface}
-          beamPosition={beam()}
-          color={untrack(props.tint)}
-          tint={props.tint}
-          pace={props.pace}
-          onImpact={props.onImpact}
-        />
-      )}
-    </Show>
   );
 }
 
@@ -312,7 +265,7 @@ function SummaryLine(props: {
 
 /**
  * The pricing page: one order form with a hosted server on the left and the license on the right, one summary
- * under both, and one button. The beam's colour and speed follow the size of the order.
+ * under both, and one button. The colour of the glow follows the size of the order.
  */
 export function PricingPage(props: { text: PricingPageText; offer: PricingOffer; lang: string }) {
   const [interval, setInterval] = createSignal<BillingInterval>("year");
@@ -330,8 +283,6 @@ export function PricingPage(props: { text: PricingPageText; offer: PricingOffer;
   const [members, setMembers] = createSignal(
     Math.min(LICENSE_MAX_USERS, Math.max(LICENSE_INCLUDED_USERS, standard?.memberLimit ?? 0)),
   );
-  const [struck, setStruck] = createSignal(false);
-  let frame: HTMLDivElement | undefined;
 
   onSettled(() => landingAnalytics.start(document, window.location.hostname, PRICING_ROUTE));
 
@@ -363,8 +314,7 @@ export function PricingPage(props: { text: PricingPageText; offer: PricingOffer;
     return choice === "none" ? 0 : bundleOff(choice);
   };
   const subtotal = () => serverCost() + licenseCost() - discount();
-  const vat = () => (props.offer.inEu ? Math.round((subtotal() * EU_VAT_PERCENT) / 100) : 0);
-  const total = () => subtotal() + vat();
+  const total = () => subtotal();
   const buying = () => server() !== undefined || licensed();
   const unit = () => (isYearly() ? props.text.unit.monthBilledYearly : props.text.unit.month);
   /** A license cannot pay for more members than the server holds, so the Team license does not fit a small server. */
@@ -378,7 +328,12 @@ export function PricingPage(props: { text: PricingPageText; offer: PricingOffer;
       : (props.text.license.serverMembers[teamMax()] ?? "");
   const licenseLine = () =>
     license() === "starter" ? props.text.license.starterSummary : (props.text.license.summaryLine[members()] ?? "");
-  const totalUnit = () => (buying() ? unit() : props.text.unit.free);
+  /** The total is the price a visitor pays, so in the EU its unit says that VAT is not included. */
+  const totalUnit = () => {
+    if (!buying()) return props.text.unit.free;
+    if (!props.offer.inEu) return unit();
+    return isYearly() ? props.text.unit.monthBilledYearlyExclVat : props.text.unit.monthExclVat;
+  };
   const ctaText = () => (server() ? props.text.cta.server : props.text.cta.license);
   const bestValue = (plan: HostedServerCatalogPlan) =>
     plan.id === "standard" ? props.text.server.bestValue : undefined;
@@ -400,18 +355,12 @@ export function PricingPage(props: { text: PricingPageText; offer: PricingOffer;
     <div class="landing-page pricing-page" lang={props.lang}>
       <SiteHeader page="landing" />
       <main>
-        {/* The accent colour of the whole hero follows the beam. */}
+        {/* The accent colour of the whole hero follows the size of the order. */}
         <section
           class="landing-hero pricing-hero"
           aria-labelledby="pricing-title"
-          style={{ "--pricing-beam": rarity().rgb }}
+          style={{ "--pricing-accent": rarity().rgb }}
         >
-          <MeasuredBeam
-            surface={() => frame}
-            onImpact={() => setStruck(true)}
-            tint={() => rarity().color}
-            pace={() => rarity().pace}
-          />
           <div class="pricing-split">
             <div class="landing-section-heading pricing-heading">
               <h1 id="pricing-title">{props.text.heading}</h1>
@@ -435,7 +384,7 @@ export function PricingPage(props: { text: PricingPageText; offer: PricingOffer;
             </div>
           </div>
 
-          <div ref={frame} class="pricing-frame" data-struck={struck() ? "" : undefined}>
+          <div class="pricing-frame">
             <section class="pricing-half" aria-labelledby="pricing-servers">
               <div class="pricing-half-title">
                 <h2 id="pricing-servers">{props.text.server.title}</h2>
@@ -572,9 +521,6 @@ export function PricingPage(props: { text: PricingPageText; offer: PricingOffer;
               <ul class="pricing-summary-lines pricing-summary-personal">
                 <SummaryLine open={!buying()} label={props.text.summary.personal} value={0} currency={currency()} />
               </ul>
-              <ul class="pricing-summary-lines pricing-summary-vat">
-                <SummaryLine open={vat() > 0} label={props.text.summary.vat} value={vat()} currency={currency()} />
-              </ul>
               <div class="pricing-summary-total">
                 <span class="pricing-summary-total-label">{props.text.summary.total}</span>
                 <Price unit={totalUnit()}>
@@ -611,7 +557,7 @@ export function PricingPage(props: { text: PricingPageText; offer: PricingOffer;
               <h2 id="pricing-enterprise">{props.text.enterprise.title}</h2>
               <p class="pricing-half-summary">{props.text.enterprise.body}</p>
             </div>
-            <ButtonLink to="/contact" variant="secondary" size="md" icon="contact">
+            <ButtonLink to="/contact" variant="primary" size="md" icon="contact">
               {props.text.enterprise.contact}
             </ButtonLink>
           </section>
