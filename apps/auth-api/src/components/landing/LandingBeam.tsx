@@ -24,13 +24,6 @@ export interface LandingBeamProps {
    */
   onImpact?: () => void;
   class?: string;
-  /**
-   * A six-digit hex colour that can change while the beam runs. The beam fades to each new colour.
-   * When it is given, the beam uses its default look in this colour, and `color` is not used.
-   */
-  tint?: () => string;
-  /** A multiple of the beam speed that can change while the beam runs. */
-  pace?: () => number;
 }
 
 // The beam is a port of LaserFlow from React Bits. Its license does not let a public repository
