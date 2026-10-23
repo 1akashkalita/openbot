@@ -49,7 +49,7 @@ import {
 } from "./billing-errors";
 import { type BillingSales, type BillingSalesSynced, type PaymentReversal, paymentReversal } from "./billing-sales";
 import type { HostedFailure } from "./hosted-server-service";
-import { LicenseService, type LicenseSync } from "./license-service";
+import { LicenseService, type LicenseSync, ORDER_METADATA } from "./license-service";
 import type { RemoteFailure } from "./remote-control-plane";
 import type { StripeTransportError } from "./stripe-client";
 import {
@@ -144,12 +144,6 @@ export interface FirstPlanStart {
   plan: BillingPlanId;
   serverName: string;
 }
-
-/**
- * The license order of a server Checkout page, on the session only. A later page for the same server
- * reads it from the page that it closes, so it sells the same license.
- */
-const ORDER_METADATA = { licenseTier: "openbot_order_license_tier", licenseUsers: "openbot_order_license_users" };
 
 /** A closed Checkout page. `paid` when the user paid on it, so no second page must open. */
 export type ClosedCheckout = { status: "paid" } | { status: "closed"; license: LicenseOrder | null };
@@ -333,7 +327,7 @@ export class BillingService {
       const licensePrice = licensePlan ? yield* this.license.price(licensePlan) : null;
       if (licensePlan && !licensePrice)
         return yield* new BillingError(503, "license_unavailable", sourceText("error.billing.licenseUnavailable"));
-      if (order) yield* this.license.assertCanOrder(request.user, order.users);
+      if (order) yield* this.license.assertCanOrder(request.user.id, order.users);
       yield* this.license.assertCurrency(request.user.id, request.currency);
       const customerId = yield* this.ensureCustomer(request.user);
       const returnUrl = checkoutReturnUrl(request.origin, request.target, request.serverId);
@@ -366,6 +360,7 @@ export class BillingService {
           nowSeconds: Math.floor(dependencies.now() / 1_000),
         }),
       );
+      if (order) yield* this.license.keepOrderPage(customerId, session.id);
       if (this.#sales && returnToken) {
         const destination = new URL(returnUrl);
         destination.searchParams.set("cancelled", "1");

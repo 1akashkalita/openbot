@@ -548,8 +548,7 @@ the tiers used the same lookup key. The license terms allow 3 devices for each u
 - A server create can order a license (`license: {tier, users}` in `POST /v2/hosting/servers`). The
   Worker refuses a Team license on a Starter server, and more Team users than the server plan has
   members (400 `invalid_hosted_server_request`). An account with an open license gets 409
-  `license_exists`. The Worker also reads the customer's subscriptions in Stripe, because a paid order
-  has its license only there until the split. Fewer users than the people in use get 409
+  `license_exists`. Fewer users than the people in use get 409
   `license_users_in_use`, as a license checkout does. One Checkout page then has 2 line items: the server price, and the license bundle
   price for the same interval and currency, with the users as its quantity. The customer pays one
   invoice. On the first sync of the paid subscription, `LicenseService.splitOrder` makes a license
@@ -592,10 +591,12 @@ the tiers used the same lookup key. The license terms allow 3 devices for each u
   below 5. The subscription metadata `openbot_paid_users` and `openbot_paid_period_end` keep the
   users paid in the current period, so an increase after a decrease charges only the users above
   that number.
-- Checkout keeps one open license page for each account. After it makes a page, it closes the
-  older license pages of the customer, so two requests at the same time return the same page. It
-  then reads the customer's subscriptions in Stripe, not only D1, so a license paid before its
-  webhook stops the new page with `license_exists`. A second open license can still come from the
+- Checkout keeps one open page that sells a license for each account: a license page, or a server
+  order page with a license. After it makes a page, it closes the older pages of the customer that
+  sell a license, so two requests at the same time return the same page. When a newer page sells a
+  license, the new page closes with `license_exists`. It then reads the customer's subscriptions in
+  Stripe, not only D1, so a license paid before its webhook, or a paid order before its split, stops
+  the new page with `license_exists`. A second open license can still come from the
   Stripe Dashboard; `sync` logs a warning, and a person refunds it.
 - Refunds are by email only; the app and the Worker have no refund action. A customer emails
   licenses@openbot.run within 24 hours of the first payment for a refund less a €3 / $3.60 /

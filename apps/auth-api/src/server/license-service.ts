@@ -268,14 +268,14 @@ export class LicenseService {
         }),
       );
       const listed = yield* this.#stripeCall(() => dependencies.stripe.listOpenCheckoutSessions(customerId));
-      const pages = listed.filter(
-        (page) => page.metadata[LICENSE_METADATA.kind] === LICENSE_METADATA_KIND && page.url !== null,
-      );
+      const pages = listed.filter((page) => sellsLicense(page) && page.url !== null);
       // The list can be read before Stripe shows the new page in it.
       if (!pages.some((page) => page.id === session.id))
         pages.push({ ...session, status: "open", created: Math.floor(dependencies.now() / 1_000), metadata: {} });
       pages.sort((left, right) => right.created - left.created || right.id.localeCompare(left.id));
       const [kept = session, ...older] = pages;
+      // A newer server order page sells the license, and it closes this page.
+      const ordered = pages[0] !== undefined && pages[0].metadata[LICENSE_METADATA.kind] !== LICENSE_METADATA_KIND;
       let paid = false;
       for (const page of older) {
         const closed = yield* this.#stripeCall(() => dependencies.stripe.expireCheckoutSession(page.id));
@@ -293,6 +293,10 @@ export class LicenseService {
       if (open && !subscriptionServerItem(open)) yield* this.sync(open, user.id, readAt);
       if (paid || open) {
         yield* this.#stripeCall(() => dependencies.stripe.expireCheckoutSession(kept.id));
+        return yield* licenseExists();
+      }
+      if (kept.id !== session.id && ordered) {
+        yield* this.#stripeCall(() => dependencies.stripe.expireCheckoutSession(session.id));
         return yield* licenseExists();
       }
       // Each page starts once: a request that returns a newer page of another request reports nothing.
@@ -587,18 +591,50 @@ export class LicenseService {
 
   /**
    * Fails when a server order cannot buy this license: the account has an open license, or the license
-   * has fewer users than the people that it counts now, as a license checkout refuses. A paid server
-   * order has its license only in Stripe until the split, so Stripe is read too.
+   * has fewer users than the people that it counts now, as a license checkout refuses. `keepOrderPage`
+   * then checks Stripe after the page opens.
    */
   readonly assertCanOrder = Effect.fn("LicenseService.assertCanOrder")(
     function* (
       this: LicenseService,
-      user: { id: string; email: string },
+      userId: string,
       users: number,
     ): Effect.fn.Return<void, BillingError | BillingOperationError, LicenseDependencies> {
+      if (yield* this.hasLicense(userId)) return yield* licenseExists();
+      const { used } = yield* this.getState(userId);
+      if (users < used)
+        return yield* new BillingError(409, "license_users_in_use", sourceText("error.billing.licenseUsersInUse"));
+    },
+    (operation) => operation.pipe(Effect.provide(this.#layer)),
+  ).bind(this);
+
+  /**
+   * Keeps one open Checkout page that sells a license, as the license checkout does: the newest. A server
+   * order page closes the customer's older pages that sell a license, and then reads Stripe, so a page
+   * paid before it closed, or a paid order that is not split yet, refuses the order. When a newer page
+   * sells a license, the order page closes.
+   */
+  readonly keepOrderPage = Effect.fn("LicenseService.keepOrderPage")(
+    function* (
+      this: LicenseService,
+      customerId: string,
+      sessionId: string,
+    ): Effect.fn.Return<void, BillingError | BillingOperationError, LicenseDependencies> {
       const dependencies = yield* LicenseDependencies;
-      if (yield* this.hasLicense(user.id)) return yield* licenseExists();
-      const customerId = yield* this.#ensureCustomer(user);
+      const listed = yield* this.#stripeCall(() => dependencies.stripe.listOpenCheckoutSessions(customerId));
+      const created = listed.find((page) => page.id === sessionId)?.created ?? Math.floor(dependencies.now() / 1_000);
+      let paid = false;
+      let newer = false;
+      for (const page of listed) {
+        if (page.id === sessionId || !sellsLicense(page)) continue;
+        // The same order as the license checkout: created, then id.
+        if ((page.created - created || page.id.localeCompare(sessionId)) > 0) {
+          newer = true;
+          continue;
+        }
+        const closed = yield* this.#stripeCall(() => dependencies.stripe.expireCheckoutSession(page.id));
+        if (closed.status === "complete") paid = true;
+      }
       const subscriptions = yield* this.#stripeCall(() => dependencies.stripe.listCustomerSubscriptions(customerId));
       const open = subscriptions.some(
         (subscription) =>
@@ -606,10 +642,9 @@ export class LicenseService {
           isOpenBillingStatus(subscription.status) &&
           subscriptionLicenseItem(subscription) !== null,
       );
-      if (open) return yield* licenseExists();
-      const { used } = yield* this.getState(user.id);
-      if (users < used)
-        return yield* new BillingError(409, "license_users_in_use", sourceText("error.billing.licenseUsersInUse"));
+      if (!paid && !open && !newer) return;
+      yield* this.#stripeCall(() => dependencies.stripe.expireCheckoutSession(sessionId));
+      return yield* licenseExists();
     },
     (operation) => operation.pipe(Effect.provide(this.#layer)),
   ).bind(this);
@@ -1075,6 +1110,23 @@ function licenseChange(
 function licenseReturnUrl(origin: string, target: LicenseReturnTarget): string {
   if (target === "web") return `${origin}/app?billing=license`;
   return `${origin}/billing/return?kind=license`;
+}
+
+/**
+ * The license order of a server Checkout page, on the session only. A later page for the same server
+ * reads it from the page that it closes, so it sells the same license.
+ */
+export const ORDER_METADATA = {
+  licenseTier: "openbot_order_license_tier",
+  licenseUsers: "openbot_order_license_users",
+};
+
+/** True for a Checkout page that sells a license: a license page, or a server order with a license. */
+function sellsLicense(page: { metadata: Readonly<Record<string, string>> }): boolean {
+  return (
+    page.metadata[LICENSE_METADATA.kind] === LICENSE_METADATA_KIND ||
+    page.metadata[ORDER_METADATA.licenseTier] !== undefined
+  );
 }
 
 function licenseExists(): BillingError {
