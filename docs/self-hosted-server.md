@@ -282,7 +282,8 @@ Threat model:
   and it stopped with exit code 0. All packages install except `libminiupnpc17`. The install with
   systemd and an x86_64 run were not tested.
 - Remote desktop does not work on Ubuntu 26.04. The x86_64 runtime needs `libminiupnpc.so.17` and
-  `libicuuc.so.74`; Ubuntu 26.04 has `libminiupnpc21` and `libicu78` (`ldd`, release 0.48.1).
+  `libicuuc.so.74`; Ubuntu 26.04 has `libminiupnpc21` and `libicu78` (`ldd`, release 0.48.1). See
+  [#2876](https://github.com/nightly-labs/openbot/issues/2876).
 - The full install was not run on a Linux computer before the first release that has the setup
   file. It needs a release build.
 - [Display size](#display-size): the display sizes, the warning and the start with a value that is
