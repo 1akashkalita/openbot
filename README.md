@@ -73,8 +73,6 @@ a plugin listing - open the app and gives the launcher an icon that stays after 
 
 Remote desktop works on Linux x64 in an X11 session,
 such as Xorg or Xvfb. It does not work under Wayland, and the arm64 AppImage does not include it.
-It does not work on Ubuntu 26.04: the runtime needs `libminiupnpc.so.17` and `libicuuc.so.74` from
-Ubuntu 24.04.
 
 For Gemini sign-in, install a desktop browser and `xdg-utils`. Open the sign-in page in a
 desktop session on the same host or VM. Google sends the callback to that host through
