@@ -1,8 +1,10 @@
 import {
   BILLING_INTERVALS,
   BILLING_PLAN_IDS,
+  type BillingCurrency,
   type BillingInterval,
   type BillingPlanId,
+  billingListPrices,
   billingLookupKey,
 } from "@openbot/contracts/billing";
 import {
@@ -37,15 +39,6 @@ import { z } from "zod";
 const logger = createOpenBotLogger("stripe-bootstrap");
 const STRIPE_API_VERSION = "2025-03-31.basil";
 
-/**
- * Monthly amounts in the minor unit (cents, grosze). Each amount divides by 5, so a year (12 months
- * less 20%) is a whole number.
- */
-const MONTHLY_CENTS: Record<BillingPlanId, PriceAmounts> = {
-  starter: { eur: 2000, usd: 2500, pln: 9000 },
-  standard: { eur: 5000, usd: 6000, pln: 22000 },
-  pro: { eur: 10000, usd: 12000, pln: 44000 },
-};
 const PLAN_NAME: Record<BillingPlanId, string> = { starter: "Starter", standard: "Standard", pro: "Pro" };
 
 /** The events that the webhook endpoint must receive. */
@@ -67,19 +60,6 @@ export const BILLING_WEBHOOK_EVENTS = [
   "charge.dispute.created",
   "charge.dispute.closed",
 ] as const;
-
-export interface PriceAmounts {
-  eur: number;
-  usd: number;
-  pln: number;
-}
-
-export function billingPriceAmounts(plan: BillingPlanId, interval: BillingInterval): PriceAmounts {
-  const monthly = MONTHLY_CENTS[plan];
-  if (interval === "month") return monthly;
-  const year = (amount: number) => (amount * 12 * 4) / 5;
-  return { eur: year(monthly.eur), usd: year(monthly.usd), pln: year(monthly.pln) };
-}
 
 const productSchema = z.object({ id: z.string(), active: z.boolean() });
 const priceSchema = z.object({
@@ -161,7 +141,12 @@ async function ensureProduct(stripe: StripeAdmin, plan: BillingPlanId): Promise<
   logger.info(`Created product ${id}.`);
 }
 
-function priceMatches(price: Price, plan: BillingPlanId, interval: BillingInterval, amounts: PriceAmounts): boolean {
+function priceMatches(
+  price: Price,
+  plan: BillingPlanId,
+  interval: BillingInterval,
+  amounts: Record<BillingCurrency, number>,
+): boolean {
   return (
     price.product === productId(plan) &&
     price.currency === "eur" &&
@@ -183,7 +168,7 @@ async function ensurePrice(
   interval: BillingInterval,
 ): Promise<string> {
   const lookupKey = billingLookupKey(plan, interval);
-  const amounts = billingPriceAmounts(plan, interval);
+  const amounts = billingListPrices(plan, interval);
   const current = existing.find((price) => price.lookup_key === lookupKey);
   if (current && priceMatches(current, plan, interval, amounts)) {
     logger.info(`Price ${lookupKey} is up to date.`);

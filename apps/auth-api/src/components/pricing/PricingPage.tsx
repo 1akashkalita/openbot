@@ -1,0 +1,570 @@
+import { BILLING_CURRENCIES, type BillingCurrency, type BillingInterval } from "@openbot/contracts/billing";
+import type { HostedServerCatalogPlan } from "@openbot/contracts/hosted-servers";
+import { LICENSE_INCLUDED_USERS, LICENSE_MAX_USERS, licenseAmount } from "@openbot/contracts/license";
+import { createDigitRoll } from "@openbot/ui/digit-roll";
+import { cx, prefersReducedMotion } from "@openbot/ui/utils";
+import type { JSX } from "@solidjs/web";
+import { createMemo, createSignal, For, onSettled, Show, untrack } from "solid-js";
+import { landingAnalytics } from "../../lib/analytics";
+import {
+  formatMoney,
+  LICENSE_BUNDLE_DISCOUNT,
+  licenseMonthlyPrice,
+  PRICING_ROUTE,
+  type PricingOffer,
+  planMonthlyPrice,
+  STARTER_LICENSE_MONTHLY,
+} from "../../lib/pricing-page";
+import { LandingFooter } from "../landing/LandingFooter";
+import { LandingGlow } from "../landing/LandingGlow";
+import { SiteHeader } from "../landing/SiteHeader";
+import { ButtonLink } from "../ui/button";
+import type { PricingPageText } from "./pricing-page-text";
+import "./PricingPage.css";
+
+const CURRENCY_LABEL: Record<BillingCurrency, string> = { eur: "EUR", usd: "USD", pln: "PLN" };
+
+/**
+ * Like loot rarity in a game: a bigger order gives a rarer colour to the glow of the form. The steps are silver,
+ * sky, blue, violet, pink and orange.
+ */
+const RARITY = [
+  { rgb: "154, 163, 184" },
+  { rgb: "56, 168, 255" },
+  { rgb: "56, 71, 255" },
+  { rgb: "164, 108, 245" },
+  { rgb: "236, 72, 153" },
+  { rgb: "255, 106, 43" },
+] as const;
+
+type LicenseChoice = "none" | "starter" | "team";
+
+/** A license moves the colour: Standard with the Team license is pink, and Pro with it is orange. */
+const LICENSE_RARITY_STEPS: Record<LicenseChoice, number> = { none: 0, starter: 1, team: 2 };
+
+function isDigit(character: string) {
+  return /\d/u.test(character);
+}
+
+/**
+ * A money amount whose digits roll to each new value, as the app's hosted server prices do. They fall when the
+ * amount goes down and rise when it goes up. Assistive technology reads the plain text.
+ */
+function RollingAmount(props: { value: number; currency: BillingCurrency }) {
+  const roll = createDigitRoll(() => props.value, { settleMs: 0, animate: () => !prefersReducedMotion() });
+  let previous = untrack(roll.displayed);
+  const direction = createMemo(() => {
+    const next = roll.displayed();
+    const result = next < previous ? -1 : 1;
+    previous = next;
+    return result;
+  });
+  const characters = () => formatMoney(roll.displayed(), props.currency).split("");
+  // The last two digits trail the others, so the digit that changes most lands last.
+  const stagger = (index: number) => {
+    const digits = characters().flatMap((character, position) => (isDigit(character) ? [position] : []));
+    if (index === digits.at(-1)) return "2";
+    if (index === digits.at(-2)) return "1";
+    return undefined;
+  };
+  return (
+    <>
+      <span class="landing-visually-hidden">{formatMoney(props.value, props.currency)}</span>
+      <span ref={roll.ref} class="pricing-digits" style={{ "--pricing-digit-dir": direction() }} aria-hidden="true">
+        <For each={characters()} keyed={false}>
+          {(character, index) => (
+            <span
+              class={isDigit(character()) ? "pricing-digit" : undefined}
+              data-stagger={isDigit(character()) ? stagger(index) : undefined}
+            >
+              {character()}
+            </span>
+          )}
+        </For>
+      </span>
+    </>
+  );
+}
+
+function Price(props: { children: JSX.Element; unit?: string | undefined; class?: string }) {
+  return (
+    <p class={cx("pricing-price", props.class)}>
+      <span class="pricing-price-amount">{props.children}</span>
+      <Show when={props.unit}>{(unit) => <span class="pricing-price-unit">{unit()}</span>}</Show>
+    </p>
+  );
+}
+
+/** A pill switch. The pill slides to the pressed option; every column has the same width. */
+function Segment<T extends string>(props: {
+  label: string;
+  options: readonly { id: T; label: string }[];
+  value: T;
+  onChange: (value: T) => void;
+}) {
+  const index = () =>
+    Math.max(
+      0,
+      props.options.findIndex((option) => option.id === props.value),
+    );
+  return (
+    <fieldset class="pricing-segment" style={{ "--pricing-count": props.options.length, "--pricing-index": index() }}>
+      <legend class="landing-visually-hidden">{props.label}</legend>
+      <For each={props.options}>
+        {(option) => (
+          <button
+            type="button"
+            aria-pressed={option.id === props.value ? "true" : "false"}
+            onClick={() => props.onChange(option.id)}
+          >
+            {option.label}
+          </button>
+        )}
+      </For>
+    </fieldset>
+  );
+}
+
+/**
+ * One row of a radio group. The members stepper goes under the label. The row takes the stepper as data, not as
+ * JSX children: children here render on the server but are lost when the client hydrates.
+ */
+function ChoiceRow(props: {
+  name: string;
+  checked: boolean;
+  onSelect: () => void;
+  title: string;
+  badge?: string | undefined;
+  /** A green pill by the title, such as the bundle discount. */
+  saving?: string | undefined;
+  detail: string;
+  disabled?: boolean | undefined;
+  price: number;
+  /** The price without the yearly discount. In yearly billing it shows struck through. */
+  fullPrice?: number;
+  currency: BillingCurrency;
+  unit?: string | undefined;
+  stepper?: MemberStepperProps | undefined;
+}) {
+  return (
+    <div class="pricing-choice" data-disabled={props.disabled ? "" : undefined}>
+      <label>
+        <input
+          type="radio"
+          name={props.name}
+          checked={props.checked}
+          disabled={props.disabled}
+          onChange={() => props.onSelect()}
+        />
+        <span class="pricing-choice-dot" aria-hidden="true" />
+        <span class="pricing-row-name">
+          <strong>{props.title}</strong>
+          <Show when={props.badge}>{(badge) => <span class="pricing-badge">{badge()}</span>}</Show>
+          <Show when={props.saving}>
+            {(saving) => (
+              <span class="pricing-yearly pricing-saving" data-active="">
+                {saving()}
+              </span>
+            )}
+          </Show>
+          <span>{props.detail}</span>
+        </span>
+        <Price unit={props.unit}>
+          <Show when={props.fullPrice}>
+            {(full) => (
+              <span class="pricing-was" data-shown={full() > props.price ? "" : undefined} aria-hidden="true">
+                <span>
+                  <s>{formatMoney(full(), props.currency)}</s>
+                </span>
+              </span>
+            )}
+          </Show>
+          <RollingAmount value={props.price} currency={props.currency} />
+        </Price>
+      </label>
+      <Show when={props.stepper}>
+        {(stepper) => (
+          <MemberStepper
+            text={stepper().text}
+            value={stepper().value}
+            max={stepper().max}
+            disabled={stepper().disabled}
+            onChange={stepper().onChange}
+          />
+        )}
+      </Show>
+    </div>
+  );
+}
+
+interface MemberStepperProps {
+  text: PricingPageText["license"];
+  value: number;
+  max: number;
+  disabled: boolean;
+  onChange: (value: number) => void;
+}
+
+function MemberStepper(props: MemberStepperProps) {
+  return (
+    <fieldset class="pricing-stepper">
+      <legend class="landing-visually-hidden">{props.text.members}</legend>
+      <button
+        type="button"
+        aria-label={props.text.fewer}
+        disabled={props.disabled || props.value <= LICENSE_INCLUDED_USERS}
+        onClick={() => props.onChange(props.value - 1)}
+      >
+        −
+      </button>
+      <span aria-live="polite">{props.text.memberCount[props.value]}</span>
+      <button
+        type="button"
+        aria-label={props.text.more}
+        disabled={props.disabled || props.value >= props.max}
+        onClick={() => props.onChange(props.value + 1)}
+      >
+        +
+      </button>
+    </fieldset>
+  );
+}
+
+/** A summary line that opens and closes. While it closes, it keeps the text that it had when it was open. */
+function SummaryLine(props: {
+  open: boolean;
+  label: string;
+  value: number;
+  currency: BillingCurrency;
+  minus?: boolean;
+}) {
+  let last = untrack(() => ({ label: props.label, value: props.value }));
+  const shown = createMemo(() => {
+    if (props.open) last = { label: props.label, value: props.value };
+    return last;
+  });
+  return (
+    <li
+      class="pricing-summary-line"
+      data-open={props.open ? "" : undefined}
+      data-minus={props.minus ? "" : undefined}
+      aria-hidden={props.open ? undefined : "true"}
+    >
+      <div>
+        <div>
+          <span>{shown().label}</span>
+          <span>
+            {props.minus ? "−" : ""}
+            <RollingAmount value={shown().value} currency={props.currency} />
+          </span>
+        </div>
+      </div>
+    </li>
+  );
+}
+
+/**
+ * The pricing page: one order form with a hosted server on the left and the license on the right, one summary
+ * under both, and one button. The colour of the glow follows the size of the order.
+ */
+export function PricingPage(props: { text: PricingPageText; offer: PricingOffer; lang: string }) {
+  const [interval, setInterval] = createSignal<BillingInterval>("year");
+  const [currency, setCurrency] = createSignal<BillingCurrency>("eur");
+  const plans = () => props.offer.plans;
+  // Yearly billing, the Standard server and the Team license are the default. Users and server members are the same people, so the Team license starts
+  // with every member of the server.
+  const standard = untrack(() => {
+    const plan = plans().find((item) => item.id === "standard");
+    return plan ? { id: plan.id, memberLimit: plan.memberLimit } : undefined;
+  });
+  const [serverId, setServerId] = createSignal<string>(standard?.id ?? "none");
+  const [license, setLicense] = createSignal<LicenseChoice>("team");
+  const licensed = () => license() !== "none";
+  const [members, setMembers] = createSignal(
+    Math.min(LICENSE_MAX_USERS, Math.max(LICENSE_INCLUDED_USERS, standard?.memberLimit ?? 0)),
+  );
+
+  onSettled(() => landingAnalytics.start(document, window.location.hostname, PRICING_ROUTE));
+
+  const server = (): HostedServerCatalogPlan | undefined => plans().find((plan) => plan.id === serverId());
+  const serverText = (plan: HostedServerCatalogPlan) => props.text.server.plans.find((entry) => entry.id === plan.id);
+  const isYearly = () => interval() === "year";
+  const serverCost = () => {
+    const plan = server();
+    return plan ? planMonthlyPrice(plan, interval(), currency()) : 0;
+  };
+  /** The monthly price of the chosen server. In yearly billing the summary takes the discount off as its own line. */
+  const serverFull = () => {
+    const plan = server();
+    return plan ? planMonthlyPrice(plan, "month", currency()) : 0;
+  };
+  /** The monthly price of a license. In yearly billing the summary takes the discount off as its own line. */
+  const licenseMonthly = (choice: LicenseChoice) => {
+    if (choice === "starter") return STARTER_LICENSE_MONTHLY[currency()];
+    return choice === "team" ? licenseAmount(members(), currency()) : 0;
+  };
+  const licenseFull = () => licenseMonthly(license());
+  const licenseCost = () => licenseMonthlyPrice(licenseFull(), interval());
+  /** What a license saves with any server. Each license row shows its price less this amount. */
+  const bundleOff = (choice: "starter" | "team") => (server() ? LICENSE_BUNDLE_DISCOUNT[choice][currency()] : 0);
+  const bundleSaving = (choice: "starter" | "team") =>
+    server() ? props.text.license.bundleSaving[choice][currency()] : undefined;
+  const discount = () => {
+    const choice = license();
+    return choice === "none" ? 0 : bundleOff(choice);
+  };
+  const subtotal = () => serverCost() + licenseCost() - discount();
+  const total = () => subtotal();
+  const buying = () => server() !== undefined || licensed();
+  const unit = () => (isYearly() ? props.text.unit.monthBilledYearly : props.text.unit.month);
+  /** A license cannot pay for more members than the server holds, so the Team license does not fit a small server. */
+  const teamMax = () => Math.min(LICENSE_MAX_USERS, server()?.memberLimit ?? LICENSE_MAX_USERS);
+  const teamFits = () => teamMax() >= LICENSE_INCLUDED_USERS;
+  // A conditional in a component prop or in children compiles to a memo on the client but not on the server. That
+  // moves the hydration keys of everything after it, so each such conditional is a named function here.
+  const teamDetail = () =>
+    teamFits()
+      ? props.text.license.teamDetail[interval()][currency()]
+      : (props.text.license.serverMembers[teamMax()] ?? "");
+  const licenseLine = () =>
+    license() === "starter" ? props.text.license.starterSummary : (props.text.license.summaryLine[members()] ?? "");
+  /** The total is the price a visitor pays, so in the EU its unit says that VAT is not included. */
+  const totalUnit = () => {
+    if (!buying()) return props.text.unit.free;
+    if (!props.offer.inEu) return unit();
+    return isYearly() ? props.text.unit.monthBilledYearlyExclVat : props.text.unit.monthExclVat;
+  };
+  const ctaText = () => (server() ? props.text.cta.server : props.text.cta.license);
+  const bestValue = (plan: HostedServerCatalogPlan) =>
+    plan.id === "standard" ? props.text.server.bestValue : undefined;
+  const pickServer = (plan: HostedServerCatalogPlan) => {
+    setServerId(plan.id);
+    if (plan.memberLimit < LICENSE_INCLUDED_USERS) {
+      if (license() === "team") setLicense("starter");
+      return;
+    }
+    setMembers(Math.min(LICENSE_MAX_USERS, Math.max(LICENSE_INCLUDED_USERS, plan.memberLimit)));
+  };
+  const rarity = () => {
+    const size = plans().findIndex((plan) => plan.id === serverId()) + 1;
+    const step = size + LICENSE_RARITY_STEPS[license()];
+    return RARITY[Math.min(RARITY.length - 1, step)] ?? RARITY[0];
+  };
+
+  return (
+    <div class="landing-page pricing-page" lang={props.lang}>
+      <SiteHeader page="landing" />
+      <main>
+        {/* The accent colour of the whole hero follows the size of the order. */}
+        <section
+          class="landing-hero pricing-hero"
+          aria-labelledby="pricing-title"
+          style={{ "--pricing-accent": rarity().rgb }}
+        >
+          <div class="pricing-split">
+            <div class="landing-section-heading pricing-heading">
+              <h1 id="pricing-title">{props.text.heading}</h1>
+            </div>
+            <div class="pricing-controls">
+              <Segment
+                label={props.text.billing}
+                options={[
+                  { id: "month", label: props.text.monthly },
+                  { id: "year", label: props.text.yearly },
+                ]}
+                value={interval()}
+                onChange={setInterval}
+              />
+              <Segment
+                label={props.text.currency}
+                options={BILLING_CURRENCIES.map((id) => ({ id, label: CURRENCY_LABEL[id] }))}
+                value={currency()}
+                onChange={setCurrency}
+              />
+            </div>
+          </div>
+
+          <div class="pricing-frame">
+            <section class="pricing-half" aria-labelledby="pricing-servers">
+              <div class="pricing-half-title">
+                <h2 id="pricing-servers">{props.text.server.title}</h2>
+                <span class="pricing-yearly" data-active={isYearly() ? "" : undefined}>
+                  {props.text.server.yearlySaving[currency()]}
+                </span>
+              </div>
+              <p class="pricing-half-summary">{props.text.server.summary}</p>
+              <div class="pricing-choices" role="radiogroup" aria-labelledby="pricing-servers">
+                <ChoiceRow
+                  name="pricing-server"
+                  checked={serverId() === "none"}
+                  onSelect={() => setServerId("none")}
+                  title={props.text.server.none}
+                  detail={props.text.server.noneDetail}
+                  price={0}
+                  currency={currency()}
+                />
+                <For each={plans()}>
+                  {(plan) => (
+                    <ChoiceRow
+                      name="pricing-server"
+                      checked={serverId() === plan.id}
+                      onSelect={() => pickServer(plan)}
+                      title={serverText(plan)?.name ?? plan.id}
+                      badge={bestValue(plan)}
+                      detail={serverText(plan)?.detail ?? ""}
+                      price={planMonthlyPrice(plan, interval(), currency())}
+                      fullPrice={planMonthlyPrice(plan, "month", currency())}
+                      currency={currency()}
+                      unit={unit()}
+                    />
+                  )}
+                </For>
+              </div>
+            </section>
+
+            <section class="pricing-half" aria-labelledby="pricing-license">
+              <div class="pricing-half-title">
+                <h2 id="pricing-license">{props.text.license.title}</h2>
+                <span class="pricing-yearly" data-active={isYearly() ? "" : undefined}>
+                  {props.text.license.yearlySaving}
+                </span>
+              </div>
+              <p class="pricing-half-summary">{props.text.license.summary}</p>
+              <div class="pricing-choices" role="radiogroup" aria-labelledby="pricing-license">
+                <ChoiceRow
+                  name="pricing-license"
+                  checked={license() === "none"}
+                  onSelect={() => setLicense("none")}
+                  title={props.text.license.none}
+                  detail={props.text.license.noneDetail}
+                  price={0}
+                  currency={currency()}
+                />
+                <ChoiceRow
+                  name="pricing-license"
+                  checked={license() === "starter"}
+                  onSelect={() => setLicense("starter")}
+                  title={props.text.license.starter}
+                  saving={bundleSaving("starter")}
+                  detail={props.text.license.starterDetail}
+                  price={licenseMonthlyPrice(licenseMonthly("starter"), interval()) - bundleOff("starter")}
+                  fullPrice={licenseMonthly("starter")}
+                  currency={currency()}
+                  unit={unit()}
+                />
+                <ChoiceRow
+                  name="pricing-license"
+                  checked={license() === "team"}
+                  onSelect={() => setLicense("team")}
+                  title={props.text.license.team}
+                  saving={bundleSaving("team")}
+                  detail={teamDetail()}
+                  disabled={!teamFits()}
+                  price={licenseMonthlyPrice(licenseMonthly("team"), interval()) - bundleOff("team")}
+                  fullPrice={licenseMonthly("team")}
+                  currency={currency()}
+                  unit={unit()}
+                  stepper={{
+                    text: props.text.license,
+                    value: members(),
+                    max: teamMax(),
+                    disabled: !teamFits(),
+                    onChange: (value) => {
+                      setMembers(value);
+                      setLicense("team");
+                    },
+                  }}
+                />
+              </div>
+            </section>
+
+            <section class="pricing-summary" aria-labelledby="pricing-summary">
+              <h2 id="pricing-summary" class="landing-visually-hidden">
+                {props.text.summary.title}
+              </h2>
+              {/* Each part sits under its own half: the server on the left, the license on the right. */}
+              <ul class="pricing-summary-lines pricing-summary-server">
+                <SummaryLine
+                  open={server() !== undefined}
+                  label={(() => {
+                    const plan = server();
+                    return plan ? (serverText(plan)?.summary ?? "") : "";
+                  })()}
+                  value={serverFull()}
+                  currency={currency()}
+                />
+                <SummaryLine
+                  open={server() !== undefined && isYearly()}
+                  label={props.text.summary.yearlyDiscount[currency()]}
+                  value={serverFull() - serverCost()}
+                  currency={currency()}
+                  minus
+                />
+              </ul>
+              <ul class="pricing-summary-lines pricing-summary-license">
+                <SummaryLine open={licensed()} label={licenseLine()} value={licenseFull()} currency={currency()} />
+                <SummaryLine
+                  open={licensed() && isYearly()}
+                  label={props.text.summary.licenseYearlyDiscount}
+                  value={licenseFull() - licenseCost()}
+                  currency={currency()}
+                  minus
+                />
+                <SummaryLine
+                  open={discount() > 0}
+                  label={props.text.summary.bundleDiscount}
+                  value={discount()}
+                  currency={currency()}
+                  minus
+                />
+              </ul>
+              <ul class="pricing-summary-lines pricing-summary-personal">
+                <SummaryLine open={!buying()} label={props.text.summary.personal} value={0} currency={currency()} />
+              </ul>
+              <div class="pricing-summary-total">
+                <span class="pricing-summary-total-label">{props.text.summary.total}</span>
+                <Price unit={totalUnit()}>
+                  <RollingAmount value={total()} currency={currency()} />
+                </Price>
+                <Show
+                  when={buying()}
+                  fallback={
+                    <ButtonLink to="/download" variant="secondary" size="md" icon="download" class="pricing-cta">
+                      {props.text.cta.download}
+                    </ButtonLink>
+                  }
+                >
+                  {/* A full page load, as the header's App link. The web app reads `start` after sign-in and opens
+                      the add server dialog or Billing. With both chosen, it opens the server first; Billing sells the license. */}
+                  <ButtonLink
+                    to="/app"
+                    search={{ start: server() ? "server" : "license" }}
+                    reloadDocument
+                    variant="primary"
+                    size="md"
+                    icon="arrow-right"
+                    class="pricing-cta"
+                  >
+                    {ctaText()}
+                  </ButtonLink>
+                </Show>
+              </div>
+            </section>
+          </div>
+
+          <section class="pricing-enterprise" aria-labelledby="pricing-enterprise">
+            <div>
+              <h2 id="pricing-enterprise">{props.text.enterprise.title}</h2>
+              <p class="pricing-half-summary">{props.text.enterprise.body}</p>
+            </div>
+            <ButtonLink to="/contact" variant="primary" size="md" icon="contact">
+              {props.text.enterprise.contact}
+            </ButtonLink>
+          </section>
+        </section>
+      </main>
+      <LandingFooter />
+      <LandingGlow />
+    </div>
+  );
+}

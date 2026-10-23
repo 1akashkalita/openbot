@@ -86,4 +86,70 @@ export const messages = defineMessages("sitePage", {
   "sitePage.report.sentTitle": "Report sent",
   "sitePage.report.sentBody": "Thanks. We received your report.",
   "sitePage.report.home": "Go to the home page",
+  "sitePage.pricing.title": "OpenBot pricing",
+  "sitePage.pricing.description":
+    "Hosted servers and a license for teams. OpenBot is free for personal use on your own computer.",
+  "sitePage.pricing.heading": "Pricing",
+  "sitePage.pricing.billing": "Billing period",
+  "sitePage.pricing.monthly": "Monthly",
+  "sitePage.pricing.yearly": "Yearly",
+  "sitePage.pricing.currency": "Currency",
+  "sitePage.pricing.server.title": "Hosted server",
+  "sitePage.pricing.server.summary": "We run OpenBot for your team.",
+  // {percent} is a whole number, such as 20.
+  "sitePage.pricing.server.yearlySaving": "−{percent}% yearly",
+  "sitePage.pricing.server.none": "No server",
+  "sitePage.pricing.server.noneDetail": "Run OpenBot on your own computer",
+  "sitePage.pricing.server.bestValue": "Best value",
+  "sitePage.pricing.server.bestFor.starter": "Best for one person",
+  "sitePage.pricing.server.bestFor.standard": "Best for a small team",
+  "sitePage.pricing.server.bestFor.pro": "Best for heavy browser work",
+  // {size} is a whole number of gigabytes.
+  "sitePage.pricing.server.storage": "{size} GB storage",
+  // {speed} is how many times faster than the Starter server, such as 2.
+  "sitePage.pricing.server.speed": "{speed}× speed",
+  "sitePage.pricing.license.title": "License",
+  "sitePage.pricing.license.summary": "To use OpenBot at work.",
+  "sitePage.pricing.license.none": "No license",
+  "sitePage.pricing.license.noneDetail": "Personal and noncommercial use",
+  "sitePage.pricing.license.starter": "Starter license",
+  "sitePage.pricing.license.bundleSaving": "−{price} with your server",
+  "sitePage.pricing.license.team": "Team license",
+  // {included} is the number of members in the base price. {price} is the monthly price of one more member.
+  "sitePage.pricing.license.teamDetail": "{included} included, +{price} for each more",
+  "sitePage.pricing.license.serverMembers": {
+    one: "Your server has {count} member",
+    other: "Your server has {count} members",
+  },
+  "sitePage.pricing.license.members": "Team license members",
+  "sitePage.pricing.license.fewer": "Fewer members",
+  "sitePage.pricing.license.more": "More members",
+  "sitePage.pricing.memberCount": { one: "{count} member", other: "{count} members" },
+  "sitePage.pricing.summary.title": "Your plan",
+  // {plan} is a server plan name, such as Standard.
+  "sitePage.pricing.summary.server": {
+    one: "{plan} server, {count} member",
+    other: "{plan} server, up to {count} members",
+  },
+  "sitePage.pricing.summary.starterLicense": "Starter license, 1 member",
+  "sitePage.pricing.summary.license": { one: "Team license, {count} member", other: "Team license, {count} members" },
+  // {percent} is a whole number, such as 20.
+  "sitePage.pricing.summary.yearlyDiscount": "Yearly discount ({percent}%)",
+  "sitePage.pricing.summary.bundleDiscount": "Bundle discount",
+  "sitePage.pricing.summary.personal": "Personal use on your own computer",
+  "sitePage.pricing.summary.total": "Total",
+  "sitePage.pricing.unit.month": "a month",
+  "sitePage.pricing.unit.monthBilledYearly": "a month, billed yearly",
+  // The unit beside the total for a visitor in the EU: the prices do not include VAT.
+  "sitePage.pricing.unit.monthExclVat": "a month, excl. VAT",
+  "sitePage.pricing.unit.monthBilledYearlyExclVat": "a month, billed yearly, excl. VAT",
+  "sitePage.pricing.unit.free": "forever",
+  "sitePage.pricing.cta.server": "Create a server",
+  "sitePage.pricing.cta.license": "Buy a license",
+  "sitePage.pricing.cta.download": "Download",
+  "sitePage.pricing.enterprise.title": "Enterprise",
+  // {count} is the largest number of members that the page sells, such as 25.
+  "sitePage.pricing.enterprise.body":
+    "Larger servers, more than {count} members, or anything else you need. With enterprise support.",
+  "sitePage.pricing.enterprise.contact": "Contact sales",
 });

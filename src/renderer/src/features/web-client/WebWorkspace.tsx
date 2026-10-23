@@ -180,7 +180,7 @@ import { createWebAccountCalls } from "./web-account";
 import { createWebAccountUsage } from "./web-account-usage";
 import { createWebAgentImportCalls } from "./web-agent-import";
 import { openWebLink } from "./web-attachments";
-import { createWebBillingCalls, createWebLicenseCalls } from "./web-billing";
+import { createWebBillingCalls, createWebLicenseCalls, type WebAppStart } from "./web-billing";
 import { createWebChannelsPort } from "./web-channels-runtime";
 import { createWebWorkspace, type WebRuntimeFactory } from "./web-client-context";
 import { createWebConversationRuntime } from "./web-conversation-runtime";
@@ -247,6 +247,9 @@ type WebWorkspaceProps = {
   /** A plugin listing that a `/app?plugin=<slug>` link named. The marketplace opens on it. */
   pluginSlug?: string | null;
   onPluginSlugConsumed?: () => void;
+  /** What a pricing page button asked for: the add server dialog or Billing. */
+  start?: WebAppStart | null;
+  onStartConsumed?: () => void;
   /** True on a return from the Stripe Customer Portal. The Billing dialog opens on it. */
   billingReturn?: boolean;
   onBillingReturnConsumed?: () => void;
@@ -864,6 +867,17 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
       if (!billingReturn) return;
       setBillingOpen(true);
       props.onBillingReturnConsumed?.();
+    },
+  );
+  // The add server dialog waits for the first list of hosted servers: before it, the account looks
+  // like one that cannot create a server, and the join dialog would open.
+  createEffect(
+    () => (props.start === "server" && !hostedServers.loaded() ? null : props.start),
+    (start) => {
+      if (!start) return;
+      if (start === "server") hostedServers.openAddServer("pricing_page");
+      else setBillingOpen(true);
+      props.onStartConsumed?.();
     },
   );
   const saveFile = createWebFileSaver();

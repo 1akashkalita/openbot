@@ -274,7 +274,8 @@ before the 1-member limit keeps 3: migration `0039` sets `hosted_servers.legacy_
 for each existing row, and the Worker writes 0 for a new server. `getServerEntitlement` returns the
 limit as `memberLimit`. The Worker reads the plan
 with `getServerEntitlement` when a member joins or is reactivated, and refuses a member over the limit
-(`409 member_limit_reached`). This also applies to a self-hosted host that has a plan.
+(`409 member_limit_reached`). A lower limit removes no member who is already active. This also applies to a
+self-hosted host that has a plan.
 
 - A lower limit after a plan change or a plan end removes no one. Active members keep their seats.
   A new join or a reactivation waits for a free seat.
