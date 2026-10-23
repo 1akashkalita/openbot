@@ -2535,20 +2535,22 @@ const scenarios: Record<Scenario, (account: Account) => Promise<void>> = {
 
   async "order-bundle"(account) {
     const team = (users: number): LicenseOrder => ({ tier: "team", users });
-    const starterPlan = await account.orderServer("Solo", "starter", team(1));
-    const tooMany = await account.orderServer("Big", "standard", team(11));
+    const starterPlan = await account.orderServer("Solo server", "starter", team(1));
+    const tooMany = await account.orderServer("Big server", "standard", team(11));
+    // The message names the field, so a refused name cannot pass for a refused license.
+    const licenseRefused = (response: { status: number; body: unknown }) =>
+      response.status === 400 &&
+      z.object({ error: z.object({ code: z.string(), message: z.string() }) }).safeParse(response.body).data?.error
+        .message === "The license is invalid.";
     record(
       "order-bundle",
-      "a Team license on a Starter server, and 11 Team users on a 10-member Standard server: 400 invalid_hosted_server_request",
-      starterPlan.status === 400 &&
-        starterPlan.code === "invalid_hosted_server_request" &&
-        tooMany.status === 400 &&
-        tooMany.code === "invalid_hosted_server_request",
-      { starter: { status: starterPlan.status, code: starterPlan.code }, tooMany },
+      "a Team license on a Starter server, and 11 Team users on a 10-member Standard server: 400, the license is invalid",
+      licenseRefused(starterPlan) && licenseRefused(tooMany),
+      { starter: starterPlan.body, tooMany: tooMany.body },
     );
 
     const order = team(6);
-    const opened = await account.orderServer("Order", "standard", order);
+    const opened = await account.orderServer("Order server", "standard", order);
     const created = createdSchema.safeParse(opened.body).data;
     const session = created?.checkoutUrl ? await licenseSession(created.checkoutUrl) : null;
     const lines = session?.line_items.data ?? [];
@@ -2635,7 +2637,7 @@ const scenarios: Record<Scenario, (account: Account) => Promise<void>> = {
       print("SKIP [order-bundle] sales facts: the Worker has no OpenPanel client");
     }
 
-    const again = await account.orderServer("Second", "standard", order);
+    const again = await account.orderServer("Second server", "standard", order);
     record(
       "order-bundle",
       "a second server order with a license: 409 license_exists",
@@ -2812,9 +2814,10 @@ const scenarios: Record<Scenario, (account: Account) => Promise<void>> = {
   async "license-member-limits"(account) {
     const fresh = await account.createServer("Starter now");
     const freshSub = await account.pay(fresh.server.serverId);
+    // Until the webhook stores the plan, the Worker takes the first server as unpaid and reuses it.
+    await planWhere(account, freshSub, "plan", () => true);
     const legacy = await account.createServer("Starter before");
     const legacySub = await account.pay(legacy.server.serverId);
-    await planWhere(account, freshSub, "plan", () => true);
     await planWhere(account, legacySub, "plan", () => true);
     const freshId = fresh.server.serverId;
     const legacyId = legacy.server.serverId;
