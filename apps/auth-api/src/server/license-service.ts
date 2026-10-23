@@ -274,7 +274,7 @@ export class LicenseService {
         pages.push({ ...session, status: "open", created: Math.floor(dependencies.now() / 1_000), metadata: {} });
       pages.sort((left, right) => right.created - left.created || right.id.localeCompare(left.id));
       const [kept = session, ...older] = pages;
-      // A newer server order page sells the license, and it closes this page.
+      // A newer server order page sells the license. The loop below closes this page.
       const ordered = pages[0] !== undefined && pages[0].metadata[LICENSE_METADATA.kind] !== LICENSE_METADATA_KIND;
       let paid = false;
       for (const page of older) {
@@ -295,10 +295,7 @@ export class LicenseService {
         yield* this.#stripeCall(() => dependencies.stripe.expireCheckoutSession(kept.id));
         return yield* licenseExists();
       }
-      if (kept.id !== session.id && ordered) {
-        yield* this.#stripeCall(() => dependencies.stripe.expireCheckoutSession(session.id));
-        return yield* licenseExists();
-      }
+      if (kept.id !== session.id && ordered) return yield* licenseExists();
       // Each page starts once: a request that returns a newer page of another request reports nothing.
       if (kept.id === session.id)
         yield* this.#checkoutStarted(user.id, session.id, plan, request.users, request.currency);

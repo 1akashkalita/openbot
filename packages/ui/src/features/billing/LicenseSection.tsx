@@ -565,7 +565,7 @@ function BuyLicenseDialog(props: {
         <SliderField
           label={t("billing.license.users.label")}
           value={people()}
-          minValue={1}
+          minValue={Math.min(SLIDER_MAX, Math.max(1, props.state.used))}
           maxValue={SLIDER_MAX}
           disabled={props.store.state.pending !== null}
           formatValue={(value) =>
