@@ -297,7 +297,7 @@
     }
   },
   "remoteDesktop": {
-    "recipeVersion": 15,
+    "recipeVersion": 16,
     "sunshine": {
       "sourceMode": "upstream-with-patch",
       "repository": "https://github.com/LizardByte/Sunshine.git",

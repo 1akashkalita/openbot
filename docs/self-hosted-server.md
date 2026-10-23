@@ -275,15 +275,13 @@ Threat model:
 
 - The full install runs only on Ubuntu 24.04 in tests. On Debian 12 and Debian 13, only the package
   step is tested (`apt-get --dry-run`). Debian 12 names some libraries without the `t64` suffix, and
-  the install uses those names. Debian 13 and Ubuntu 26.04 have no `libminiupnpc17`, so the install
-  skips it with a warning.
+  the install uses those names.
 - Ubuntu 26.04: release 0.48.1 was tested on Ubuntu 26.04.1 arm64 in the Docker image, with
   `BASE=ubuntu:26.04`. The server started with the Electron sandbox on, `openbot status` answered,
-  and it stopped with exit code 0. All packages install except `libminiupnpc17`. The install with
-  systemd and an x86_64 run were not tested.
-- Remote desktop does not work on Ubuntu 26.04. The x86_64 runtime needs `libminiupnpc.so.17` and
-  `libicuuc.so.74`; Ubuntu 26.04 has `libminiupnpc21` and `libicu78` (`ldd`, release 0.48.1). See
-  [#2876](https://github.com/nightly-labs/openbot/issues/2876).
+  and it stopped with exit code 0. The install with systemd and an x86_64 run were not tested.
+- Remote desktop on Ubuntu 26.04: the runtime build checks with `ldd` that the x86_64 runtime finds
+  all its libraries there (see [Linux runtime](RELEASING.md#linux-runtime-recipe-16)). A remote
+  desktop session on Ubuntu 26.04 was not tested.
 - The full install was not run on a Linux computer before the first release that has the setup
   file. It needs a release build.
 - [Display size](#display-size): the display sizes, the warning and the start with a value that is
