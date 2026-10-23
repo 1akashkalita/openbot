@@ -1134,22 +1134,53 @@ export class ProviderRuntime implements ProviderPort {
           .pipe(toProviderOperationFailed);
         return this.status();
       case "acp-authenticate": {
+        // A Reconnect of a Google sign-in signs out first: the saved token would answer it with no
+        // browser page. A saved key wins over Google, so it keeps the token. A provider that the idle
+        // timer released is still connected.
+        const fresh =
+          provider === "antigravity" &&
+          this.#status.providers?.find((row) => row.id === provider)?.state === "available" &&
+          !this.#credentials.apiKey("antigravity");
+        // The sign-out removes the credential that a running turn uses.
+        if (fresh && this.#hooks.isProviderBusy(provider)) {
+          return yield* new ProviderOperationFailed({
+            cause: new Error(sourceText("error.provider.cliBusyReconnect", { provider: providerLabel(provider) })),
+          });
+        }
         yield* this.#cancelCliLogin(provider);
+        const disposals = this.#disposals;
         const temp = provider === "antigravity" ? antigravityTemp(this.#credentials) : undefined;
         yield* this.#cliLogin
-          .start(provider, (cli) =>
-            startAcpAuthentication({
+          .start(provider, (cli) => {
+            let loggedOut = false;
+            return startAcpAuthentication({
               executable: cli.executable,
               argv: signIn.argv,
               env: { ...signIn.env },
               methodId: signIn.methodId,
               timeoutMs: signIn.timeoutMs,
+              ...(fresh
+                ? {
+                    logout: true,
+                    onLoggedOut: () => {
+                      loggedOut = true;
+                    },
+                  }
+                : {}),
               privateTemp: temp && { ...temp, provider: providerLabel(provider) },
               ...(provider === "antigravity" && (onHost || process.platform === "linux")
                 ? { openGoogleSignIn: openExternal }
                 : {}),
-            }),
-          )
+            }).pipe(
+              // A sign-in that stops after the sign-out leaves no account behind it.
+              Effect.map((login) => ({
+                ...login,
+                done: login.done.pipe(
+                  Effect.onError(() => (loggedOut ? this.#endSignedOutClient(provider, disposals) : Effect.void)),
+                ),
+              })),
+            );
+          })
           .pipe(toProviderOperationFailed);
         return this.status();
       }
@@ -2673,6 +2704,25 @@ export class ProviderRuntime implements ProviderPort {
         }),
     );
   }, Effect.uninterruptible);
+
+  /**
+   * Stops the client that still runs on a credential that a Reconnect signed out, and reports the
+   * provider signed out. A failed sign-in then reports its own reason; a cancel keeps this one.
+   */
+  readonly #endSignedOutClient = Effect.fn("ProviderRuntime.endSignedOutClient")(function* (
+    this: ProviderRuntime,
+    provider: AgentProvider,
+    disposals: number,
+  ) {
+    if (disposals !== this.#disposals || this.#hooks.isStopping()) return;
+    const version = this.#cli.get(provider)?.version;
+    yield* this.#stopProviderClient(provider).pipe(Effect.ignore);
+    this.#setProviderConnectionFailure(
+      provider,
+      new ProviderSignInError({ message: this.#signInRequiredMessage(provider) }),
+      version,
+    );
+  });
 
   #cancelCliLogin(provider: AgentProvider): Effect.Effect<void, ProviderOperationFailed> {
     return this.#cliLogin.cancel(provider, null).pipe(toProviderOperationFailed);
