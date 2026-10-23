@@ -66,6 +66,7 @@ import {
   isProviderDetectionSettings,
   isRemoteDesktopSetupStatus,
   isRemoteDesktopTestStatus,
+  isRemoteNetworkRoute,
   isSpeechVoice,
   isVoiceLanguage,
   isVoiceModelId,
@@ -81,6 +82,7 @@ import {
   parseOnePasswordConnectorStatus,
   type RemoteDesktopSetupStatus,
   type RemoteDesktopTestStatus,
+  type RemoteNetworkRouteState,
   type RemoteSessionReusePreference,
   SPEECH_MODEL_ID,
   type SpeechAudio,
@@ -320,6 +322,12 @@ export function decodeRemoteSessionReusePreference(value: unknown): RemoteSessio
   return {
     keepBetweenRuns: requiredBoolean(decodeRecord(value, "remote session preference"), "keepBetweenRuns"),
   };
+}
+
+export function decodeRemoteNetworkRouteState(value: unknown): RemoteNetworkRouteState {
+  const state = decodeRecord(value, "remote network route");
+  if (!isRemoteNetworkRoute(state.route)) throw new Error("Invalid remote network route.");
+  return { route: state.route, tailscaleConnected: requiredBoolean(state, "tailscaleConnected") };
 }
 
 export function decodeNotificationPreference(value: unknown): NotificationPreference {
@@ -565,7 +573,18 @@ export function decodeRemoteDesktopTestFromMain(value: unknown): RemoteDesktopTe
 }
 
 export function decodeBitwardenConnectorStatus(value: unknown): BitwardenConnectorStatus {
-  if (!value || typeof value !== "object" || !("connected" in value) || typeof value.connected !== "boolean")
+  if (
+    !value ||
+    typeof value !== "object" ||
+    !("connected" in value) ||
+    !isBoolean(value.connected) ||
+    !("connecting" in value) ||
+    !isBoolean(value.connecting) ||
+    !("serverUrl" in value) ||
+    !(value.serverUrl === null || isString(value.serverUrl)) ||
+    !("error" in value) ||
+    !(value.error === null || isString(value.error))
+  )
     throw new Error("Invalid Bitwarden connector response.");
-  return { connected: value.connected };
+  return { connected: value.connected, connecting: value.connecting, serverUrl: value.serverUrl, error: value.error };
 }

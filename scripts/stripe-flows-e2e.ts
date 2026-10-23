@@ -466,7 +466,7 @@ class Account {
   }
 
   async createServer(name: string) {
-    const response = await this.orderServer(name, "starter");
+    const response = await this.orderServer(name, "standard");
     if (response.status !== 201) throw new Error(`create ${response.status}: ${response.code}`);
     return createdSchema.parse(response.body);
   }
@@ -531,7 +531,7 @@ class Account {
     if (session) await stripe("POST", `/v1/checkout/sessions/${session}/expire`, idSchema).catch(() => null);
     const subscription = await stripe("POST", "/v1/subscriptions", idSchema, {
       customer: this.customer,
-      "items[0][price]": await priceId("starter", "month"),
+      "items[0][price]": await priceId("standard", "month"),
       currency: "eur",
       "metadata[openbot_user_id]": this.id,
       "metadata[openbot_server_id]": serverId,
@@ -1475,7 +1475,7 @@ const scenarios: Record<Scenario, (account: Account) => Promise<void>> = {
       account,
       server.serverId,
       "Portal upgrade",
-      (row) => row.plan !== "starter",
+      (row) => row.plan !== "standard",
       600_000,
     );
     record("portal", "Portal plan change: the server plan follows, and an upgrade is invoiced at once", true, {
@@ -1817,23 +1817,23 @@ const scenarios: Record<Scenario, (account: Account) => Promise<void>> = {
         { status: woken.status, row: awake, web: again },
       );
 
-      // A plan change: Starter (small) to Standard (default). The server stops and resumes on the new type.
+      // A plan change: Standard (default) to Pro (large). The server stops and resumes on the new type.
       const sub = await openPlan();
       const item = (await subscription(sub)).items.data[0]?.id;
       if (!item) throw new Error("No subscription item");
       await stripe("POST", `/v1/subscriptions/${sub}`, idSchema, {
         "items[0][id]": item,
-        "items[0][price]": await priceId("standard", "month"),
+        "items[0][price]": await priceId("pro", "month"),
         proration_behavior: "always_invoice",
       });
-      const resized = await runningRow("resized", (row) => row.size === "default");
+      const resized = await runningRow("resized", (row) => row.size === "large");
       const resizedBoat = await sandbox(sandboxId);
       const resizedWeb = await connectWeb(account, serverId, name, "boat-e2e-web-after-resize.png");
       record(
         "boat",
-        "Starter to Standard: the server moves to the boat default type, and the web client connects again",
-        resized.plan === "standard" &&
-          resizedBoat.type === "default" &&
+        "Standard to Pro: the server moves to the boat large type, and the web client connects again",
+        resized.plan === "pro" &&
+          resizedBoat.type === "large" &&
           resized.provider_sandbox_id === sandboxId &&
           resizedWeb.peers.some((peer) => peer.state === "connected"),
         { row: resized, boat: resizedBoat, web: resizedWeb },
@@ -2827,6 +2827,12 @@ const scenarios: Record<Scenario, (account: Account) => Promise<void>> = {
     );
     // The migration gives 1 to each hosted server row from before it. This row stands for one of them.
     d1(`UPDATE hosted_servers SET legacy_starter_members = 1 WHERE server_id = ${quote(legacyId)}`, z.unknown());
+    // Starter is sold out, so both servers pay Standard. These rows stand for Starter plans from before.
+    d1(
+      `UPDATE billing_subscriptions SET plan = 'starter'
+       WHERE stripe_subscription_id IN (${quote(freshSub)}, ${quote(legacySub)})`,
+      z.unknown(),
+    );
     account.hostServer(freshId, "Starter now");
     account.hostServer(legacyId, "Starter before");
 

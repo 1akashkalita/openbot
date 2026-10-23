@@ -39,6 +39,9 @@ export const messages = {
   "settings.sendShortcut.enter": "Enter para enviar",
   "settings.sendShortcut.modEnterMac": "⌘Enter para enviar",
   "settings.sendShortcut.modEnterWin": "Ctrl+Enter para enviar",
+  "settings.showAgentSteps.title": "Mostrar pasos del agente",
+  "settings.showAgentSteps.description":
+    "Abre por defecto el razonamiento, los pasos de herramientas y los cambios de recuerdos de cada turno en este dispositivo y navegador.",
   "settings.busyMessage.title": "Orientar a los agentes mientras trabajan",
   "settings.busyMessage.description":
     "Los mensajes nuevos se incorporan al trabajo actual del agente, no a la cola. Funciona con ChatGPT y Claude.",
@@ -193,6 +196,19 @@ export const messages = {
   "settings.mobileConnect.link.error.revoke": "No se pudo revocar el enlace permanente.",
   "settings.mobileConnect.devices.title": "Dispositivos conectados",
   "settings.mobileConnect.devices.refreshing": "Actualizando…",
+  "settings.mobileConnect.route.title": "Cómo se conectan los dispositivos",
+  "settings.mobileConnect.route.description":
+    "Para teléfonos, otros ordenadores y miembros del equipo que se conectan a este ordenador.",
+  "settings.mobileConnect.route.openbot.title": "A través de OpenBot",
+  "settings.mobileConnect.route.openbot.badge": "Recomendado",
+  "settings.mobileConnect.route.openbot.description":
+    "Funciona en cualquier red. Los chats y archivos se cifran entre tus dispositivos.",
+  "settings.mobileConnect.route.private.title": "Red privada",
+  "settings.mobileConnect.route.private.tailscale": "Tailscale detectado",
+  "settings.mobileConnect.route.private.description":
+    "Tailscale o esta wifi. Los dispositivos siguen iniciando sesión con OpenBot. Los chats y archivos nunca pasan por servidores de OpenBot, y los dispositivos solo se conectan en esa red.",
+  "settings.mobileConnect.route.error.load": "No se pudo cargar cómo se conectan los dispositivos.",
+  "settings.mobileConnect.route.error.save": "No se pudo cambiar cómo se conectan los dispositivos.",
   "settings.mobileConnect.disconnectInfo.title": "Desconectar un dispositivo",
   "settings.mobileConnect.disconnectInfo.description":
     "El acceso se revoca de inmediato. La aplicación móvil puede seguir mostrando su pantalla actual hasta que se vuelva a abrir o regrese del segundo plano.",
@@ -411,6 +427,7 @@ export const messages = {
   "settings.hostedServers.deleteFailed": "No se pudo eliminar el servidor.",
   "settings.hostedServers.plan.label": "Plan",
   "settings.hostedServers.plan.recommended": "Mejor oferta",
+  "settings.hostedServers.plan.soldOut": "Agotado",
   "settings.hostedServers.plan.perMonth": "/ mes",
   "settings.hostedServers.plan.disk": "{count} GB de almacenamiento",
   "settings.hostedServers.plan.linux": "Equipo Linux",

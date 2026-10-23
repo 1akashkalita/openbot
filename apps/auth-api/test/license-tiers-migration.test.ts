@@ -10,7 +10,7 @@ afterEach(() => {
 
 describe("license tiers migration", () => {
   it("keeps rows, keeps 3 members for old Starter servers, and accepts old Worker writes", () => {
-    const database = migratedDatabase("0038_licenses.sql");
+    const database = migratedDatabase("0039_remote_host_key_handovers.sql");
     databases.push(database);
     database.exec(`
       INSERT INTO users(id, identity_key, email, name, avatar_url, created_at, updated_at)
@@ -33,7 +33,7 @@ describe("license tiers migration", () => {
     const before = snapshot(database);
 
     database.exec("BEGIN");
-    database.exec(migration("0039_license_tiers.sql"));
+    database.exec(migration("0040_license_tiers.sql"));
     database.exec("COMMIT");
 
     const after = snapshot(database);

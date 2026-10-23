@@ -65,7 +65,6 @@ export const messages = {
   "routine.hours.window": "{start}–{end}",
   "routine.hours.windowSameHalf": "{start}–{end} {meridiem}",
   "routine.hours.everyShort": "Alle {hours} Std.",
-  "routine.hours.endBeforeStart": "Die Endzeit muss nach der Startzeit liegen",
   "routine.hours.runsPerDay": {
     one: "Einmal täglich",
     other: "{count}-mal täglich",
@@ -77,7 +76,6 @@ export const messages = {
   "routine.hours.startTime": "Startzeit",
   "routine.hours.endTime": "Endzeit",
   "routine.hours.repeat": "Wiederholen",
-  "routine.problem.endBeforeStart": "Die Endzeit muss nach der Startzeit liegen.",
   "routine.problem.invalidDate": "Wähle ein gültiges Datum.",
   "routine.problem.cronRequired": "Gib einen Cron-Ausdruck ein.",
   "routine.problem.cronTooLong": "Der Cron-Ausdruck ist zu lang.",
@@ -260,7 +258,6 @@ export const messages = {
   "routine.settings.webhookSummaryAny": "Wenn ein Webhook eintrifft",
   "routine.trigger.change": "Auslöser ändern",
   "routine.trigger.groupSchedule": "Zeitplan",
-  "routine.trigger.groupAdvanced": "Erweitert",
   "routine.trigger.onceDescription": "An einem gewählten Datum zu einer gewählten Uhrzeit",
   "routine.trigger.hourlyDescription": "Stündlich innerhalb der gewählten Zeiten",
   "routine.trigger.dailyDescription": "Täglich zu einer gewählten Uhrzeit",

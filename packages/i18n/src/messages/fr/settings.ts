@@ -44,6 +44,9 @@ export const messages = {
   "settings.sendShortcut.enter": "Entrée pour envoyer",
   "settings.sendShortcut.modEnterMac": "⌘Entrée pour envoyer",
   "settings.sendShortcut.modEnterWin": "Ctrl+Entrée pour envoyer",
+  "settings.showAgentSteps.title": "Afficher les étapes de l’agent",
+  "settings.showAgentSteps.description":
+    "Ouvre par défaut la réflexion, les étapes d’outils et les changements de souvenirs de chaque tour sur cet appareil et ce navigateur.",
   "settings.busyMessage.title": "Orienter les agents pendant leur travail",
   "settings.busyMessage.description":
     "Les nouveaux messages rejoignent le travail en cours de l’agent, pas la file. Fonctionne avec ChatGPT et Claude.",
@@ -204,6 +207,19 @@ export const messages = {
   "settings.mobileConnect.link.error.revoke": "Impossible de révoquer le lien permanent.",
   "settings.mobileConnect.devices.title": "Appareils connectés",
   "settings.mobileConnect.devices.refreshing": "Actualisation…",
+  "settings.mobileConnect.route.title": "Connexion des appareils",
+  "settings.mobileConnect.route.description":
+    "Pour les téléphones, autres ordinateurs et membres de l’équipe qui se connectent à cet ordinateur.",
+  "settings.mobileConnect.route.openbot.title": "Via OpenBot",
+  "settings.mobileConnect.route.openbot.badge": "Recommandé",
+  "settings.mobileConnect.route.openbot.description":
+    "Fonctionne sur tout réseau. Les chats et fichiers sont chiffrés entre vos appareils.",
+  "settings.mobileConnect.route.private.title": "Réseau privé",
+  "settings.mobileConnect.route.private.tailscale": "Tailscale détecté",
+  "settings.mobileConnect.route.private.description":
+    "Tailscale ou ce Wi-Fi. Les appareils se connectent toujours avec OpenBot. Les chats et fichiers ne passent jamais par les serveurs OpenBot, et les appareils se connectent uniquement sur ce réseau.",
+  "settings.mobileConnect.route.error.load": "Impossible de charger la connexion des appareils.",
+  "settings.mobileConnect.route.error.save": "Impossible de modifier la connexion des appareils.",
   "settings.mobileConnect.disconnectInfo.title": "Déconnecter un appareil",
   "settings.mobileConnect.disconnectInfo.description":
     "L’accès est révoqué immédiatement. L’application mobile peut continuer à afficher son écran actuel jusqu’à ce qu’elle soit rouverte ou ramenée au premier plan.",
@@ -418,6 +434,7 @@ export const messages = {
   "settings.hostedServers.deleteFailed": "Impossible de supprimer le serveur.",
   "settings.hostedServers.plan.label": "Forfait",
   "settings.hostedServers.plan.recommended": "Meilleure offre",
+  "settings.hostedServers.plan.soldOut": "Épuisé",
   "settings.hostedServers.plan.perMonth": "/ mois",
   "settings.hostedServers.plan.disk": "{count} Go de stockage",
   "settings.hostedServers.plan.linux": "Machine Linux",

@@ -62,7 +62,6 @@ export const messages = {
   "routine.hours.window": "{start}–{end}",
   "routine.hours.windowSameHalf": "{start}–{end} {meridiem}",
   "routine.hours.everyShort": "Her {hours} saatte bir",
-  "routine.hours.endBeforeStart": "Bitiş zamanı başlangıç zamanından sonra olmalıdır",
   "routine.hours.runsPerDay": { one: "Günde bir kez", other: "Günde {count} kez" },
   "routine.hours.chipLabel": "Saatler: {hours}",
   "routine.hours.choose": "Saatleri seçin",
@@ -72,7 +71,6 @@ export const messages = {
   "routine.hours.endTime": "Bitiş zamanı",
   "routine.hours.repeat": "Tekrarla",
 
-  "routine.problem.endBeforeStart": "Bitiş zamanı başlangıç zamanından sonra olmalıdır.",
   "routine.problem.invalidDate": "Mevcut olan bir tarih seçin.",
   "routine.problem.cronRequired": "Bir cron ifadesi girin.",
   "routine.problem.cronTooLong": "Cron ifadesi çok uzun.",
@@ -258,7 +256,6 @@ export const messages = {
   "routine.settings.webhookSummaryAny": "Bir webhook geldiğinde",
   "routine.trigger.change": "Tetikleyiciyi değiştir",
   "routine.trigger.groupSchedule": "Zamanlama",
-  "routine.trigger.groupAdvanced": "Gelişmiş",
   "routine.trigger.onceDescription": "Seçilen tarih ve saatte",
   "routine.trigger.hourlyDescription": "Seçilen saatler içinde her saat",
   "routine.trigger.dailyDescription": "Her gün seçilen saatte",

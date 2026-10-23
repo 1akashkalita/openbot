@@ -40,6 +40,7 @@ import type { UnloadedHistory } from "@openbot/ui/features/conversation/ChatScro
 import type { JSX } from "@solidjs/web";
 import type { ConnectorRegistry } from "../connectors/connector-registry";
 import type { ConversationRuntime } from "./conversation-runtime";
+import type { TurnStepLines } from "./turn-step-lines";
 
 /**
  * What a conversation is, as data. These live apart from `ConversationView.tsx`
@@ -199,6 +200,8 @@ export interface ConversationProps {
   olderError?: string | null | undefined;
   activeTurnId: string | null | undefined;
   activityDetail?: string | undefined;
+  /** The host's progress lines of the newest turns, by turn, for the steps of each turn. */
+  turnStepLines?: TurnStepLines | undefined;
   skillsMarketplaceOpen?: boolean | undefined;
   /**
    * True while a surface that can add or remove one of the host's MCP servers is open: the server
@@ -288,6 +291,8 @@ export interface ConversationProps {
   agentAutoApproves?: boolean | undefined;
   /** Whether a joined server's host answered with the agent's backup models: owners and admins only. */
   remoteBackupModelsLoaded?: boolean | undefined;
+  /** Whether a joined server's host answered with the agent's task limit: owners and admins only. */
+  remoteTaskLimitLoaded?: boolean | undefined;
   /** The app default an agent without its own busy-message setting follows. Local agents only. */
   defaultBusyMessageMode?: BusyMessageMode | undefined;
   /** The app memory cap. Local agents only. */
@@ -332,15 +337,19 @@ export interface ComposerDraft {
  */
 type SidebarFilePreviewSource =
   | { kind: "shared"; path: string }
-  /** `folder` is the folder view the file was opened from, so the panel can go back to it. */
-  | { kind: "workspace"; path: string; folder?: string | undefined }
+  /**
+   * `agentId` is the agent whose workspace holds the path. In a channel it is the agent that wrote
+   * the link, not the channel. `folder` is the folder view the file was opened from, so the panel
+   * can go back to it.
+   */
+  | { kind: "workspace"; agentId: string; path: string; folder?: string | undefined }
   | { kind: "attachment"; attachment: AttachmentSummary };
 
 export type SidebarFilePreview =
   | { ownerAgentId: string; source: SidebarFilePreviewSource; preview: FilePreview; directory?: undefined }
   | {
       ownerAgentId: string;
-      source: { kind: "workspace-folder"; path: string };
+      source: { kind: "workspace-folder"; agentId: string; path: string };
       preview: null;
       directory: WorkspaceDirectory;
     };

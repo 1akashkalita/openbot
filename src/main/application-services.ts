@@ -4,6 +4,7 @@ import { fileReportStorage } from "@openbot/telemetry/node";
 import { Effect, Fiber } from "effect";
 import { toAgentRemovalFailed } from "../backend/agent/agent-removal";
 import { toHostedSiteOperationFailed } from "../backend/agent/hosted-site-coordinator";
+import { AgentApiKeys } from "../backend/agent-api-keys";
 import { AgentDatabaseSupervisor } from "../backend/agent-data/agent-database-supervisor";
 import { AgentTables } from "../backend/agent-data/agent-tables";
 import { AgentRoutineStore } from "../backend/agent-routine-store";
@@ -27,6 +28,7 @@ import {
   HostedUpdateAdapter,
 } from "./hosted-update-adapter";
 import { LicenseDesktopService } from "./license-service";
+import { LocalSignInWindows } from "./local-sign-in-window";
 import { LocalSkillLibrary } from "./local-skill-library";
 import { localSkillTools } from "./local-skill-tools";
 import { MAC_PERMISSION_URLS } from "./mac-permission-urls";
@@ -72,6 +74,7 @@ import type {
   VoiceStreamTranscript,
 } from "@openbot/contracts/ipc";
 import {
+  agentOwnBrowserSessionEnabled,
   IPC_ENDPOINTS,
   isManagedToolRuntime,
   isUpdateBusyPhase,
@@ -131,7 +134,9 @@ import { AppBehaviorService } from "./app-behavior-service";
 import { ApprovalAutomation, readApprovalAutomation } from "./approval-automation-store";
 import { AutomationServer } from "./automation-server";
 import { BillingDesktopService } from "./billing-service";
+import { managedBitwardenCli } from "./bitwarden-cli-installer";
 import { BitwardenConnectorService } from "./bitwarden-connector-service";
+import { BitwardenConnectorStore } from "./bitwarden-connector-store";
 import { BrowserDockOverlay } from "./browser-dock-overlay";
 import { BrowserPictureInPicture } from "./browser-picture-in-picture";
 import { BrowserViewClient } from "./browser-view-client";
@@ -232,9 +237,16 @@ import { resolveRemoteDesktopRuntime } from "./remote-desktop-runtime-artifact";
 import { loadOrCreateRemoteDesktopCredentials } from "./remote-desktop-secret-store";
 import { appendRemoteDiagnosticLog } from "./remote-diagnostics";
 import { decodeVoid } from "./remote-host-decoding";
+import {
+  createRemoteNetworkRoutePreferenceStore,
+  type RemoteNetworkRoutePreferenceStore,
+} from "./remote-network-route-preference-store";
 import { RemoteServerManager } from "./remote-server-manager";
 import { RemoteSessionCache } from "./remote-session-cache";
-import { RemoteSessionReusePreferenceStore } from "./remote-session-reuse-preference-store";
+import {
+  createRemoteSessionReusePreferenceStore,
+  type RemoteSessionReusePreferenceStore,
+} from "./remote-session-reuse-preference-store";
 import { sendToRenderer } from "./renderer-ipc";
 import { RequestedUpdate, RequestedUpdateRefusal } from "./requested-update";
 import { ResourceMonitor } from "./resource-monitor";
@@ -307,6 +319,7 @@ const BUSY_MESSAGE_MODE_PREFERENCE_FILE = "openbot-busy-message-mode-v1.json";
 const AGENT_MEMORY_LIMIT_PREFERENCE_FILE = "openbot-agent-memory-limit-v1.json";
 const SERVER_TIMEZONE_PREFERENCE_FILE = "openbot-server-timezone-v1.json";
 const REMOTE_SESSION_REUSE_PREFERENCE_FILE = "openbot-remote-session-reuse-preference-v1.json";
+const REMOTE_NETWORK_ROUTE_PREFERENCE_FILE = "openbot-remote-network-route-v1.json";
 const APP_BEHAVIOR_PREFERENCE_FILE = "openbot-app-behavior-preference-v1.json";
 const DYNAMIC_ISLAND_PREFERENCE_FILE = "openbot-dynamic-island-preference-v1.json";
 const BROWSER_STATE_FILE = "openbot-browser-state-v1.json";
@@ -330,6 +343,8 @@ const MCP_OAUTH_PROXY_FILE = "openbot-mcp-oauth-proxy-v1.json";
 const GITHUB_CONNECTOR_FILE = "openbot-github-connector-v1.json";
 /** The 1Password service account token of this computer, with the same cipher. */
 const ONEPASSWORD_CONNECTOR_FILE = "openbot-onepassword-connector-v1.json";
+/** The Bitwarden API key and master password of a host connection (`bitwarden-connector-v1`), with the same cipher. */
+const BITWARDEN_CONNECTOR_FILE = "openbot-bitwarden-connector-v1.json";
 /** Which agent each imported Hermes profile made, so a second import updates that agent. */
 const HERMES_IMPORT_LINKS_FILE = "openbot-hermes-imports-v1.json";
 
@@ -368,6 +383,7 @@ const TEARDOWN_ORDER = {
   mcpHostSignIns: 29,
   browser: 30,
   browserPictureInPicture: 40,
+  localSignIn: 41,
   browserDock: 42,
   browserView: 45,
   providerDetection: 48,
@@ -471,6 +487,7 @@ export interface ApplicationServices {
   storageUsage: StorageUsageService;
   browser: BrowserHost;
   browserPictureInPicture: BrowserPictureInPicture;
+  localSignIn: LocalSignInWindows;
   browserDock: BrowserDockOverlay;
   browserView: BrowserViewClient;
   updater: UpdateService;
@@ -496,6 +513,7 @@ export interface ApplicationServices {
   agentAccess: AgentAccessStore;
   serverTimezone: ServerTimezonePreferenceStore;
   remoteSessionReuse: RemoteSessionReusePreferenceStore;
+  remoteNetworkRoute: RemoteNetworkRoutePreferenceStore;
   remoteSessionCache: RemoteSessionCache;
   appBehavior: AppBehaviorService;
   agentInitialization: AgentInitializationGate<AgentLifecycleFailed>;
@@ -964,6 +982,10 @@ export async function createApplicationServices({
   }
   const browser = new BrowserHost(mainWindow, store.downloadsRoot, join(app.getPath("userData"), BROWSER_STATE_FILE), {
     memoryLow: () => (hostMemory?.level() ?? "ok") !== "ok",
+    ownBrowserSession: (agentId) => {
+      const agent = store.list().find((candidate) => candidate.id === agentId);
+      return agent ? agentOwnBrowserSessionEnabled(agent) : false;
+    },
   });
   teardown.push(TEARDOWN_ORDER.browser, "the browser", () => runCauseEffect(browser.destroy()));
   await runCauseEffect(browser.restore(store.list().map((agent) => ({ id: agent.id, threadId: agent.threadId }))));
@@ -984,6 +1006,8 @@ export async function createApplicationServices({
     },
   });
   teardown.push(TEARDOWN_ORDER.browserPictureInPicture, "picture in picture", () => browserPictureInPicture.destroy());
+  const localSignIn = new LocalSignInWindows();
+  teardown.push(TEARDOWN_ORDER.localSignIn, "the local sign-in window", () => Effect.runPromise(localSignIn.discard()));
   // A value, as for Picture in Picture: the overlay is a view in the window that the browser shows its pages in.
   const browserDock = new BrowserDockOverlay({
     mainWindow,
@@ -1036,10 +1060,14 @@ export async function createApplicationServices({
     join(app.getPath("userData"), SERVER_TIMEZONE_PREFERENCE_FILE),
   );
   await runCauseEffect(serverTimezone.load());
-  const remoteSessionReuse = new RemoteSessionReusePreferenceStore(
+  const remoteSessionReuse = createRemoteSessionReusePreferenceStore(
     join(app.getPath("userData"), REMOTE_SESSION_REUSE_PREFERENCE_FILE),
   );
   await runCauseEffect(remoteSessionReuse.load());
+  const remoteNetworkRoute = createRemoteNetworkRoutePreferenceStore(
+    join(app.getPath("userData"), REMOTE_NETWORK_ROUTE_PREFERENCE_FILE),
+  );
+  await runCauseEffect(remoteNetworkRoute.load());
   const appBehavior = new AppBehaviorService({
     path: join(app.getPath("userData"), APP_BEHAVIOR_PREFERENCE_FILE),
     loginItem: createLoginItem({ appVariant, server: Boolean(hostedServer || serverModeEnvironment) }),
@@ -1266,7 +1294,27 @@ export async function createApplicationServices({
   teardown.push(TEARDOWN_ORDER.githubConnector, "the GitHub connection", () =>
     runCauseEffect(githubConnector.dispose()),
   );
-  const bitwardenConnector = new BitwardenConnectorService();
+  /*
+   * The Bitwarden connection. A host connection's API key and master password are stored, so the
+   * host unlocks again after a restart; its CLI data and OpenBot's copy of `bw` stay outside every
+   * root an agent can write.
+   */
+  const bitwardenCliTarget = runtimeTarget(process.platform, process.arch);
+  const bitwardenConnector = new BitwardenConnectorService({
+    host: {
+      store: new BitwardenConnectorStore(join(app.getPath("userData"), BITWARDEN_CONNECTOR_FILE), secretCipher),
+      dataDirectory: join(app.getPath("userData"), "provider-state", "bitwarden-host"),
+      installCli: bitwardenCliTarget
+        ? (signal) =>
+            managedBitwardenCli({
+              directory: join(app.getPath("userData"), "provider-state", "bitwarden-cli"),
+              target: bitwardenCliTarget,
+              signal,
+            })
+        : null,
+    },
+  });
+  await runCauseEffect(bitwardenConnector.load());
   teardown.push(TEARDOWN_ORDER.bitwardenConnector, "the Bitwarden connection", async () => {
     await runCauseEffect(bitwardenConnector.dispose());
   });
@@ -1437,6 +1485,9 @@ export async function createApplicationServices({
   const providerTempDirectory = join(app.getPath("userData"), "provider-temp");
   performance.mark("openbot:services.computer-use");
   if (process.platform === "win32") await Effect.runPromise(sweepProviderTemp(providerTempDirectory));
+  // Outside every workspace. Each saved key is masked in the logs before the first agent starts.
+  const agentApiKeys = new AgentApiKeys(join(app.getPath("userData"), "agent-api-keys"));
+  await Effect.runPromise(agentApiKeys.registerSaved());
   const service: AgentService = new AgentService({
     store,
     mailbox,
@@ -1527,6 +1578,7 @@ export async function createApplicationServices({
       mcpAuthorization: () => githubConnector.mcpAuthorization().pipe(toMcpGatewayFailed),
     },
     passwordVault: passwordVaultRouter(onePasswordConnector, bitwardenConnector),
+    agentApiKeys,
     localSkillTools: () => localSkillTools(skills),
     routineFlowTools: () => routineFlowRuntime,
     // `events` is built later, after the account service and the relay.
@@ -1535,6 +1587,9 @@ export async function createApplicationServices({
     busyMessageMode: () => busyMessageMode.get().mode,
     agentMemoryLimit: () => agentMemoryLimit.get().limit,
     timezone: () => serverTimezone.effective(),
+    // `host` is built later, after the agent service; a channel tool reads it when it runs.
+    channelPersonAgentLevel: (personId, agentId) => host.channelPersonAgentLevel(personId, agentId),
+    channelRemotePerson: (personId) => host.channelPersonIsRemote(personId),
     deleteWithRevokedApproval: (agentId, remove) =>
       approvalAutomation.deleteAgent(agentId, remove).pipe(toAgentRemovalFailed),
     tables,
@@ -2005,10 +2060,15 @@ export async function createApplicationServices({
     // Present, so the host advertises `onepassword-connector-v1`. An owner or admin connects it with
     // a service account token, as a host with no screen cannot approve the 1Password app.
     onePasswordConnector,
+    // Present, so the host advertises `bitwarden-connector-v1`. An owner or admin connects it with an
+    // API key and the master password: a session key from their computer cannot open this vault.
+    bitwardenConnector,
     // Present on Linux, so the host advertises `provider-host-sign-in-v1`. The routes are admin-only.
     providerHostSignIns,
     // Present, so the host advertises `provider-accounts-v1`. The routes are admin-only.
     providerAccounts: providerAccountsHost,
+    // Present, so the host advertises `provider-usage-reset-v1`. The routes are admin-only.
+    providerUsageResets: service,
     // Present, so the host advertises `storage-v1`. Members read; only admins delete or clear.
     storage: storageUsage,
     // Present, so the host advertises `hosted-sites-v1`. Members list; only admins delete.
@@ -2067,7 +2127,10 @@ export async function createApplicationServices({
       toolRuntimes: () => providerRuntimes.mcpToolRuntimes(),
     },
     teamWebRtcBridge,
+    privateNetwork: () => remoteNetworkRoute.get().route === "private",
     registerRemoteHost: (input) => centralAuth.registerRemoteHost(input).pipe(toRemoteWorkflowError),
+    handOverRemoteHostKey: (hostId, handover) =>
+      centralAuth.handOverRemoteHostKey(hostId, handover).pipe(toRemoteWorkflowError),
     issueRemoteHostTicket: (hostId) => centralAuth.issueRemoteHostTicket(hostId).pipe(toRemoteWorkflowError),
     sendLiveActivityPush: (hostId, push) => centralAuth.sendLiveActivityPush(hostId, push).pipe(toRemoteWorkflowError),
     sendPushNotification: (hostId, push) => centralAuth.sendPushNotification(hostId, push).pipe(toRemoteWorkflowError),
@@ -2157,7 +2220,8 @@ export async function createApplicationServices({
     getRemoteDesktopIceServers: () =>
       Effect.try({
         try: () => {
-          if (developmentRemoteRole === "host") return [];
+          // The private route has no relay, so the remote desktop also connects only over a direct path.
+          if (developmentRemoteRole === "host" || remoteNetworkRoute.get().route === "private") return [];
           const identity = teamStore.getIdentity();
           if (!identity) throw new Error(sourceText("error.app.remoteIdentityUnavailable"));
           const iceServers = teamWebRtcBridge.getIceServers(identity.serverId);
@@ -2694,6 +2758,7 @@ export async function createApplicationServices({
     storageUsage,
     browser,
     browserPictureInPicture,
+    localSignIn,
     browserDock,
     browserView,
     updater,
@@ -2712,6 +2777,7 @@ export async function createApplicationServices({
     agentAccess,
     serverTimezone,
     remoteSessionReuse,
+    remoteNetworkRoute,
     remoteSessionCache,
     appBehavior,
     agentInitialization,

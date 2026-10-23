@@ -128,6 +128,7 @@ export function WorkspaceConversation(props: { account: () => CentralAuthUser })
     approvalOfThread,
     activeTurns,
     turnProgress,
+    turnStepLines,
     answerPrompt,
     respondToApproval,
     respondToApprovalRequest,
@@ -237,6 +238,7 @@ export function WorkspaceConversation(props: { account: () => CentralAuthUser })
     const automation = remoteAgentAdmin.automation();
     const backupModels = remoteAgentAdmin.backupModels();
     const usageLimitReturn = remoteAgentAdmin.usageLimitReturn();
+    const taskLimit = remoteAgentAdmin.taskLimit();
     return agent
       ? {
           ...agent,
@@ -244,6 +246,7 @@ export function WorkspaceConversation(props: { account: () => CentralAuthUser })
           ...(activeServer()?.kind === "remote" && automation !== undefined ? { allowAutomation: automation } : {}),
           ...(activeServer()?.kind === "remote" && backupModels ? { backupModels } : {}),
           ...(activeServer()?.kind === "remote" && usageLimitReturn ? { usageLimitReturn } : {}),
+          ...(activeServer()?.kind === "remote" && typeof taskLimit === "number" ? { taskLimit } : {}),
         }
       : agent;
   });
@@ -523,6 +526,7 @@ export function WorkspaceConversation(props: { account: () => CentralAuthUser })
         browserTakeover={activeBrowserTakeover()}
         activeTurnId={activeAgent() ? activeTurns()[activeAgent()?.id ?? ""] : null}
         activityDetail={activeAgent() ? turnProgress()[activeAgent()?.id ?? ""]?.detail : undefined}
+        turnStepLines={turnStepLines()}
         skillsMarketplaceOpen={skillsMarketplaceOpen()}
         mcpSettingsOpen={serverSettingsOpen() || skillsMarketplaceOpen()}
         globalOverlayOpen={
@@ -557,6 +561,7 @@ export function WorkspaceConversation(props: { account: () => CentralAuthUser })
         onAlwaysAllowApproval={alwaysAllowApproval()}
         agentAutoApproves={activeAgentAutoApproves()}
         remoteBackupModelsLoaded={remoteAgentAdmin.backupModels() !== undefined}
+        remoteTaskLimitLoaded={remoteAgentAdmin.taskLimit() !== undefined}
         onUpdateAgentPermissions={permissionsEditable() ? writeAgentPermissions : undefined}
         defaultBusyMessageMode={generalSettings().busyMessageMode}
         agentMemoryLimit={generalSettings().agentMemoryLimit}

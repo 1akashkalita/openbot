@@ -39,6 +39,9 @@ export const messages = {
   "settings.sendShortcut.enter": "Enter wysyła",
   "settings.sendShortcut.modEnterMac": "⌘Enter wysyła",
   "settings.sendShortcut.modEnterWin": "Ctrl+Enter wysyła",
+  "settings.showAgentSteps.title": "Pokazuj kroki agenta",
+  "settings.showAgentSteps.description":
+    "Domyślnie otwiera myślenie, kroki narzędzi i zmiany wspomnień z każdej tury na tym urządzeniu i w tej przeglądarce.",
   "settings.busyMessage.title": "Kieruj agentami podczas pracy",
   "settings.busyMessage.description":
     "Nowe wiadomości dołączają do bieżącej pracy agenta, a nie do kolejki. Działa z ChatGPT i Claude.",
@@ -191,6 +194,19 @@ export const messages = {
   "settings.mobileConnect.link.error.revoke": "Nie udało się unieważnić stałego linku.",
   "settings.mobileConnect.devices.title": "Połączone urządzenia",
   "settings.mobileConnect.devices.refreshing": "Odświeżanie…",
+  "settings.mobileConnect.route.title": "Jak łączą się urządzenia",
+  "settings.mobileConnect.route.description":
+    "Dla telefonów, innych komputerów i członków zespołu, którzy łączą się z tym komputerem.",
+  "settings.mobileConnect.route.openbot.title": "Przez OpenBot",
+  "settings.mobileConnect.route.openbot.badge": "Zalecane",
+  "settings.mobileConnect.route.openbot.description":
+    "Działa w każdej sieci. Czaty i pliki są szyfrowane między Twoimi urządzeniami.",
+  "settings.mobileConnect.route.private.title": "Sieć prywatna",
+  "settings.mobileConnect.route.private.tailscale": "Wykryto Tailscale",
+  "settings.mobileConnect.route.private.description":
+    "Tailscale lub ta sieć Wi-Fi. Urządzenia nadal logują się przez OpenBot. Czaty i pliki nigdy nie przechodzą przez serwery OpenBot, a urządzenia łączą się tylko w tej sieci.",
+  "settings.mobileConnect.route.error.load": "Nie udało się wczytać sposobu łączenia urządzeń.",
+  "settings.mobileConnect.route.error.save": "Nie udało się zmienić sposobu łączenia urządzeń.",
   "settings.mobileConnect.disconnectInfo.title": "Odłączanie urządzenia",
   "settings.mobileConnect.disconnectInfo.description":
     "Dostęp zostaje cofnięty natychmiast. Aplikacja mobilna może nadal pokazywać bieżący ekran, dopóki nie zostanie ponownie otwarta lub przywrócona z tła.",
@@ -416,6 +432,7 @@ export const messages = {
   "settings.hostedServers.deleteFailed": "Nie udało się usunąć serwera.",
   "settings.hostedServers.plan.label": "Plan",
   "settings.hostedServers.plan.recommended": "Najlepsza oferta",
+  "settings.hostedServers.plan.soldOut": "Wyprzedany",
   "settings.hostedServers.plan.perMonth": "/ miesiąc",
   "settings.hostedServers.plan.disk": "{count} GB miejsca",
   "settings.hostedServers.plan.linux": "Maszyna z Linuksem",

@@ -62,7 +62,6 @@ export const messages = {
   "routine.hours.window": "{start}〜{end}",
   "routine.hours.windowSameHalf": "{meridiem}{start}〜{end}",
   "routine.hours.everyShort": "{hours} 時間ごと",
-  "routine.hours.endBeforeStart": "終了時刻は開始時刻より後にしてください",
   "routine.hours.runsPerDay": { other: "1 日 {count} 回" },
   "routine.hours.chipLabel": "時間帯: {hours}",
   "routine.hours.choose": "時間帯を選択",
@@ -72,7 +71,6 @@ export const messages = {
   "routine.hours.endTime": "終了時刻",
   "routine.hours.repeat": "繰り返し",
 
-  "routine.problem.endBeforeStart": "終了時刻は開始時刻より後にしてください。",
   "routine.problem.invalidDate": "存在する日付を選択してください。",
   "routine.problem.cronRequired": "cron 式を入力してください。",
   "routine.problem.cronTooLong": "cron 式が長すぎます。",
@@ -249,7 +247,6 @@ export const messages = {
   "routine.settings.webhookSummaryAny": "Webhook を受信したとき",
   "routine.trigger.change": "トリガーを変更",
   "routine.trigger.groupSchedule": "スケジュール",
-  "routine.trigger.groupAdvanced": "詳細",
   "routine.trigger.onceDescription": "指定した日時に",
   "routine.trigger.hourlyDescription": "指定した時間帯に 1 時間ごと",
   "routine.trigger.dailyDescription": "毎日、指定した時刻に",

@@ -42,6 +42,9 @@ export const messages = defineMessages("settings", {
   "settings.sendShortcut.enter": "Enter to send",
   "settings.sendShortcut.modEnterMac": "⌘Enter to send",
   "settings.sendShortcut.modEnterWin": "Ctrl+Enter to send",
+  "settings.showAgentSteps.title": "Show agent steps",
+  "settings.showAgentSteps.description":
+    "Open the thinking, tool steps and memory changes of each turn by default on this device and browser.",
   "settings.busyMessage.title": "Steer agents while they work",
   "settings.busyMessage.description":
     "New messages join the agent’s current work, not the queue. Works with ChatGPT and Claude.",
@@ -199,6 +202,19 @@ export const messages = defineMessages("settings", {
   "settings.mobileConnect.link.error.revoke": "Could not revoke the permanent link.",
   "settings.mobileConnect.devices.title": "Connected devices",
   "settings.mobileConnect.devices.refreshing": "Refreshing…",
+  "settings.mobileConnect.route.title": "How devices connect",
+  "settings.mobileConnect.route.description":
+    "For phones, other computers and team members that connect to this computer.",
+  "settings.mobileConnect.route.openbot.title": "Through OpenBot",
+  "settings.mobileConnect.route.openbot.badge": "Recommended",
+  "settings.mobileConnect.route.openbot.description":
+    "Works on any network. Chats and files are encrypted between your devices.",
+  "settings.mobileConnect.route.private.title": "Private network",
+  "settings.mobileConnect.route.private.tailscale": "Tailscale found",
+  "settings.mobileConnect.route.private.description":
+    "Tailscale or this Wi-Fi. Devices still sign in with OpenBot. Chats and files never go through OpenBot servers, and devices connect only on that network.",
+  "settings.mobileConnect.route.error.load": "Could not load how devices connect.",
+  "settings.mobileConnect.route.error.save": "Could not change how devices connect.",
   "settings.mobileConnect.disconnectInfo.title": "Disconnecting a device",
   "settings.mobileConnect.disconnectInfo.description":
     "Access is revoked immediately. The mobile app may keep showing its current screen until it is reopened or brought back from the background.",
@@ -416,6 +432,7 @@ export const messages = defineMessages("settings", {
   // The plan picker. {count} is a number, such as 4. {price} is a formatted amount, such as "€50".
   "settings.hostedServers.plan.label": "Plan",
   "settings.hostedServers.plan.recommended": "Best value",
+  "settings.hostedServers.plan.soldOut": "Sold out",
   "settings.hostedServers.plan.perMonth": "/ month",
   "settings.hostedServers.plan.disk": "{count} GB storage",
   // Each plan is a Linux virtual machine. Agents run Linux commands and apps there, not macOS or Windows ones.

@@ -44,9 +44,11 @@ import type {
   AgentAdminSettings,
   AgentBackupModelSettings,
   AgentHostSettings,
+  AgentTaskLimitSettings,
   UpdateAgentAdminSettingsInput,
   UpdateAgentBackupModelsInput,
   UpdateAgentHostSettingsInput,
+  UpdateAgentTaskLimitInput,
 } from "./ipc-agent-admin";
 import type { AgentAnalytics, AgentAnalyticsInput } from "./ipc-agent-analytics";
 import type { AgentIpcRequest, ScopedAgentEvent } from "./ipc-agent-events";
@@ -86,8 +88,11 @@ import type {
   ProviderCodeLoginStart,
   ProviderHostSignInStatus,
   ProviderRelaySignInStatus,
+  ProviderUsageResetOutcome,
+  ProviderUsageResets,
   RemoveProviderAccountInput,
   RenameProviderAccountInput,
+  ResetProviderUsageInput,
   SetProviderApiKeyInput,
   SubmitProviderCodeLoginInput,
 } from "./ipc-agent-status";
@@ -155,12 +160,16 @@ import type {
   OpenWorkspaceFileInput,
   WorkspaceDirectory,
 } from "./ipc-attachments";
-import type { BitwardenConnectorStatus } from "./ipc-bitwarden-connector";
+import type { BitwardenConnectorStatus, BitwardenHostConnectInput } from "./ipc-bitwarden-connector";
 import type {
   BrowserBounds,
   BrowserControlState,
   BrowserDisplayState,
   BrowserLiveViewEvent,
+  BrowserLocalSignInEnd,
+  BrowserLocalSignInFinish,
+  BrowserLocalSignInInput,
+  BrowserLocalSignInResult,
   BrowserNavigateInput,
   BrowserOpenInput,
   BrowserPictureInPictureEvent,
@@ -240,6 +249,7 @@ import type {
   SaveEventRoutineInput,
   SaveEventRoutineResult,
   WebhookSecret,
+  WebhookTestResult,
 } from "./ipc-events";
 import type { GitHubConnectorRepositories, GitHubConnectorStatus } from "./ipc-github-connector";
 import type { ApplyHermesImportInput, HermesImportPreview } from "./ipc-hermes-import";
@@ -345,7 +355,11 @@ import type {
   RemoteDesktopTestInput,
   RemoteDesktopTestStatus,
 } from "./ipc-remote-desktop-setup";
-import type { RemoteSessionReusePreference } from "./ipc-remote-sessions";
+import type {
+  RemoteNetworkRoutePreference,
+  RemoteNetworkRouteState,
+  RemoteSessionReusePreference,
+} from "./ipc-remote-sessions";
 import type {
   ConnectRoutineFlowInput,
   DisconnectRoutineFlowInput,
@@ -567,6 +581,10 @@ export const IPC_ENDPOINTS = {
     setRemoteSessionReusePreference: request<RemoteSessionReusePreference, RemoteSessionReusePreference>()(
       "app:set-remote-session-reuse",
     ),
+    getRemoteNetworkRoute: request<undefined, RemoteNetworkRouteState>()("app:get-remote-network-route"),
+    setRemoteNetworkRoute: request<RemoteNetworkRoutePreference, RemoteNetworkRouteState>()(
+      "app:set-remote-network-route",
+    ),
     getAppBehaviorPreference: request<undefined, AppBehaviorPreference>()("app:get-behavior-preference"),
     setAppBehaviorPreference: request<AppBehaviorPreferenceChange, AppBehaviorPreference>()(
       "app:set-behavior-preference",
@@ -661,6 +679,10 @@ export const IPC_ENDPOINTS = {
     ),
     renameProviderAccount: request<RenameProviderAccountInput, AgentStatus>()("app:rename-provider-account"),
     removeProviderAccount: request<RemoveProviderAccountInput, AgentStatus>()("app:remove-provider-account"),
+    /** The usage reset credits of each connected account of a provider. It reads the usage of each. */
+    providerUsageResets: request<AgentProviderId, ProviderUsageResets[]>()("app:provider-usage-resets"),
+    /** Spends one usage reset credit of an account. A reset ends the usage limit that holds its agents. */
+    resetProviderUsage: request<ResetProviderUsageInput, ProviderUsageResetOutcome>()("app:reset-provider-usage"),
   },
   providerRuntimes: {
     getStatus: request<undefined, ProviderRuntimeSnapshot>()("provider-runtimes:get-status"),
@@ -853,6 +875,12 @@ export const IPC_ENDPOINTS = {
     cancelAccountSignIn: scopedRequest<AgentProviderId, void, "required">()("provider-admin:cancel-account-sign-in"),
     renameAccount: scopedRequest<RenameProviderAccountInput, void, "required">()("provider-admin:rename-account"),
     removeAccount: scopedRequest<RemoveProviderAccountInput, void, "required">()("provider-admin:remove-account"),
+    // The usage reset credits of a joined server's host's accounts, and the reset that spends one
+    // (`provider-usage-reset-v1`).
+    usageResets: scopedRequest<AgentProviderId, ProviderUsageResets[], "required">()("provider-admin:usage-resets"),
+    resetUsage: scopedRequest<ResetProviderUsageInput, ProviderUsageResetOutcome, "required">()(
+      "provider-admin:reset-usage",
+    ),
     // A sign-in that a joined server's host starts and that opens in this computer's browser
     // (`sign-in-relay-v1`). This computer takes the callback and sends its query to the host.
     // `openRelaySignIn` opens the page when the user asks, and `pasteRelaySignIn` takes the address
@@ -989,13 +1017,20 @@ export const IPC_ENDPOINTS = {
     hostOpenVerification: scopedQuery<void, "required">()("github-connector:host-open-verification"),
     hostOpenInstall: scopedQuery<void, "required">()("github-connector:host-open-install"),
   },
-  // The Bitwarden connection of this computer. Local only, like `onePasswordConnector`. The session
-  // key goes from the renderer to main once, in `connect`; every answer is the status only.
+  // The Bitwarden connection of this computer. The session key goes from the renderer to main once,
+  // in `connect`; every answer is the status only. The `host*` endpoints do the same for a joined
+  // server (`bitwarden-connector-v1`), with an API key and the master password: a session key from
+  // this computer cannot open the host's vault.
   bitwardenConnector: {
     status: request<undefined, BitwardenConnectorStatus>()("bitwarden-connector:status"),
     connect: request<string, BitwardenConnectorStatus>()("bitwarden-connector:connect"),
     disconnect: request<undefined, BitwardenConnectorStatus>()("bitwarden-connector:disconnect"),
     changed: event<BitwardenConnectorStatus>()("bitwarden-connector:changed"),
+    hostStatus: scopedQuery<BitwardenConnectorStatus, "required">()("bitwarden-connector:host-status"),
+    hostConnect: scopedRequest<BitwardenHostConnectInput, BitwardenConnectorStatus, "required">()(
+      "bitwarden-connector:host-connect",
+    ),
+    hostDisconnect: scopedQuery<BitwardenConnectorStatus, "required">()("bitwarden-connector:host-disconnect"),
   },
   // The 1Password connection of this computer. The token goes from the renderer to main once, in
   // `connectWithToken`; every answer is the status only. The `host*` endpoints do the same for a
@@ -1327,6 +1362,11 @@ export const IPC_ENDPOINTS = {
     dockPictureInPicture: request<undefined, void>()("browser:picture-in-picture-dock"),
     hidePictureInPicture: request<undefined, void>()("browser:picture-in-picture-hide"),
     pictureInPictureEvent: event<BrowserPictureInPictureEvent>()("browser:picture-in-picture-event"),
+    // Resolves when the local sign-in window closes, or when the site in it looks signed in.
+    openLocalSignIn: request<BrowserLocalSignInInput, BrowserLocalSignInEnd>()("browser:local-sign-in-open"),
+    finishLocalSignIn: request<BrowserLocalSignInFinish, BrowserLocalSignInResult | null>()(
+      "browser:local-sign-in-finish",
+    ),
   },
   // Not part of `browser`, so that group can be bridged: this is the one untyped endpoint. The renderer
   // sends `BrowserLiveViewInput` and main reads the wire `BrowserViewInput`, which differ on purpose
@@ -1381,6 +1421,11 @@ export const IPC_ENDPOINTS = {
     getAgentBackupModels: scopedRequest<string, AgentBackupModelSettings>()("agent:admin:get-backup-models"),
     updateAgentBackupModels: scopedRequest<UpdateAgentBackupModelsInput, AgentBackupModelSettings>()(
       "agent:admin:update-backup-models",
+    ),
+    // Task limit: `agent-task-limit-v1` on a joined server.
+    getAgentTaskLimit: scopedRequest<string, AgentTaskLimitSettings>()("agent:admin:get-task-limit"),
+    updateAgentTaskLimit: scopedRequest<UpdateAgentTaskLimitInput, AgentTaskLimitSettings>()(
+      "agent:admin:update-task-limit",
     ),
     getAgentAdminSettings: scopedRequest<string, AgentAdminSettings>()("agent:admin:get-settings"),
     updateAgentAdminSettings: scopedRequest<UpdateAgentAdminSettingsInput, AgentAdminSettings>()(
@@ -1496,6 +1541,8 @@ export const IPC_ENDPOINTS = {
     getStatus: request<undefined, HostStatus>()("host:get-status"),
     configure: request<ConfigureHostInput, HostStatus>()("host:configure"),
     updateIdentity: request<UpdateHostIdentityInput, HostStatus>()("host:update-identity"),
+    /** Changes this computer's server key. Paired devices follow a handover that both keys sign. */
+    rotateIdentityKey: request<undefined, HostStatus>()("host:rotate-identity-key"),
     getPresence: request<undefined, TeamPresenceSnapshot>()("host:get-presence"),
     start: request<undefined, HostStatus>()("host:start"),
     stop: request<undefined, HostStatus>()("host:stop"),
@@ -1525,6 +1572,7 @@ export const IPC_ENDPOINTS = {
     deleteRoutine: scopedRequest<EventRoutineRef, void, "required">()("events:delete-routine"),
     testRoutine: scopedRequest<EventRoutineRef, void, "required">()("events:test-routine"),
     rotateSecret: scopedRequest<EventRoutineRef, WebhookSecret, "required">()("events:rotate-secret"),
+    sendTestEvent: scopedRequest<EventRoutineRef, WebhookTestResult, "required">()("events:send-test-event"),
     listActivity: scopedRequest<ListEventActivityInput, EventActivity[], "required">()("events:list-activity"),
     listRoutineRuns: scopedRequest<ListEventRoutineRunsInput, EventRoutineRun[], "required">()(
       "events:list-routine-runs",

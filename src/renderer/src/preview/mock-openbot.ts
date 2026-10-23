@@ -38,6 +38,7 @@ import {
   type ClientAgentModelOption,
   type ClientAgentSummary,
   CONTEXT_RESET_ITEM_TYPE,
+  CONVERSATION_MEMORY_CHANGES_ITEM_TYPE,
   type ComputerUseState,
   type ConversationMessage,
   type ConversationSnapshot,
@@ -54,6 +55,7 @@ import {
   DEFAULT_DYNAMIC_ISLAND_PREFERENCE,
   DEFAULT_PROVIDER_ACCOUNT_ID,
   DEFAULT_PROVIDER_DETECTION_SETTINGS,
+  DEFAULT_REMOTE_NETWORK_ROUTE,
   DEFAULT_REMOTE_SESSION_REUSE_PREFERENCE,
   type DirectConversationSnapshot,
   type DirectMessageRealtimeEvent,
@@ -81,6 +83,7 @@ import {
   type QueuedMessageReceipt,
   type QueueSnapshot,
   type RemoteDesktopSession,
+  type RemoteNetworkRouteState,
   type RemoteSessionReusePreference,
   type ReorderQueueInput,
   type RespondToPromptInput,
@@ -302,6 +305,8 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
   let agentAccess: AgentAccessChange = { revision: 0, everyone: {}, roles: [] };
   const agentMemoryLimitListeners = new Set<(preference: AgentMemoryLimitPreference) => void>();
   let remoteSessionReuse: RemoteSessionReusePreference = { ...DEFAULT_REMOTE_SESSION_REUSE_PREFERENCE };
+  // The preview computer has Tailscale, so the private route shows what it finds.
+  let remoteNetworkRoute: RemoteNetworkRouteState = { route: DEFAULT_REMOTE_NETWORK_ROUTE, tailscaleConnected: true };
   let appBehavior: AppBehaviorPreference = { launchAtLogin: false, keepRunningInBackground: false };
   let languagePreference = clone<AppLanguagePreference>(options.languagePreference ?? { language: "system" });
   const languageListeners = new Set<(preference: AppLanguagePreference) => void>();
@@ -400,6 +405,8 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
   let updateStatus = clone(options.updateStatus ?? STORY_UPDATE_STATUS);
   let updatePreference: UpdatePreference = { autoDownload: true, allowRemoteUpdates: true, autoInstall: false };
   const usage = clone(options.usage ?? STORY_USAGE);
+  /** The usage resets left on each provider account after the preview spent one. */
+  const usageResets = new Map<string, number>();
   let agentCounter = agents.length;
   let hostedSites = clone(STORY_HOSTED_SITES);
   let detectionSettings: ProviderDetectionSettings = clone(DEFAULT_PROVIDER_DETECTION_SETTINGS);
@@ -811,6 +818,11 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
       remoteSessionReuse = { keepBetweenRuns };
       return clone(remoteSessionReuse);
     },
+    getRemoteNetworkRoute: async () => clone(remoteNetworkRoute),
+    setRemoteNetworkRoute: async ({ route }) => {
+      remoteNetworkRoute = { ...remoteNetworkRoute, route };
+      return clone(remoteNetworkRoute);
+    },
     setBusyMessageModePreference: async ({ mode }) => {
       busyMessageMode = { mode };
       return clone(busyMessageMode);
@@ -991,6 +1003,24 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
       return clone(
         changeProviderAccounts(provider, (accounts) => accounts.filter((account) => account.id !== accountId)),
       );
+    },
+    // Codex gives the preview's own sign-in two usage resets; each other connected Codex account has none.
+    providerUsageResets: async (provider) =>
+      provider === "codex"
+        ? (agentStatus.providers?.find((row) => row.id === provider)?.accounts ?? [])
+            .filter((account) => account.state === "connected")
+            .map((account) => ({
+              provider,
+              accountId: account.id,
+              available: usageResets.get(account.id) ?? (account.id === DEFAULT_PROVIDER_ACCOUNT_ID ? 2 : 0),
+            }))
+        : [],
+    resetProviderUsage: async ({ provider, accountId }) => {
+      const readings = await api.providerUsageResets(provider);
+      const available = readings.find((reading) => reading.accountId === accountId)?.available ?? 0;
+      if (available === 0) return "noCredit";
+      usageResets.set(accountId, available - 1);
+      return "reset";
     },
     getProviderApiKeyState: async (provider) => ({
       provider,
@@ -1219,6 +1249,8 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
       removeAccount: async (input) => {
         await api.removeProviderAccount(input);
       },
+      usageResets: (provider) => api.providerUsageResets(provider),
+      resetUsage: (input) => api.resetProviderUsage(input),
       startRelaySignIn: async () => undefined,
       relaySignInStatus: async () => ({ page: null, result: null }),
       openRelaySignIn: async () => undefined,
@@ -1526,6 +1558,15 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
       updateAgentBackupModels: async (input) => {
         await api.agent.updateAgent(input);
         return api.agent.getAgentBackupModels(input.agentId);
+      },
+      getAgentTaskLimit: async (agentId) => {
+        const agent = agents.find((candidate) => candidate.id === agentId);
+        if (!agent) throw new Error("Agent not found");
+        return { taskLimit: agent.taskLimit ?? null };
+      },
+      updateAgentTaskLimit: async (input) => {
+        await api.agent.updateAgent(input);
+        return api.agent.getAgentTaskLimit(input.agentId);
       },
       updateAgentAdminSettings: async ({ agentId, access, autoApprove }) => {
         const agent = agents.find((candidate) => candidate.id === agentId);
@@ -2110,6 +2151,13 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
           turnId,
           detail: "Reviewing your request…",
         });
+        emitAgentEvent({
+          type: "turn-progress",
+          agentId: input.agentId,
+          threadId: getSnapshot(input.agentId).threadId ?? `thread-${input.agentId}`,
+          turnId,
+          detail: "Searched its memories: 1 found",
+        });
 
         schedule(() => {
           const assistantMessage: ConversationMessage = {
@@ -2121,9 +2169,25 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
             createdAt: new Date().toISOString(),
             status: "completed",
           };
+          // A message that asks the agent to remember something commits one memory, as a real turn does.
+          const memoryMessage: ConversationMessage[] = /\bremember\b/iu.test(input.text)
+            ? [
+                {
+                  id: `${turnId}:memory-changes`,
+                  turnId,
+                  author: "system",
+                  source: "system",
+                  text: "Memory: 1 saved, 0 updated, 0 forgotten.",
+                  createdAt: new Date().toISOString(),
+                  status: "completed",
+                  itemType: CONVERSATION_MEMORY_CHANGES_ITEM_TYPE,
+                  memoryChanges: [{ memoryId: `memory-${turnId}`, action: "saved", text: input.text.slice(0, 500) }],
+                },
+              ]
+            : [];
           updateSnapshot(input.agentId, (snapshot) => {
             snapshot.activeTurnId = null;
-            snapshot.messages = [...snapshot.messages, assistantMessage];
+            snapshot.messages = [...snapshot.messages, assistantMessage, ...memoryMessage];
           });
           queues.set(input.agentId, {
             agentId: input.agentId,
