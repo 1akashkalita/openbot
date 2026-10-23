@@ -1633,6 +1633,13 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                   }
                   collapsedSectionIds={workspace.preferences.collapsedSidebarSectionIds()}
                   onMutateLayout={workspace.mutateSidebarLayout}
+                  sectionDuplicateSupported={
+                    workspace.state.status === "online" &&
+                    workspace.state.capabilities.includes("agent-duplication") &&
+                    workspace.state.capabilities.includes("sidebar-layout")
+                  }
+                  duplicatingSectionIds={workspace.duplicatingSectionIds()}
+                  onDuplicateSection={workspace.duplicateSection}
                   onToggleSection={workspace.preferences.toggleSidebarSection}
                   pinnedItems={workspace.preferences.pinnedSidebarItems()}
                   peopleOrder={[]}

@@ -282,6 +282,7 @@
     "./features/sidebar/SidebarViewSwitch": "./src/features/sidebar/SidebarViewSwitch.tsx",
     "./features/sidebar/sidebar-views.css": "./src/features/sidebar/sidebar-views.css",
     "./features/sidebar/createSidebarDragEngine": "./src/features/sidebar/createSidebarDragEngine.ts",
+    "./features/sidebar/duplicate-section": "./src/features/sidebar/duplicate-section.ts",
     "./features/sidebar/sidebar-drag-dom": "./src/features/sidebar/sidebar-drag-dom.ts",
     "./features/sidebar/sidebar-drag-model": "./src/features/sidebar/sidebar-drag-model.ts",
     "./features/sidebar/sidebar-filtering": "./src/features/sidebar/sidebar-filtering.ts",
