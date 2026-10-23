@@ -5,6 +5,7 @@ import { Button } from "@openbot/ui";
 import type { AgentMessage, ChatActionMarkerModel } from "@openbot/ui/data";
 import { ChannelActivityIndicator } from "@openbot/ui/features/channels/ChannelActivityIndicator";
 import { AgentActivityIndicator } from "@openbot/ui/features/conversation/AgentActivity";
+import { AgentChatEmptyState } from "@openbot/ui/features/conversation/AgentChatEmptyState";
 import { AgentStepsDisclosure } from "@openbot/ui/features/conversation/AgentSteps";
 import { AgentTaskChips } from "@openbot/ui/features/conversation/AgentTasks";
 import { AttachmentCards } from "@openbot/ui/features/conversation/AttachmentCards";
@@ -152,6 +153,7 @@ export function ConversationTimeline() {
     openWorkspaceFile,
     openQuote,
     pendingSendFor,
+    presentedQueueDeliveries,
     providerUpdateRequired,
     previewAttachment,
     props,
@@ -413,6 +415,28 @@ export function ConversationTimeline() {
    * agent asked without one, the prompt's questions draw it.
    */
   const pendingPromptBlock = createMemo(() => (keyedPrompt() ? props.promptUiBlock : undefined));
+  /**
+   * A direct chat with no message yet, and no turn, queued send or question. A queued send leaves the
+   * timeline for the queue tray, and the activity line shows only after a delay, so both are read here.
+   * Its empty state plays a faint turn from the agent's own routine and skill.
+   */
+  const emptyAgent = createMemo(() =>
+    !channel &&
+    timelineMessages().length === 0 &&
+    !props.hasOlder &&
+    !props.activeTurnId &&
+    presentedQueueDeliveries().length === 0 &&
+    !renderedAgentActivity() &&
+    !keyedPrompt()
+      ? props.agent
+      : undefined,
+  );
+  const sampleRoutinePrompt = () =>
+    props.routines?.find((routine) => routine.active && routine.instruction.trim())?.instruction ??
+    props.routines?.find((routine) => routine.instruction.trim())?.instruction;
+  // A skill of the agent's own: every agent has the managed OpenBot skills.
+  const sampleSkillName = () =>
+    installedSkills().find((skill) => skill.enabled !== false && skill.origin !== "managed")?.name;
   return (
     <>
       <span class="sr-only" role="status" aria-live="polite" aria-atomic="true">
@@ -486,7 +510,17 @@ export function ConversationTimeline() {
             <Show when={timelineMessages().length === 0}>
               <channel.EmptyState />
             </Show>
-          ) : null}
+          ) : (
+            <Show when={emptyAgent()}>
+              {(agent) => (
+                <AgentChatEmptyState
+                  agent={agent()}
+                  samplePrompt={sampleRoutinePrompt()}
+                  sampleSkillName={sampleSkillName()}
+                />
+              )}
+            </Show>
+          )}
           <div
             ref={setVirtualRootElement}
             class={["virtual-chat-list", { "virtual-chat-list-static": !messageVirtualizer.isVirtualized() }]}
