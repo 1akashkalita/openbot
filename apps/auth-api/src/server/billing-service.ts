@@ -333,7 +333,7 @@ export class BillingService {
       const licensePrice = licensePlan ? yield* this.license.price(licensePlan) : null;
       if (licensePlan && !licensePrice)
         return yield* new BillingError(503, "license_unavailable", sourceText("error.billing.licenseUnavailable"));
-      if (order) yield* this.license.assertCanOrder(request.user.id, order.users);
+      if (order) yield* this.license.assertCanOrder(request.user, order.users);
       yield* this.license.assertCurrency(request.user.id, request.currency);
       const customerId = yield* this.ensureCustomer(request.user);
       const returnUrl = checkoutReturnUrl(request.origin, request.target, request.serverId);

@@ -548,8 +548,9 @@ the tiers used the same lookup key. The license terms allow 3 devices for each u
 - A server create can order a license (`license: {tier, users}` in `POST /v2/hosting/servers`). The
   Worker refuses a Team license on a Starter server, and more Team users than the server plan has
   members (400 `invalid_hosted_server_request`). An account with an open license gets 409
-  `license_exists`, and fewer users than the people in use get 409 `license_users_in_use`, as a
-  license checkout does. One Checkout page then has 2 line items: the server price, and the license bundle
+  `license_exists`. The Worker also reads the customer's subscriptions in Stripe, because a paid order
+  has its license only there until the split. Fewer users than the people in use get 409
+  `license_users_in_use`, as a license checkout does. One Checkout page then has 2 line items: the server price, and the license bundle
   price for the same interval and currency, with the users as its quantity. The customer pays one
   invoice. On the first sync of the paid subscription, `LicenseService.splitOrder` makes a license
   subscription with the metadata `openbot_order_subscription` (the server subscription), anchored at

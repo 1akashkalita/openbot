@@ -34,13 +34,14 @@ const FIRST_SERVER: BillingPlanId = "standard";
 const FIRST_LICENSE: LicenseTier = "team";
 
 /**
- * A full page load, as the header's App link. The web app reads `start` after sign-in: a server alone opens the
- * add server dialog, and an order with a license opens Billing, which sells both.
+ * A full page load, as the header's App link. The web app reads `start` after sign-in: an order with a server
+ * opens the add server dialog, which sells the server and its license together, and a license alone opens
+ * Billing.
  */
 function OrderAction(props: { order: Accessor<OrderFormOrder> }) {
   const { t } = useText();
   const buying = () => props.order().server !== null || props.order().license !== null;
-  const start = () => (props.order().license === null ? "server" : "license");
+  const start = () => (props.order().server === null ? "license" : "server");
   const label = () => (props.order().server === null ? t("billing.order.cta.license") : t("billing.order.cta.server"));
   const download = () => (
     <ButtonLink to="/download" variant="secondary" size="md" icon="download" class="pricing-cta">

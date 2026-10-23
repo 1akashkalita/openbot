@@ -587,16 +587,27 @@ export class LicenseService {
 
   /**
    * Fails when a server order cannot buy this license: the account has an open license, or the license
-   * has fewer users than the people that it counts now, as a license checkout refuses.
+   * has fewer users than the people that it counts now, as a license checkout refuses. A paid server
+   * order has its license only in Stripe until the split, so Stripe is read too.
    */
   readonly assertCanOrder = Effect.fn("LicenseService.assertCanOrder")(
     function* (
       this: LicenseService,
-      userId: string,
+      user: { id: string; email: string },
       users: number,
     ): Effect.fn.Return<void, BillingError | BillingOperationError, LicenseDependencies> {
-      if (yield* this.hasLicense(userId)) return yield* licenseExists();
-      const { used } = yield* this.getState(userId);
+      const dependencies = yield* LicenseDependencies;
+      if (yield* this.hasLicense(user.id)) return yield* licenseExists();
+      const customerId = yield* this.#ensureCustomer(user);
+      const subscriptions = yield* this.#stripeCall(() => dependencies.stripe.listCustomerSubscriptions(customerId));
+      const open = subscriptions.some(
+        (subscription) =>
+          isOneOf(BILLING_SUBSCRIPTION_STATUSES, subscription.status) &&
+          isOpenBillingStatus(subscription.status) &&
+          subscriptionLicenseItem(subscription) !== null,
+      );
+      if (open) return yield* licenseExists();
+      const { used } = yield* this.getState(user.id);
       if (users < used)
         return yield* new BillingError(409, "license_users_in_use", sourceText("error.billing.licenseUsersInUse"));
     },
