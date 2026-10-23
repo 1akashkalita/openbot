@@ -193,6 +193,12 @@
   font-variant-numeric: tabular-nums;
 }
 
+.billing-license-notes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--openbot-space-1);
+}
+
 .billing-license-actions {
   display: flex;
   flex-wrap: wrap;

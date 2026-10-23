@@ -1,5 +1,6 @@
 import type { BillingCurrency, BillingPlanId } from "@openbot/contracts/billing";
 import type { HostedServerCatalog } from "@openbot/contracts/hosted-servers";
+import { LICENSE_PLAN_PRICES, LICENSE_SERVER_BUNDLE_PLANS } from "@openbot/contracts/license";
 import type { AppFormat, AppTextKey } from "@openbot/i18n";
 import {
   Badge,
@@ -14,6 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
   Server,
+  ShieldCheck,
   UsersRound,
 } from "@openbot/ui";
 import { createDigitRoll } from "@openbot/ui/digit-roll";
@@ -323,6 +325,19 @@ export function HostedServerPlans(props: HostedServerPlansProps) {
                 <li>
                   <HardDrive aria-hidden="true" />
                   {t("settings.hostedServers.plan.disk", { count: plan.diskGb })}
+                </li>
+                <li>
+                  <ShieldCheck aria-hidden="true" />
+                  <Show
+                    when={LICENSE_SERVER_BUNDLE_PLANS.includes(plan.id)}
+                    fallback={t("settings.hostedServers.plan.license.team")}
+                  >
+                    {t("settings.hostedServers.plan.license.starter", {
+                      price: price(
+                        LICENSE_PLAN_PRICES.server_month[HOSTED_BILLING_CURRENCY[props.currency]].base / 100,
+                      ),
+                    })}
+                  </Show>
                 </li>
                 <li>
                   <Gauge aria-hidden="true" />

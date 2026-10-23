@@ -13,6 +13,8 @@ export const messages = {
   "error.billing.licensePaymentFailed":
     "Eklenen kullanıcıların ödemesi başarısız oldu. Ödeme yöntemini güncelleyip tekrar deneyin.",
   "error.billing.licenseUnavailable": "Lisanslar şu anda kullanılamıyor.",
+  "error.billing.licenseOneUser": "Bu lisans 1 kullanıcı içindir. Kullanıcı eklemek için Team'e geçin.",
+  "error.billing.licensePlanChange": "Bu lisans o plana geçemez. Lisansı iptal edip yeni planı satın alın.",
   "error.billing.noLicense": "Bu hesabın lisansı yok.",
   "error.billing.invalidRequest": "Faturalandırma isteği geçersiz.",
   "error.billing.invalidResponse": "Faturalandırma yanıtı geçersiz.",

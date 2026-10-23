@@ -14,6 +14,9 @@ export const messages = {
   "error.billing.licensePaymentFailed":
     "Die Zahlung für die zusätzlichen Nutzer ist fehlgeschlagen. Aktualisieren Sie die Zahlungsmethode und versuchen Sie es erneut.",
   "error.billing.licenseUnavailable": "Lizenzen sind derzeit nicht verfügbar.",
+  "error.billing.licenseOneUser": "Diese Lizenz gilt für 1 Nutzer. Wechsle zu Team, um Nutzer hinzuzufügen.",
+  "error.billing.licensePlanChange":
+    "Diese Lizenz kann nicht zu diesem Tarif wechseln. Kündige sie und kaufe den neuen Tarif.",
   "error.billing.noLicense": "Dieses Konto hat keine Lizenz.",
   "error.billing.invalidRequest": "Die Abrechnungsanfrage ist ungültig.",
   "error.billing.invalidResponse": "Die Abrechnungsantwort ist ungültig.",

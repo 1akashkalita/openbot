@@ -384,8 +384,11 @@ export const messages = {
   "server.invite.showQr": "Einladungs-QR-Code anzeigen",
   "server.invite.permaHint":
     "Läuft nie ab und kann mehrfach verwendet werden. Jeder mit diesem Link kann beitreten. Widerrufe ihn, um ihn zu deaktivieren.",
-  "server.invite.full":
-    "Dieser Server hat die maximale Anzahl von {limit} Mitgliedern. Entferne ein Mitglied, um eine neue Person einzuladen.",
+  "server.invite.full": {
+    one: "Dieser Server hat die maximale Anzahl von {count} Mitglied. Entferne ein Mitglied, um eine neue Person einzuladen.",
+    other:
+      "Dieser Server hat die maximale Anzahl von {count} Mitgliedern. Entferne ein Mitglied, um eine neue Person einzuladen.",
+  },
   "server.invite.qrLabel": "Einladungs-QR-Code",
   "server.invite.qrDescription": "Scanne diesen Code in OpenBot Mobile, um diesem Server beizutreten.",
   "server.invite.accepted": "Einladung angenommen",

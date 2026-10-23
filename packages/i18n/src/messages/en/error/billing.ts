@@ -12,6 +12,8 @@ export const messages = defineMessages("error.billing", {
   "error.billing.licensePaymentFailed":
     "The payment for the added users failed. Update the payment method and try again.",
   "error.billing.licenseUnavailable": "Licenses are not available now.",
+  "error.billing.licenseOneUser": "This license is for 1 user. Change it to Team to add users.",
+  "error.billing.licensePlanChange": "This license cannot change to that plan. Cancel it and buy the new plan.",
   "error.billing.noLicense": "This account has no license.",
   // Billing errors that the desktop and web clients make.
   "error.billing.invalidRequest": "The billing request is invalid.",

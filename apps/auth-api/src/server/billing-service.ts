@@ -22,7 +22,7 @@ import type {
   HostedServerCatalogPlan,
   HostedServerEntryPoint,
 } from "@openbot/contracts/hosted-servers";
-import { LICENSE_METADATA, LICENSE_METADATA_KIND } from "@openbot/contracts/license";
+import { LICENSE_METADATA, LICENSE_METADATA_KIND, LICENSE_SERVER_BUNDLE_PLANS } from "@openbot/contracts/license";
 import { isDynamicRecord, isOneOf, isString } from "@openbot/contracts/runtime-values";
 import { sourceText } from "@openbot/i18n/source";
 import { Context, Effect, Layer } from "effect";
@@ -722,7 +722,13 @@ export class BillingService {
       // License events count as sales with `product: license`. The sync reports the license lifecycle.
       const sold: BillingSalesSynced | null =
         synced?.kind === "license"
-          ? { product: "license", userId: synced.userId, users: synced.users, currency: synced.currency }
+          ? {
+              product: "license",
+              userId: synced.userId,
+              users: synced.users,
+              interval: synced.interval,
+              currency: synced.currency,
+            }
           : synced;
       if (this.#sales) {
         yield* this.#sales.webhook(event, sold, payment).pipe(Effect.mapError(() => new BillingOperationError({})));
@@ -794,7 +800,7 @@ export class BillingService {
       action: paid ? "payment_succeeded" : "payment_failed",
       product: synced.kind === "license" ? "license" : "server",
       ...(synced.kind === "license" ? { users: synced.users } : { plan: synced.plan }),
-      interval: synced.kind === "license" ? "month" : synced.interval,
+      interval: synced.interval,
       currency: synced.currency,
       amount: currency === synced.currency && isBillingAmount(amount) ? amount : null,
     });
@@ -886,6 +892,9 @@ export class BillingService {
       latestInvoiceId: subscriptionLatestInvoiceId(subscription),
     };
     if (stored.meta.changes !== 1) return synced;
+    // A Starter server plan gives the 1-user license a lower price from its next renewal.
+    if (isOneOf(LICENSE_SERVER_BUNDLE_PLANS, key.plan) || isOneOf(LICENSE_SERVER_BUNDLE_PLANS, previous?.plan))
+      yield* this.license.alignOneUserPrice(ownerId);
     const current = { ...synced, amount, status: subscription.status, cancelAtPeriodEnd };
     const action = planChange(previous, current);
     // The other plans of an account whose plan starts. A failed read leaves them out: the subscription

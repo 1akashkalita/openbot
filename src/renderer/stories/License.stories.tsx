@@ -1,5 +1,5 @@
 import type { LicenseDesktopApi } from "@openbot/contracts/ipc";
-import { type License, type LicenseState, licenseAmount } from "@openbot/contracts/license";
+import { type License, type LicensePlan, type LicenseState, licenseMonthlyAmount } from "@openbot/contracts/license";
 import { BillingPanel } from "@openbot/ui/features/billing/BillingPanel";
 import { createBillingStore } from "@openbot/ui/features/billing/billing-store";
 import { LicenseSection } from "@openbot/ui/features/billing/LicenseSection";
@@ -13,12 +13,17 @@ const DAY = 24 * 60 * 60_000;
 /** Active server plans only, so the failed-payment alert of a server does not hide the license. */
 const SERVERS = previewBillingServers().filter((server) => server.status === "active");
 
-function license(users: number, change: Partial<License> = {}): License {
+function license(
+  users: number,
+  change: Partial<License> = {},
+  plan: LicensePlan = { tier: "team", interval: "month" },
+): License {
   return {
     subscriptionId: "sub_story_license",
     users,
     currency: "eur",
-    amount: licenseAmount(users, "eur"),
+    amount: licenseMonthlyAmount(plan, users, "eur"),
+    ...plan,
     status: "active",
     // One month after the story opens, so the renewal date is never in the past.
     currentPeriodEnd: Date.now() + 30 * DAY,
@@ -62,8 +67,37 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-/** No license. "Buy a license" opens the users, the price and "Continue to checkout". */
+/**
+ * No license, and 4 people use the owner's servers. "Buy a license" opens the tiers, the users, the
+ * price and "Continue to checkout". Starter is not available.
+ */
 export const Buy: Story = story({});
+
+/** No license, and only the owner. Starter is €30 a month for 1 user. */
+export const BuyStarter: Story = story({ used: 1, users: previewLicenseUsers().slice(0, 1) });
+
+/** No license, and the account pays for a Starter server. Starter is €20 a month. */
+export const BuyWithStarterServer: Story = story({
+  used: 1,
+  users: previewLicenseUsers().slice(0, 1),
+  serverPrice: true,
+});
+
+/** A Starter license. The row menu has Change to Team in place of Change users. */
+export const Starter: Story = story({
+  license: license(1, {}, { tier: "starter", interval: "month" }),
+  used: 1,
+  users: previewLicenseUsers().slice(0, 1),
+});
+
+/** A Starter license that 3 people use: the warning offers Change to Team. */
+export const StarterOverLimit: Story = story({
+  license: license(1, {}, { tier: "server", interval: "month" }),
+  used: 3,
+});
+
+/** A yearly Team license. The row shows the yearly price, and the menu has no Change to yearly. */
+export const TeamYearly: Story = story({ license: license(7, {}, { tier: "team", interval: "year" }) });
 
 /** 4 of 10 users. The row menu has Users, Change users, Update payment method and Cancel. */
 export const Active: Story = story({ license: license(10) });

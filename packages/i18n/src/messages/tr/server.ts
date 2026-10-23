@@ -385,7 +385,10 @@ export const messages = {
   "server.invite.showQr": "Davet QR kodunu göster",
   "server.invite.permaHint":
     "Süresi asla dolmaz ve birçok kez kullanılabilir. Bu bağlantıya sahip olan herkes katılabilir; devre dışı bırakmak için iptal edin.",
-  "server.invite.full": "Bu sunucu {limit} üye sınırına ulaştı. Yeni bir kişiyi davet etmek için bir üyeyi kaldırın.",
+  "server.invite.full": {
+    one: "Bu sunucu {count} üye sınırına ulaştı. Yeni bir kişiyi davet etmek için bir üyeyi kaldırın.",
+    other: "Bu sunucu {count} üye sınırına ulaştı. Yeni bir kişiyi davet etmek için bir üyeyi kaldırın.",
+  },
   "server.invite.qrLabel": "Davet QR kodu",
   "server.invite.qrDescription": "Bu sunucuya katılmak için bu kodu OpenBot Mobile uygulamasında tarayın.",
   "server.invite.accepted": "Davet kabul edildi",

@@ -42,7 +42,7 @@ export interface BillingPlan {
 
 /** The storage, members and speed of each plan. The amounts are Stripe Prices, not code. */
 export const BILLING_PLANS: readonly BillingPlan[] = [
-  { id: "starter", storageGb: 12, memberLimit: DEFAULT_TEAM_MEMBER_LIMIT, siteLimit: 3, relativeSpeed: 1 },
+  { id: "starter", storageGb: 12, memberLimit: 1, siteLimit: 3, relativeSpeed: 1 },
   { id: "standard", storageGb: 50, memberLimit: 10, siteLimit: 10, relativeSpeed: 2 },
   { id: "pro", storageGb: 100, memberLimit: 25, siteLimit: 50, relativeSpeed: 4 },
 ];

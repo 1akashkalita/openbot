@@ -92,9 +92,21 @@ export const messages = {
   "billing.license.ended": "La licenza è terminata il {date}.",
   "billing.license.buy": "Acquista una licenza",
   "billing.license.checkout": "Procedi al pagamento",
-  "billing.license.work.title": "Licenza aziendale",
   // {used} people use the license; it is paid for {users}.
   "billing.license.work.used": "{used} di {users} utenti",
+  "billing.license.tier.label": "Tipo di licenza",
+  "billing.license.tier.starter.name": "Starter",
+  "billing.license.tier.team.name": "Team",
+  "billing.license.tier.teamYear.name": "Team annuale",
+  "billing.license.tier.starter.title": "Licenza Starter",
+  "billing.license.tier.team.title": "Licenza Team",
+  "billing.license.devices": {
+    one: "Fino a {count} dispositivo per utente.",
+    other: "Fino a {count} dispositivi per utente.",
+  },
+  "billing.license.serverPrice": "Prezzo più basso perché paghi un server Starter.",
+  "billing.license.yearSaving": "Risparmia il {percent}% rispetto al mensile.",
+  "billing.license.starter.inUse": "{used} persone usano i tuoi server. Starter è per 1 utente.",
   "billing.license.users.label": "Utenti",
   "billing.license.users.add": "Aggiungi un utente",
   "billing.license.users.remove": "Rimuovi un utente",
@@ -106,17 +118,22 @@ export const messages = {
   "billing.license.line.extra": "{extra} in più × {price}",
   // {currency} is a currency code, for example "EUR".
   "billing.license.total.month": "/ mese, {currency}",
+  "billing.license.total.year": "/ anno, {currency}",
   "billing.license.contact.question": { one: "Più di {count} utente?", other: "Più di {count} utenti?" },
   "billing.license.contact.action": "Contattaci",
   "billing.license.action.menu": "Azioni sulla licenza",
   "billing.license.action.users": "Utenti",
   "billing.license.action.changeUsers": "Modifica utenti",
+  "billing.license.action.changeToTeam": "Passa a Team",
+  "billing.license.action.changeToYear": "Passa all'annuale",
   "billing.license.action.cancel": "Annulla licenza",
   "billing.license.action.renew": "Rinnova licenza",
   "billing.license.paymentFailed":
     "Un pagamento della licenza non è riuscito. Aggiorna il metodo di pagamento per mantenere la licenza.",
   "billing.license.overLimit":
     "{used} persone usano la licenza, ma è per {users} utenti. Le nuove persone non possono unirsi finché non aggiungi utenti alla licenza.",
+  "billing.license.overLimitOneUser":
+    "{used} persone usano la licenza, ma è per 1 utente. Passa a Team perché le nuove persone possano unirsi.",
   "billing.license.covered.title": "Coperto da una licenza",
   // {owners} is a list of names, for example "Ana and Jan".
   "billing.license.covered.description": "Il lavoro sui server di {owners} è coperto dalla loro licenza.",
@@ -130,6 +147,11 @@ export const messages = {
     other: "Per più di {count} utenti, concordiamo con te il prezzo e le condizioni.",
   },
   "billing.license.change.increase": "Paghi ora gli utenti aggiunti per il resto di questo mese.",
+  "billing.license.change.increaseYear": "Paghi ora gli utenti aggiunti per il resto di quest'anno.",
+  "billing.license.plan.teamDescription": "Team va da {min} a {max} utenti.",
+  "billing.license.plan.yearDescription": "Paga per un anno e risparmia il {percent}%.",
+  "billing.license.plan.confirm": "Cambia piano",
+  "billing.license.plan.charge": "Paghi ora la differenza per il resto di questo periodo.",
   "billing.license.change.decrease": "Il prezzo più basso parte dalla prossima fattura. Non è previsto alcun rimborso.",
   "billing.license.users.title": "Utenti della licenza",
   "billing.license.users.description": "{used} di {users} utenti. I membri dei tuoi server contano. Gli agenti IA no.",
@@ -144,6 +166,9 @@ export const messages = {
   "billing.license.invite.title": "Aggiungere un utente alla licenza?",
   "billing.license.invite.description": "Questo invito aggiunge 1 utente alla tua licenza: {price} in più al mese.",
   "billing.license.invite.confirm": "Aggiungi e invita",
+  "billing.license.invite.oneUser":
+    "La tua licenza è per 1 utente. Questo invito la cambia in Team per {users} utenti: {price} in più al mese.",
+  "billing.license.invite.confirmTeam": "Passa a Team e invita",
   "billing.license.invite.max": {
     one: "La tua licenza ha {count} utente, il massimo. Contattaci per una licenza più grande. Le nuove persone non possono unirsi ai tuoi server.",
     other:

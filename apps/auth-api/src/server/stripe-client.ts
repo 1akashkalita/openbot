@@ -64,6 +64,7 @@ const priceSchema = Schema.Struct({
   currency: Schema.String,
   unit_amount: Schema.NullOr(Schema.Int),
   currency_options: CurrencyOptions,
+  metadata: Metadata,
 });
 export type StripePrice = typeof priceSchema.Type;
 const priceListSchema = Schema.Struct({ data: Schema.Array(priceSchema) });
@@ -194,7 +195,8 @@ export class StripeClient {
   /**
    * Sets the quantity of one subscription item. With `always_invoice`, Stripe invoices the prorated
    * difference now and refuses the change when that payment fails, so the quantity never goes up unpaid.
-   * With `none`, the new quantity applies from the next invoice.
+   * With `none`, the new quantity applies from the next invoice. A `priceId` also moves the item to
+   * that Price, with the same proration.
    */
 
   readonly setSubscriptionQuantity = Effect.fn("StripeClient.setSubscriptionQuantity")(function* (
@@ -204,6 +206,7 @@ export class StripeClient {
       itemId: string;
       quantity: number;
       proration: "always_invoice" | "none";
+      priceId?: string;
       metadata?: Readonly<Record<string, string>>;
     },
   ): Effect.fn.Return<StripeSubscription, StripeRequestError | StripeTransportError> {
@@ -212,6 +215,7 @@ export class StripeClient {
       "items[0][quantity]": String(input.quantity),
       proration_behavior: input.proration,
     });
+    if (input.priceId) body.set("items[0][price]", input.priceId);
     for (const [key, value] of Object.entries(input.metadata ?? {})) body.set(`metadata[${key}]`, value);
     if (input.proration === "always_invoice") body.set("payment_behavior", "error_if_incomplete");
     return yield* this.#requestEffect(

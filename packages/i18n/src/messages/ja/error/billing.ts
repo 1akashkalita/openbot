@@ -14,6 +14,9 @@ export const messages = {
   "error.billing.licensePaymentFailed":
     "追加ユーザーの支払いに失敗しました。支払い方法を更新して、もう一度お試しください。",
   "error.billing.licenseUnavailable": "現在ライセンスは利用できません。",
+  "error.billing.licenseOneUser": "このライセンスは 1 ユーザー分です。ユーザーを追加するには Team に変更してください。",
+  "error.billing.licensePlanChange":
+    "このライセンスはそのプランに変更できません。解約してから新しいプランを購入してください。",
   "error.billing.noLicense": "このアカウントにはライセンスがありません。",
   "error.billing.invalidRequest": "お支払いのリクエストが無効です。",
   "error.billing.invalidResponse": "お支払いの応答が無効です。",

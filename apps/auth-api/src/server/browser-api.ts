@@ -4,6 +4,7 @@ import { parseHostedServerLifecycleInput } from "@openbot/contracts/hosted-serve
 import {
   LICENSE_UNAVAILABLE_STATE,
   parseLicenseCheckoutRequest,
+  parseLicensePlanRequest,
   parseLicenseRenewalRequest,
   parseLicenseUsersRequest,
 } from "@openbot/contracts/license";
@@ -355,6 +356,11 @@ const handleBilling = Effect.fn("BrowserApi.handleBilling")(function* (
     const input = parseLicenseUsersRequest(body);
     if (!input) return failure(400, "invalid_billing_request", "The billing request is invalid.");
     return json(yield* billing.license.setUsers(user.id, input.users));
+  }
+  if (path === "v1/me/license/plan") {
+    const input = parseLicensePlanRequest(body);
+    if (!input) return failure(400, "invalid_billing_request", "The billing request is invalid.");
+    return json(yield* billing.license.changePlan(user.id, input));
   }
   if (path === "v1/me/license/renewal") {
     const input = parseLicenseRenewalRequest(body);

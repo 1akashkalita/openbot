@@ -487,12 +487,36 @@ another place.
 ### Commercial license
 
 The license is a second Stripe product next to the server plans
-(`packages/contracts/src/license.ts`). One account has at most one open license. It is one monthly
-subscription with the lookup key `openbot_license_month` and a graduated price: the base covers 5
-users, then each extra user, up to 25. The amounts are in `LICENSE_PRICES` (EUR is the base
-currency; USD and PLN are `currency_options`). `stripe-bootstrap.ts` creates the price. The
-subscription quantity is the number of users.
+(`packages/contracts/src/license.ts`). One account has at most one open license. Its subscription
+quantity is the number of users. There are three tiers, one Stripe price for each plan
+(`LICENSE_PLANS`):
 
+| Plan | Lookup key | Price (EUR) | Users |
+| --- | --- | --- | --- |
+| Starter | `openbot_license_starter_month` | 30 / month | 1 |
+| Server (Starter with a Starter server) | `openbot_license_server_month` | 20 / month | 1 |
+| Team monthly | `openbot_license_month` | 80 / month for 5 users, + 15 for each extra user | 5–25 |
+| Team yearly | `openbot_license_year` | 12 months less 10% (`LICENSE_YEAR_DISCOUNT_PERCENT`) | 5–25 |
+
+The amounts are in `LICENSE_PLAN_PRICES` (EUR is the base currency; USD and PLN are
+`currency_options`). Team prices are graduated; the 1-user prices are flat. `stripe-bootstrap.ts`
+creates each price with the metadata `openbot_license_tier` and `openbot_license_interval`, and
+`licensePlanFromPrice` reads them. A price with no metadata is Team monthly: the license from before
+the tiers used the same lookup key. The license terms allow 3 devices for each user
+(`LICENSE_DEVICES_PER_USER`); the app shows this and does not count devices.
+
+- A checkout names `tier: "starter" | "team"` and `interval`. A request with no tier is Team monthly,
+  as an app before the tiers sends. The Worker sells `server` in place of `starter` when the account
+  pays for a server whose plan is in `LICENSE_SERVER_BUNDLE_PLANS`
+  (`accountHasServerBundlePlan`). After each server plan sync, `LicenseService.alignOneUserPrice`
+  moves an open 1-user license to the other price with `proration: none`, so the change starts at the
+  next renewal. It logs a Stripe failure and does not fail the sync.
+- The 1-user tiers refuse `POST /v1/me/license/users` with 409 `license_one_user`.
+  `POST /v1/me/license/plan` sells upgrades only: Starter or Server to Team monthly or yearly, and
+  Team monthly to yearly. It bills the difference now (`always_invoice`,
+  `payment_behavior=error_if_incomplete`). Any other change is 409 `license_plan_change`: to go down,
+  the owner cancels at the period end and buys again.
+- The `licenses` table stores `tier` and `billing_interval` (migration `0039`). NULL is Team monthly.
 - Users are people, not servers or computers: the owner, plus each distinct account that is an
   active member (`remote_memberships`) of a server that the owner owns. AI agents and chat-app
   participants do not count.
@@ -506,7 +530,7 @@ subscription quantity is the number of users.
   The billing webhook gives a subscription with the license lookup key to `LicenseService.sync` and
   writes nothing to `billing_subscriptions`. A Worker before the license sees an unknown plan and
   skips the event, so an old Worker keeps working.
-- Routes: `GET /v1/me/license`, and `POST /v1/me/license/checkout`, `/users` and `/renewal`. The
+- Routes: `GET /v1/me/license`, and `POST /v1/me/license/checkout`, `/users`, `/plan` and `/renewal`. The
   state is `available: false` only when the Worker has no billing, and the app then shows nothing.
   When Stripe has no active license price (it is archived to pause sales), checkout returns 503
   `license_unavailable`, and the app shows a toast with the sales address. An app on a Worker
@@ -523,7 +547,8 @@ subscription quantity is the number of users.
   webhook stops the new page with `license_exists`. A second open license can still come from the
   Stripe Dashboard; `sync` logs a warning, and a person refunds it.
 - When the owner of a full license creates an invite, the members section asks to add 1 user and
-  shows the extra price, then adds the user and creates the invite. At 25 users it shows "Contact
+  shows the extra price, then adds the user and creates the invite. A 1-user license changes to Team
+  monthly for 5 users in place of the added user. At 25 users it shows "Contact
   us" and creates no invite. Admins get no step; the join tells the person that the license is full.
 - Desktop calls the `license` IPC group; the web client calls the browser routes. Both render
   `@openbot/ui/features/billing/LicenseSection` in the license slot of `BillingPanel`.

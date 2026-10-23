@@ -15,6 +15,10 @@ export const messages = {
   "error.billing.licensePaymentFailed":
     "Le paiement des utilisateurs ajoutés a échoué. Mettez à jour le moyen de paiement et réessayez.",
   "error.billing.licenseUnavailable": "Les licences ne sont pas disponibles pour le moment.",
+  "error.billing.licenseOneUser":
+    "Cette licence est prévue pour 1 utilisateur. Passez à Team pour ajouter des utilisateurs.",
+  "error.billing.licensePlanChange":
+    "Cette licence ne peut pas passer à cette offre. Résiliez-la et achetez la nouvelle offre.",
   "error.billing.noLicense": "Ce compte n'a pas de licence.",
   "error.billing.invalidRequest": "La demande de facturation n’est pas valide.",
   "error.billing.invalidResponse": "La réponse de facturation n’est pas valide.",

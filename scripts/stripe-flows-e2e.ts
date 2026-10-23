@@ -22,7 +22,21 @@
  *
  * The `license-*` scenarios check the commercial license: its tiered Price, Checkout, users, the count
  * of people on the owner's servers, renewal, currency, and that the server plans do not change. They need
- * `bun run api:stripe:bootstrap` to have made the license Price in the sandbox.
+ * `bun run api:stripe:bootstrap` to have made the license Prices in the sandbox. A subscription made here
+ * with the license metadata stands for a paid license Checkout page, as for a server plan.
+ *
+ * The license tiers have their own scenarios:
+ * - `license-prices`: the 4 license lookup keys give active Prices with the tier, the interval and the
+ *   amounts of `LICENSE_PLAN_PRICES` in EUR, USD and PLN. No license key is a server plan key.
+ * - `license-starter`: a Starter license is 1 user at €30. It cannot change its users, and no member joins.
+ * - `license-bundle`: an account with a Starter server plan buys the Starter license at the server price
+ *   (€20). When the server plan ends, the license moves to the Starter price, and the next renewal is €30.
+ * - `license-team-year`: a yearly Team license of 7 users. The state, the invoice and the sales facts
+ *   show the yearly interval.
+ * - `license-upgrade`: Starter → Team monthly → Team yearly. A move to a lower plan is refused.
+ * - `license-legacy-request`: a checkout request from an app before the tiers buys Team monthly (€80).
+ * - `license-member-limits`: a new Starter hosted server takes 1 member (the owner). A server made before
+ *   the 1-member limit (`legacy_starter_members = 1`) takes 3.
  */
 import { spawnSync } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
@@ -30,13 +44,27 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
-import { BILLING_CURRENCIES, type BillingPortalRequest } from "@openbot/contracts/billing";
 import {
-  LICENSE_PRICES,
+  BILLING_CURRENCIES,
+  type BillingCurrency,
+  type BillingPortalRequest,
+  parseBillingLookupKey,
+} from "@openbot/contracts/billing";
+import {
+  LICENSE_LOOKUP_KEYS,
+  LICENSE_METADATA,
+  LICENSE_METADATA_KIND,
+  LICENSE_PLANS,
   type LicenseCheckoutRequest,
+  type LicensePlan,
+  type LicensePlanRequest,
   type LicenseRenewalRequest,
   type LicenseUsersRequest,
-  licenseAmount,
+  licenseIncludedUsers,
+  licenseLookupKey,
+  licenseMonthlyAmount,
+  licensePeriodAmount,
+  licensePlanPrices,
 } from "@openbot/contracts/license";
 import { type Browser, chromium } from "playwright-core";
 import { z } from "zod";
@@ -69,9 +97,20 @@ const SCENARIOS = [
   "license-currency",
   "license-isolation",
   "license-limit",
+  "license-prices",
+  "license-starter",
+  "license-bundle",
+  "license-team-year",
+  "license-upgrade",
+  "license-legacy-request",
+  "license-member-limits",
 ] as const;
 type Scenario = (typeof SCENARIOS)[number];
 const DAY = 86_400;
+const STARTER_MONTH: LicensePlan = { tier: "starter", interval: "month" };
+const SERVER_MONTH: LicensePlan = { tier: "server", interval: "month" };
+const TEAM_MONTH: LicensePlan = { tier: "team", interval: "month" };
+const TEAM_YEAR: LicensePlan = { tier: "team", interval: "year" };
 /** `WELCOME_EMAIL_CLAIM_PREFIX` of `billing-service.ts`. That module needs the Worker types. */
 const WELCOME_EMAIL_CLAIM_PREFIX = "openbot_welcome_email:";
 
@@ -163,6 +202,8 @@ const licenseStateSchema = z.object({
       users: z.number(),
       currency: z.string(),
       amount: z.number(),
+      tier: z.string().optional(),
+      interval: z.string().optional(),
       status: z.string(),
       currentPeriodEnd: z.number().nullable(),
       cancelAtPeriodEnd: z.boolean(),
@@ -173,6 +214,7 @@ const licenseStateSchema = z.object({
     z.object({ name: z.string().nullable(), email: z.string(), servers: z.array(z.string()), owner: z.boolean() }),
   ),
   coveredBy: z.array(z.object({ ownerName: z.string().nullable(), ownerEmail: z.string() })),
+  serverPrice: z.boolean().optional(),
 });
 type LicenseView = z.infer<typeof licenseStateSchema>;
 const licenseCheckoutSchema = z.object({ url: z.string() });
@@ -183,20 +225,47 @@ const tierSchema = z.object({
 });
 const licensePriceSchema = z.object({
   id: z.string(),
+  active: z.boolean(),
+  lookup_key: z.string().nullable(),
   currency: z.string(),
+  unit_amount: z.number().nullable(),
   tiers_mode: z.string().nullable(),
   tiers: z.array(tierSchema).optional(),
-  currency_options: z.record(z.string(), z.object({ tiers: z.array(tierSchema).optional() })).optional(),
+  recurring: z.object({ interval: z.string() }).nullable(),
+  metadata: z.record(z.string(), z.string()),
+  currency_options: z
+    .record(
+      z.string(),
+      z.object({ unit_amount: z.number().nullable().optional(), tiers: z.array(tierSchema).optional() }),
+    )
+    .optional(),
 });
+type LicensePriceView = z.infer<typeof licensePriceSchema>;
 const checkoutLinesSchema = z.object({
   status: z.string().nullable(),
   currency: z.string().nullable(),
+  metadata: z.record(z.string(), z.string()).nullable(),
   line_items: z.object({
     data: z.array(
-      z.object({ quantity: z.number().nullable(), price: z.object({ lookup_key: z.string().nullable() }) }),
+      z.object({
+        quantity: z.number().nullable(),
+        price: z.object({ id: z.string(), lookup_key: z.string().nullable() }),
+      }),
     ),
   }),
 });
+const licenseItemSchema = z.object({
+  items: z.object({
+    data: z.array(
+      z.object({
+        quantity: z.number().nullable().optional(),
+        price: z.object({ id: z.string(), lookup_key: z.string().nullable() }),
+      }),
+    ),
+  }),
+});
+const licenseRowSchema = z.object({ tier: z.string().nullable(), billing_interval: z.string().nullable() });
+const hostListSchema = z.object({ hosts: z.array(z.object({ hostId: z.string(), memberLimit: z.number() })) });
 
 /** The request bodies of the browser API routes that this check calls. */
 type BrowserApiBody =
@@ -205,6 +274,7 @@ type BrowserApiBody =
   | BillingPortalRequest
   | LicenseCheckoutRequest
   | LicenseUsersRequest
+  | LicensePlanRequest
   | LicenseRenewalRequest
   | { role: "member"; reactivate?: true }
   | { token: string }
@@ -331,6 +401,8 @@ class Account {
         `DELETE FROM licenses WHERE user_id = ${id}`,
         // The servers and members that a license scenario adds. Deleting a host deletes its memberships.
         `DELETE FROM remote_hosts WHERE host_id LIKE ${quote(`e2e-${this.scenario}-%`)}`,
+        // The hosts that a scenario adds for its hosted servers have the server ID.
+        `DELETE FROM remote_hosts WHERE owner_user_id = ${id}`,
         `DELETE FROM users WHERE id LIKE ${quote(`${this.id}-member-%`)}`,
         `DELETE FROM billing_customers WHERE user_id = ${id}`,
         `DELETE FROM auth_sessions WHERE user_id = ${id}`,
@@ -467,20 +539,38 @@ class Account {
   }
 
   /**
-   * Buys a license as a completed Checkout page does: a subscription of the license Price, with the
-   * user count as its quantity and the license metadata.
+   * Buys a license as a completed Checkout page does: a subscription of the Price of the plan, with the
+   * user count as its quantity and the license metadata that the Worker puts on the Checkout page.
    */
-  async buyLicense(users: number, currency: "eur" | "usd" | "pln" = "eur") {
+  async buyLicense(users: number, currency: BillingCurrency = "eur", plan: LicensePlan = TEAM_MONTH) {
     const created = await stripe("POST", "/v1/subscriptions", idSchema, {
       customer: this.customer,
-      "items[0][price]": await priceId("license", "month"),
+      "items[0][price]": await licensePriceId(plan),
       "items[0][quantity]": String(users),
       currency,
       "metadata[openbot_user_id]": this.id,
-      "metadata[openbot_kind]": "license",
+      [`metadata[${LICENSE_METADATA.kind}]`]: LICENSE_METADATA_KIND,
+      [`metadata[${LICENSE_METADATA.tier}]`]: plan.tier,
+      [`metadata[${LICENSE_METADATA.interval}]`]: plan.interval,
       payment_behavior: "error_if_incomplete",
     });
     return created.id;
+  }
+
+  /**
+   * Adds the Remote host of a hosted server, with the owner's membership, as the server does when it
+   * publishes its host. A local Worker has no VM that publishes it.
+   */
+  hostServer(serverId: string, name: string) {
+    const now = Date.now();
+    d1(
+      `INSERT OR IGNORE INTO remote_hosts(host_id, owner_user_id, name, created_at, updated_at)
+       VALUES (${quote(serverId)}, ${quote(this.id)}, ${quote(name)}, ${now}, ${now});
+       INSERT INTO remote_memberships(membership_id, host_id, user_id, role, status, created_at, updated_at)
+       SELECT ${quote(crypto.randomUUID())}, ${quote(serverId)}, ${quote(this.id)}, 'owner', 'active', ${now}, ${now}
+       WHERE NOT EXISTS(SELECT 1 FROM remote_memberships WHERE host_id = ${quote(serverId)} AND user_id = ${quote(this.id)})`,
+      z.unknown(),
+    );
   }
 
   /**
@@ -550,9 +640,12 @@ class Account {
 
   /** A member opens a new member invitation of the server at this `addServers` index. */
   async memberJoins(key: string, server: number) {
-    const invite = await this.request("POST", `v2/remote/hosts/e2e-${this.scenario}-${server}/invites`, {
-      role: "member",
-    });
+    return this.joinHost(key, `e2e-${this.scenario}-${server}`);
+  }
+
+  /** A member opens a new member invitation of the host with this ID. */
+  async joinHost(key: string, hostId: string) {
+    const invite = await this.request("POST", `v2/remote/hosts/${hostId}/invites`, { role: "member" });
     const token = z.object({ token: z.string() }).parse(invite.body).token;
     return this.request("POST", "v2/remote/invites/accept", { token }, {}, this.memberSession(key));
   }
@@ -734,8 +827,17 @@ async function connectWeb(account: Account, serverId: string, name: string, scre
 }
 
 const priceIds = new Map<string, string>();
-async function priceId(plan: string, interval: string): Promise<string> {
-  const key = `openbot_${plan}_${interval}`;
+/** The active Price of a server plan and interval. */
+function priceId(plan: string, interval: string): Promise<string> {
+  return priceIdByLookupKey(`openbot_${plan}_${interval}`);
+}
+
+/** The active Price of a license plan. Team monthly keeps the key of the license from before the tiers. */
+function licensePriceId(plan: LicensePlan): Promise<string> {
+  return priceIdByLookupKey(licenseLookupKey(plan));
+}
+
+async function priceIdByLookupKey(key: string): Promise<string> {
   const cached = priceIds.get(key);
   if (cached) return cached;
   const list = await stripe("GET", "/v1/prices", z.object({ data: z.array(idSchema) }), {
@@ -797,6 +899,17 @@ function facts(invoiceId: string) {
      WHERE invoice_id = ${quote(invoiceId)} ORDER BY event_timestamp, source_key`,
     factSchema,
   );
+}
+
+const factAttributesSchema = z.object({ product: z.string().optional(), interval: z.string().optional() });
+
+/** The product and interval of a sales fact, or null for a value that is not JSON. */
+function factAttributes(json: string) {
+  try {
+    return factAttributesSchema.safeParse(JSON.parse(json)).data ?? null;
+  } catch {
+    return null;
+  }
 }
 
 /** True when the Worker records sales facts: the paid invoice gets its fact soon after the payment. */
@@ -930,6 +1043,93 @@ async function expireCheckout(url: string) {
 /** The amount of the latest invoice of a subscription. */
 async function latestInvoiceAmount(subscriptionId: string) {
   return (await invoices(subscriptionId))[0]?.amount ?? null;
+}
+
+/** The Price of a license plan, with its tiers or its amount in each currency. */
+async function licensePrice(plan: LicensePlan): Promise<LicensePriceView> {
+  const expand: Record<string, string> =
+    plan.tier === "team"
+      ? { "expand[0]": "tiers", "expand[1]": "currency_options.usd.tiers", "expand[2]": "currency_options.pln.tiers" }
+      : { "expand[0]": "currency_options" };
+  return stripe("GET", `/v1/prices/${await licensePriceId(plan)}`, licensePriceSchema, expand);
+}
+
+/**
+ * True when the Price sells the plan as `stripe-bootstrap.ts` makes it: its lookup key and metadata, and
+ * the amounts of `LICENSE_PLAN_PRICES`. A Team Price is graduated: the base for the included users, then
+ * each extra user. A 1-user Price is a flat amount.
+ */
+function licensePriceMatches(price: LicensePriceView, plan: LicensePlan): boolean {
+  const amounts = licensePlanPrices(plan);
+  if (
+    !amounts ||
+    !price.active ||
+    price.lookup_key !== licenseLookupKey(plan) ||
+    price.currency !== "eur" ||
+    price.recurring?.interval !== plan.interval ||
+    price.metadata[LICENSE_METADATA.kind] !== LICENSE_METADATA_KIND ||
+    price.metadata[LICENSE_METADATA.tier] !== plan.tier ||
+    price.metadata[LICENSE_METADATA.interval] !== plan.interval
+  )
+    return false;
+  if (plan.tier !== "team")
+    return BILLING_CURRENCIES.every(
+      (currency) =>
+        (currency === "eur" ? price.unit_amount : price.currency_options?.[currency]?.unit_amount) ===
+        amounts[currency].base,
+    );
+  return (
+    price.tiers_mode === "graduated" &&
+    BILLING_CURRENCIES.every((currency) => {
+      const [base, extra] = (currency === "eur" ? price.tiers : price.currency_options?.[currency]?.tiers) ?? [];
+      return (
+        base?.up_to === licenseIncludedUsers(plan.tier) &&
+        base.flat_amount === amounts[currency].base &&
+        (base.unit_amount ?? 0) === 0 &&
+        extra?.up_to === null &&
+        extra.unit_amount === amounts[currency].extraUser
+      );
+    })
+  );
+}
+
+/** The Price and quantity of the license item of a subscription in Stripe. */
+async function licenseItem(subscriptionId: string) {
+  return (await stripe("GET", `/v1/subscriptions/${subscriptionId}`, licenseItemSchema)).items.data[0] ?? null;
+}
+
+/** The tier and interval that D1 stores for a license. */
+function licenseRow(subscriptionId: string) {
+  return (
+    d1(
+      `SELECT tier, billing_interval FROM licenses WHERE stripe_subscription_id = ${quote(subscriptionId)}`,
+      licenseRowSchema,
+    )[0] ?? null
+  );
+}
+
+/** The member limit that the account's host list shows for this host. */
+async function hostMemberLimit(account: Account, hostId: string) {
+  const listed = hostListSchema.safeParse((await account.request("GET", "v2/remote/hosts")).body).data;
+  return listed?.hosts.find((host) => host.hostId === hostId)?.memberLimit ?? null;
+}
+
+/** The `legacy_starter_members` value of a hosted server row. */
+function legacyStarterMembers(serverId: string) {
+  return (
+    d1(
+      `SELECT legacy_starter_members FROM hosted_servers WHERE server_id = ${quote(serverId)}`,
+      z.object({ legacy_starter_members: z.number() }),
+    )[0]?.legacy_starter_members ?? null
+  );
+}
+
+/** The Checkout Session of a license page, with its line and metadata. */
+function licenseSession(url: string) {
+  return stripe("GET", `/v1/checkout/sessions/${checkoutSessionId(url)}`, checkoutLinesSchema, {
+    "expand[0]": "line_items",
+    "expand[1]": "line_items.data.price",
+  });
 }
 
 const scenarios: Record<Scenario, (account: Account) => Promise<void>> = {
@@ -1664,33 +1864,18 @@ const scenarios: Record<Scenario, (account: Account) => Promise<void>> = {
   },
 
   async "license-buy"(account) {
-    const price = await stripe("GET", `/v1/prices/${await priceId("license", "month")}`, licensePriceSchema, {
-      "expand[0]": "tiers",
-      "expand[1]": "currency_options.usd.tiers",
-      "expand[2]": "currency_options.pln.tiers",
-    });
-    const tiers = {
-      eur: price.tiers,
-      usd: price.currency_options?.usd?.tiers,
-      pln: price.currency_options?.pln?.tiers,
-    };
+    const price = await licensePrice(TEAM_MONTH);
     record(
       "license-buy",
-      "the license Price is graduated, with the base and extra-user tiers of LICENSE_PRICES in EUR, USD and PLN",
-      price.currency === "eur" &&
-        price.tiers_mode === "graduated" &&
-        BILLING_CURRENCIES.every((currency) => {
-          const amounts = LICENSE_PRICES[currency];
-          const [base, extra] = tiers[currency] ?? [];
-          return (
-            base?.up_to === 5 &&
-            base.flat_amount === amounts.base &&
-            (base.unit_amount ?? 0) === 0 &&
-            extra?.up_to === null &&
-            extra.unit_amount === amounts.extraUser
-          );
-        }),
-      tiers,
+      "the Team monthly Price is graduated, with the base and extra-user tiers of LICENSE_PLAN_PRICES in EUR, USD and PLN",
+      licensePriceMatches(price, TEAM_MONTH),
+      {
+        lookupKey: price.lookup_key,
+        metadata: price.metadata,
+        eur: price.tiers,
+        usd: price.currency_options?.usd?.tiers,
+        pln: price.currency_options?.pln?.tiers,
+      },
     );
     const before = await account.license();
     record(
@@ -1703,17 +1888,19 @@ const scenarios: Record<Scenario, (account: Account) => Promise<void>> = {
     const bought = await licenseWhere(account, "license active", (state) => state.license?.status === "active");
     record(
       "license-buy",
-      "7 users in EUR: the license shows 7 users and the list price €130",
+      "7 users in EUR: the license shows Team monthly, 7 users and the list price €110",
       bought.license?.users === 7 &&
         bought.license.currency === "eur" &&
-        bought.license.amount === licenseAmount(7, "eur") &&
+        bought.license.amount === licensePeriodAmount(TEAM_MONTH, 7, "eur") &&
+        bought.license.tier === "team" &&
+        bought.license.interval === "month" &&
         bought.currency === "eur",
       bought,
     );
     record(
       "license-buy",
       "Stripe charged the tiered amount for 7 users",
-      (await latestInvoiceAmount(sub)) === licenseAmount(7, "eur"),
+      (await latestInvoiceAmount(sub)) === licensePeriodAmount(TEAM_MONTH, 7, "eur"),
       await invoices(sub),
     );
     const plans = await account.billing();
@@ -1749,7 +1936,7 @@ const scenarios: Record<Scenario, (account: Account) => Promise<void>> = {
       opened.status === 200 &&
         new URL(url).host === "checkout.stripe.com" &&
         line?.quantity === 7 &&
-        line.price.lookup_key === "openbot_license_month" &&
+        line.price.lookup_key === licenseLookupKey(TEAM_MONTH) &&
         session?.currency === "eur",
       { status: opened.status, code: opened.code, session: session && { status: session.status, line } },
     );
@@ -2136,6 +2323,359 @@ const scenarios: Record<Scenario, (account: Account) => Promise<void>> = {
       "the license ends: the server row does not change",
       stillStopped?.desired_state === "stopped" && stillStopped.deleted_at === null,
       { license: licenseEnded.license, row: stillStopped },
+    );
+  },
+
+  async "license-prices"() {
+    for (const plan of LICENSE_PLANS) {
+      const price = await licensePrice(plan);
+      record(
+        "license-prices",
+        `${licenseLookupKey(plan)}: an active Price of the ${plan.tier} tier, each ${plan.interval}, with the amounts of LICENSE_PLAN_PRICES in EUR, USD and PLN`,
+        licensePriceMatches(price, plan),
+        {
+          id: price.id,
+          active: price.active,
+          lookupKey: price.lookup_key,
+          interval: price.recurring?.interval ?? null,
+          metadata: price.metadata,
+          unitAmount: price.unit_amount,
+          tiers: price.tiers ?? null,
+          currencyOptions: price.currency_options ?? null,
+        },
+      );
+    }
+    const keys = LICENSE_PLANS.map(licenseLookupKey);
+    const parsed = LICENSE_LOOKUP_KEYS.map((key) => ({ key, parsed: parseBillingLookupKey(key) }));
+    record(
+      "license-prices",
+      "the 4 license keys are the released Team monthly key and 3 new keys, and none is a server plan key",
+      keys.join(",") ===
+        "openbot_license_starter_month,openbot_license_server_month,openbot_license_month,openbot_license_year" &&
+        parsed.every((entry) => entry.parsed === null),
+      { keys, parsed },
+    );
+  },
+
+  async "license-starter"(account) {
+    // A server with no plan takes 3 members, so only the license can stop a join.
+    account.addServers([{ name: "Solo", members: [] }]);
+    const sub = await account.buyLicense(1, "eur", STARTER_MONTH);
+    const bought = await licenseWhere(account, "license active", (state) => state.license?.status === "active");
+    const paid = await invoices(sub);
+    const amount = licensePeriodAmount(STARTER_MONTH, 1, "eur");
+    record(
+      "license-starter",
+      "Starter in EUR: the license shows the starter tier, monthly, 1 user and €30, and Stripe charged €30",
+      bought.license?.tier === "starter" &&
+        bought.license.interval === "month" &&
+        bought.license.users === 1 &&
+        bought.license.amount === amount &&
+        bought.used === 1 &&
+        bought.serverPrice === false &&
+        paid[0]?.amount === amount,
+      {
+        license: bought.license,
+        used: bought.used,
+        serverPrice: bought.serverPrice,
+        invoices: paid,
+        row: licenseRow(sub),
+      },
+    );
+    const more = await account.request("POST", "v1/me/license/users", { users: 6 });
+    const after = await account.license();
+    record(
+      "license-starter",
+      "a Starter license cannot change its users: 409 license_one_user, and the license keeps 1 user",
+      more.status === 409 && more.code === "license_one_user" && after.license?.users === 1,
+      { status: more.status, code: more.code, users: after.license?.users },
+    );
+    const refused = await account.memberJoins("new", 0);
+    record(
+      "license-starter",
+      "1 of 1 users: a member cannot join the owner's server, 409 license_users_full",
+      refused.status === 409 && refused.code === "license_users_full",
+      { status: refused.status, code: refused.code },
+    );
+  },
+
+  async "license-bundle"(account) {
+    const before = await account.license();
+    const { server } = await account.createServer("Bundle");
+    const planSub = await account.pay(server.serverId);
+    await planWhere(account, planSub, "plan", () => true);
+    const bundled = await licenseWhere(account, "server price", (state) => state.serverPrice === true);
+    record(
+      "license-bundle",
+      "an account with no server plan has no server price, and a Starter server plan gives it",
+      before.serverPrice === false && bundled.serverPrice === true,
+      { before: before.serverPrice, after: bundled.serverPrice },
+    );
+    const opened = await account.request("POST", "v1/me/license/checkout", {
+      users: 1,
+      currency: "eur",
+      tier: "starter",
+    });
+    const url = licenseCheckoutSchema.safeParse(opened.body).data?.url ?? "";
+    const session = url ? await licenseSession(url) : null;
+    const line = session?.line_items.data[0];
+    record(
+      "license-bundle",
+      "a Starter checkout gives a page for the server Price, 1 user, with the server tier metadata",
+      opened.status === 200 &&
+        line?.quantity === 1 &&
+        line.price.lookup_key === licenseLookupKey(SERVER_MONTH) &&
+        session?.metadata?.[LICENSE_METADATA.tier] === "server" &&
+        session.metadata[LICENSE_METADATA.interval] === "month",
+      { status: opened.status, code: opened.code, line, metadata: session?.metadata ?? null },
+    );
+    if (url) await expireCheckout(url);
+    const sub = await account.buyLicense(1, "eur", SERVER_MONTH);
+    const bought = await licenseWhere(account, "license active", (state) => state.license?.status === "active");
+    const paid = await invoices(sub);
+    const serverAmount = licensePeriodAmount(SERVER_MONTH, 1, "eur");
+    record(
+      "license-bundle",
+      "the license is the server tier at €20, and Stripe charged €20",
+      bought.license?.tier === "server" && bought.license.amount === serverAmount && paid[0]?.amount === serverAmount,
+      { license: bought.license, invoices: paid },
+    );
+
+    // The server plan ends. Its sync moves the license to the Starter Price with no proration.
+    await stripe("DELETE", `/v1/subscriptions/${planSub}`, idSchema);
+    await rowWhere(account, server.serverId, "plan ended", (row) => row.desired_state === "stopped");
+    const moved = await waitFor(
+      "license on the Starter Price",
+      async () => {
+        const item = await licenseItem(sub);
+        return item?.price.lookup_key === licenseLookupKey(STARTER_MONTH) ? item : null;
+      },
+      120_000,
+    ).catch(() => null);
+    const starter = await licenseWhere(
+      account,
+      "starter tier",
+      (state) => state.license?.tier === "starter",
+      30_000,
+    ).catch(() => null);
+    const afterMove = await invoices(sub);
+    const starterAmount = licensePeriodAmount(STARTER_MONTH, 1, "eur");
+    record(
+      "license-bundle",
+      "the server plan ends: alignOneUserPrice moves the subscription item to the Starter Price with no new invoice, and the state shows the starter tier at €30 and no server price",
+      moved !== null &&
+        starter?.license?.amount === starterAmount &&
+        starter.serverPrice === false &&
+        afterMove.length === paid.length,
+      { item: moved, license: starter?.license ?? null, serverPrice: starter?.serverPrice, invoices: afterMove },
+    );
+    await account.advance(32);
+    const renewed = await waitFor(
+      "license renewal invoice",
+      async () => {
+        const list = await invoices(sub);
+        return list.length > afterMove.length && list[0]?.status === "paid" ? list : null;
+      },
+      120_000,
+    );
+    record(
+      "license-bundle",
+      "the test clock passes the period end: the renewal invoice is the Starter price, €30",
+      renewed[0]?.reason === "subscription_cycle" && renewed[0].amount === starterAmount,
+      { invoices: renewed },
+    );
+  },
+
+  async "license-team-year"(account) {
+    const sub = await account.buyLicense(7, "eur", TEAM_YEAR);
+    const bought = await licenseWhere(account, "license active", (state) => state.license?.status === "active");
+    const periodEnd = bought.license?.currentPeriodEnd ?? 0;
+    record(
+      "license-team-year",
+      "7 users yearly in EUR: the state shows Team, yearly, 7 users, a twelfth of the year as the monthly amount, and a period of about a year",
+      bought.license?.tier === "team" &&
+        bought.license.interval === "year" &&
+        bought.license.users === 7 &&
+        bought.license.amount === licenseMonthlyAmount(TEAM_YEAR, 7, "eur") &&
+        periodEnd - Date.now() > 300 * DAY * 1_000,
+      bought.license,
+    );
+    const paid = await invoices(sub);
+    record(
+      "license-team-year",
+      "Stripe charged the yearly amount of licensePeriodAmount for 7 users",
+      paid[0]?.amount === licensePeriodAmount(TEAM_YEAR, 7, "eur"),
+      paid,
+    );
+    const row = licenseRow(sub);
+    record(
+      "license-team-year",
+      "D1 stores the tier team and the interval year",
+      row?.tier === "team" && row.billing_interval === "year",
+      row,
+    );
+    const invoice = (await subscription(sub)).latest_invoice;
+    if (invoice && (await recordsSales(invoice))) {
+      const recorded = facts(invoice);
+      record(
+        "license-team-year",
+        "the payment sales fact is a license with the interval year",
+        recorded.some((fact) => {
+          const attributes = factAttributes(fact.attributes_json);
+          return (
+            fact.fact_type === "payment_succeeded" &&
+            attributes?.product === "license" &&
+            attributes.interval === "year"
+          );
+        }),
+        recorded,
+      );
+    } else {
+      print("SKIP [license-team-year] sales facts: the Worker has no OpenPanel client");
+    }
+  },
+
+  async "license-upgrade"(account) {
+    const sub = await account.buyLicense(1, "eur", STARTER_MONTH);
+    await licenseWhere(account, "license active", (state) => state.license?.status === "active");
+    const start = await invoices(sub);
+    const toMonth = await account.request("POST", "v1/me/license/plan", { interval: "month", users: 5 });
+    const month = licenseStateSchema.safeParse(toMonth.body).data?.license ?? null;
+    const monthItem = await licenseItem(sub);
+    const monthInvoices = await invoices(sub);
+    record(
+      "license-upgrade",
+      "Starter → Team monthly with 5 users: 200, Team monthly at €80 in the state, the Team monthly Price in Stripe, and one paid invoice now",
+      toMonth.status === 200 &&
+        month?.tier === "team" &&
+        month.interval === "month" &&
+        month.users === 5 &&
+        month.amount === licensePeriodAmount(TEAM_MONTH, 5, "eur") &&
+        monthItem?.price.lookup_key === licenseLookupKey(TEAM_MONTH) &&
+        monthItem.quantity === 5 &&
+        monthInvoices.length === start.length + 1 &&
+        monthInvoices[0]?.status === "paid" &&
+        monthInvoices[0].amount > 0,
+      { status: toMonth.status, code: toMonth.code, license: month, item: monthItem, invoices: monthInvoices },
+    );
+    const toYear = await account.request("POST", "v1/me/license/plan", { interval: "year", users: 5 });
+    const year = licenseStateSchema.safeParse(toYear.body).data?.license ?? null;
+    const yearItem = await licenseItem(sub);
+    const yearInvoices = await invoices(sub);
+    const row = licenseRow(sub);
+    record(
+      "license-upgrade",
+      "Team monthly → Team yearly: 200, Team yearly in the state and in D1, the Team yearly Price in Stripe, and one paid invoice now",
+      toYear.status === 200 &&
+        year?.tier === "team" &&
+        year.interval === "year" &&
+        year.users === 5 &&
+        yearItem?.price.lookup_key === licenseLookupKey(TEAM_YEAR) &&
+        yearInvoices.length === monthInvoices.length + 1 &&
+        yearInvoices[0]?.status === "paid" &&
+        row?.tier === "team" &&
+        row.billing_interval === "year",
+      { status: toYear.status, code: toYear.code, license: year, item: yearItem, invoices: yearInvoices, row },
+    );
+    const down = await account.request("POST", "v1/me/license/plan", { interval: "month", users: 5 });
+    const after = await account.license();
+    const afterItem = await licenseItem(sub);
+    record(
+      "license-upgrade",
+      "Team yearly → Team monthly: 409 license_plan_change, and the license stays yearly",
+      down.status === 409 &&
+        down.code === "license_plan_change" &&
+        after.license?.interval === "year" &&
+        afterItem?.price.lookup_key === licenseLookupKey(TEAM_YEAR),
+      { status: down.status, code: down.code, license: after.license, item: afterItem },
+    );
+  },
+
+  async "license-legacy-request"(account) {
+    // The body of an app from before the tiers: no tier and no interval.
+    const opened = await account.request("POST", "v1/me/license/checkout", { users: 5, currency: "eur" });
+    const url = licenseCheckoutSchema.safeParse(opened.body).data?.url ?? "";
+    const session = url ? await licenseSession(url) : null;
+    const line = session?.line_items.data[0];
+    record(
+      "license-legacy-request",
+      "a request with only users and currency gives a page for the Team monthly Price, 5 users in EUR, with the team and month metadata",
+      opened.status === 200 &&
+        line?.quantity === 5 &&
+        line.price.id === (await licensePriceId(TEAM_MONTH)) &&
+        session?.currency === "eur" &&
+        session.metadata?.[LICENSE_METADATA.tier] === "team" &&
+        session.metadata[LICENSE_METADATA.interval] === "month",
+      { status: opened.status, code: opened.code, line, metadata: session?.metadata ?? null },
+    );
+    if (REAL_CHECKOUT) {
+      await payCheckout(url, account.api, "license-legacy-e2e-checkout.png");
+    } else {
+      await expireCheckout(url);
+      await account.buyLicense(5, "eur", TEAM_MONTH);
+    }
+    const bought = await licenseWhere(
+      account,
+      "license active",
+      (state) => state.license?.status === "active",
+      120_000,
+    );
+    const sub = bought.license?.subscriptionId ?? null;
+    const paid = sub ? await invoices(sub) : [];
+    const base = licensePeriodAmount(TEAM_MONTH, 5, "eur");
+    record(
+      "license-legacy-request",
+      "the license is Team monthly with 5 users at the €80 base, and Stripe charged €80",
+      bought.license?.tier === "team" &&
+        bought.license.interval === "month" &&
+        bought.license.users === 5 &&
+        bought.license.amount === base &&
+        paid[0]?.amount === base,
+      { license: bought.license, invoices: paid },
+    );
+  },
+
+  async "license-member-limits"(account) {
+    const fresh = await account.createServer("Starter now");
+    const freshSub = await account.pay(fresh.server.serverId);
+    const legacy = await account.createServer("Starter before");
+    const legacySub = await account.pay(legacy.server.serverId);
+    await planWhere(account, freshSub, "plan", () => true);
+    await planWhere(account, legacySub, "plan", () => true);
+    const freshId = fresh.server.serverId;
+    const legacyId = legacy.server.serverId;
+    const written = { fresh: legacyStarterMembers(freshId), legacy: legacyStarterMembers(legacyId) };
+    record(
+      "license-member-limits",
+      "the Worker writes legacy_starter_members = 0 for each new hosted server",
+      written.fresh === 0 && written.legacy === 0,
+      written,
+    );
+    // The migration gives 1 to each hosted server row from before it. This row stands for one of them.
+    d1(`UPDATE hosted_servers SET legacy_starter_members = 1 WHERE server_id = ${quote(legacyId)}`, z.unknown());
+    account.hostServer(freshId, "Starter now");
+    account.hostServer(legacyId, "Starter before");
+
+    const refused = await account.joinHost("new", freshId);
+    const freshLimit = await hostMemberLimit(account, freshId);
+    record(
+      "license-member-limits",
+      "a new Starter server allows 1 member, the owner: the host list shows 1, and a member join gives 409 member_limit_reached",
+      freshLimit === 1 && refused.status === 409 && refused.code === "member_limit_reached",
+      { memberLimit: freshLimit, status: refused.status, code: refused.code },
+    );
+    const joins = [];
+    for (const key of ["a", "b", "c"]) joins.push(await account.joinHost(key, legacyId));
+    const legacyLimit = await hostMemberLimit(account, legacyId);
+    record(
+      "license-member-limits",
+      "a Starter server with legacy_starter_members = 1 allows 3 members: the host list shows 3, 2 members join next to the owner, and the third gets 409 member_limit_reached",
+      legacyLimit === 3 &&
+        joins[0]?.status === 200 &&
+        joins[1]?.status === 200 &&
+        joins[2]?.status === 409 &&
+        joins[2].code === "member_limit_reached",
+      { memberLimit: legacyLimit, joins: joins.map((join) => ({ status: join.status, code: join.code })) },
     );
   },
 };

@@ -1,4 +1,4 @@
-import { licenseAmount } from "@openbot/contracts/license";
+import { licensePeriodAmount, licensePlanFromPrice } from "@openbot/contracts/license";
 import { Effect, Schema } from "effect";
 import { readBillingCohortCounts } from "./billing-cohorts";
 import { BillingUsd } from "./billing-usd";
@@ -33,6 +33,8 @@ const StripeDiscount = Schema.Struct({
   currency: Schema.optional(Schema.NullOr(Schema.String)),
 });
 const StripePrice = Schema.Struct({
+  lookup_key: Schema.optional(Schema.NullOr(Schema.String)),
+  metadata: Schema.optional(Schema.NullOr(Schema.Record(Schema.String, Schema.String))),
   currency: Schema.String,
   unit_amount: Schema.NullOr(Schema.Int),
   currency_options: Schema.optional(
@@ -483,7 +485,7 @@ function subscriptionAmountAfterDiscount(
       for (const item of subscription.items) {
         const amount =
           product === "license"
-            ? licensePriceAmount(item.quantity, currency)
+            ? licensePriceAmount(item.price, item.quantity, currency)
             : priceAmount(item.price, subscription.currency, item.quantity);
         const discounted = applyDiscounts(amount, item.discounts, subscription.currency, timestamp, appliedDiscounts);
         subtotal = addSafe(subtotal, discounted);
@@ -503,12 +505,17 @@ function subscriptionAmountAfterDiscount(
 }
 
 /**
- * The license price is graduated tiers, so Stripe sends no `unit_amount` for it, and a subscription cannot
- * expand the tiers of another currency. The license service uses the same list price.
+ * The Team license price is graduated tiers, so Stripe sends no `unit_amount` for it, and a subscription
+ * cannot expand the tiers of another currency. The license service uses the same list price of the plan.
+ * The amount is for the period of the Price; the caller divides a year.
  */
-function licensePriceAmount(quantity: number, currency: "eur" | "usd" | "pln"): number {
+function licensePriceAmount(price: StripePrice, quantity: number, currency: "eur" | "usd" | "pln"): number {
   if (!Number.isSafeInteger(quantity) || quantity < 0) throw new BillingSnapshotError({ code: "invalid_subscription" });
-  return licenseAmount(quantity, currency);
+  return licensePeriodAmount(
+    licensePlanFromPrice({ lookup_key: price.lookup_key ?? null, metadata: price.metadata ?? {} }),
+    quantity,
+    currency,
+  );
 }
 
 function priceAmount(price: StripePrice, currency: string, quantity: number): number {

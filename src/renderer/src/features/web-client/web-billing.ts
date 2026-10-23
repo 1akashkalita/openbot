@@ -57,6 +57,7 @@ export function createWebLicenseCalls(
       navigate(url);
     },
     setUsers: (users) => state("v1/me/license/users", JSON.stringify(users)),
+    changePlan: (plan) => state("v1/me/license/plan", JSON.stringify(plan)),
     setRenewal: (renewal) => state("v1/me/license/renewal", JSON.stringify(renewal)),
   };
 }

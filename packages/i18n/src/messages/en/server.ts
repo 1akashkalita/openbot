@@ -423,7 +423,10 @@ export const messages = defineMessages("server", {
   "server.invite.showQr": "Show invitation QR code",
   "server.invite.permaHint":
     "Never expires and can be used many times. Anyone with this link can join; revoke it to disable.",
-  "server.invite.full": "This server has the maximum of {limit} members. Remove a member to invite a new person.",
+  "server.invite.full": {
+    one: "This server has the maximum of {count} member. Remove a member to invite a new person.",
+    other: "This server has the maximum of {count} members. Remove a member to invite a new person.",
+  },
   "server.invite.qrLabel": "Invitation QR code",
   "server.invite.qrDescription": "Scan this code in OpenBot Mobile to join this server.",
   "server.invite.accepted": "Invitation accepted",

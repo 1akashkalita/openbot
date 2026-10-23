@@ -12,6 +12,8 @@ export const messages = {
   "error.billing.licensePaymentFailed":
     "O pagamento dos usuários adicionados falhou. Atualize a forma de pagamento e tente novamente.",
   "error.billing.licenseUnavailable": "As licenças não estão disponíveis agora.",
+  "error.billing.licenseOneUser": "Esta licença é para 1 usuário. Mude para Team para adicionar usuários.",
+  "error.billing.licensePlanChange": "Esta licença não pode mudar para esse plano. Cancele-a e compre o novo plano.",
   "error.billing.noLicense": "Esta conta não tem licença.",
   "error.billing.invalidRequest": "A solicitação de cobrança é inválida.",
   "error.billing.invalidResponse": "A resposta de cobrança é inválida.",

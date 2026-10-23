@@ -13,6 +13,9 @@ export const messages = {
   "error.billing.licensePaymentFailed":
     "Оплата за добавленных пользователей не прошла. Обновите способ оплаты и попробуйте снова.",
   "error.billing.licenseUnavailable": "Лицензии сейчас недоступны.",
+  "error.billing.licenseOneUser":
+    "Эта лицензия рассчитана на 1 пользователя. Перейдите на Team, чтобы добавить пользователей.",
+  "error.billing.licensePlanChange": "Эту лицензию нельзя перевести на этот тариф. Отмените её и купите новый тариф.",
   "error.billing.noLicense": "У этого аккаунта нет лицензии.",
   "error.billing.invalidRequest": "Некорректный запрос оплаты.",
   "error.billing.invalidResponse": "Некорректный ответ оплаты.",

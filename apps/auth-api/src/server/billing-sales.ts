@@ -64,7 +64,9 @@ export interface BillingSalesLicenseCheckout {
   sessionId: string;
   userId: string;
   users: number;
+  interval: BillingInterval;
   currency: BillingCurrency;
+  /** The amount of one period of the license. */
   amount: number;
   createdAt: number;
 }
@@ -82,6 +84,7 @@ interface BillingSalesSyncedLicense {
   product: "license";
   userId: string;
   users: number;
+  interval: BillingInterval;
   currency: BillingCurrency;
 }
 
@@ -261,6 +264,7 @@ export class BillingSales {
       !SESSION_ID_PATTERN.test(input.sessionId) ||
       !validProfileId(input.userId) ||
       !isAnalyticsLicenseUsers(input.users) ||
+      !isOneOf(BILLING_INTERVALS, input.interval) ||
       !isOneOf(BILLING_CURRENCIES, input.currency) ||
       !isBillingAmount(input.amount) ||
       !Number.isSafeInteger(input.createdAt) ||
@@ -270,7 +274,7 @@ export class BillingSales {
     const attributes = JSON.stringify({
       product: "license",
       users: input.users,
-      interval: "month",
+      interval: input.interval,
       currency: input.currency,
       amount: input.amount,
     } satisfies FactAttributes);
@@ -572,7 +576,7 @@ export class BillingSales {
     const userId = synced?.userId ?? stored?.user_id ?? license?.userId ?? safeId(metadata?.openbot_user_id);
     const serverId = license ? null : (stored?.server_id ?? safeId(metadata?.openbot_server_id));
     const plan = license ? undefined : (syncedPlan?.plan ?? stored?.plan);
-    const interval = license ? "month" : (syncedPlan?.interval ?? stored?.interval);
+    const interval = license ? license.interval : (syncedPlan?.interval ?? stored?.interval);
     const currency =
       billingCurrency(stringValue(object.currency)) ?? synced?.currency ?? stored?.currency ?? license?.currency;
     const amountValue = event.type === "invoice.paid" ? object.amount_paid : object.amount_due;
@@ -657,7 +661,7 @@ export class BillingSales {
       : {
           product: "license",
           ...(license && isAnalyticsLicenseUsers(license.users) ? { users: license.users } : {}),
-          interval: "month",
+          interval: license?.interval ?? "month",
           ...(reversal.currency ? { currency: reversal.currency } : {}),
           amount: reversal.amount,
         };
@@ -956,14 +960,24 @@ export class BillingSales {
   readonly #storedLicense = Effect.fn("BillingSales.storedLicense")(function* (
     this: BillingSales,
     subscriptionId: string,
-  ): Effect.fn.Return<{ userId: string; users: number; currency: BillingCurrency | null } | null, BillingSalesError> {
+  ): Effect.fn.Return<
+    { userId: string; users: number; interval: BillingInterval; currency: BillingCurrency | null } | null,
+    BillingSalesError
+  > {
     const row = yield* d1(this.#database, () =>
       this.#database
-        .prepare("SELECT user_id, users, currency FROM licenses WHERE stripe_subscription_id = ?")
+        .prepare("SELECT user_id, users, billing_interval, currency FROM licenses WHERE stripe_subscription_id = ?")
         .bind(subscriptionId)
-        .first<{ user_id: string; users: number; currency: string }>(),
+        .first<{ user_id: string; users: number; billing_interval: string | null; currency: string }>(),
     );
-    return row ? { userId: row.user_id, users: row.users, currency: billingCurrency(row.currency) } : null;
+    if (!row) return null;
+    return {
+      userId: row.user_id,
+      users: row.users,
+      // A license from before the tiers has no interval and is monthly.
+      interval: isOneOf(BILLING_INTERVALS, row.billing_interval) ? row.billing_interval : "month",
+      currency: billingCurrency(row.currency),
+    };
   }).bind(this);
 
   readonly #enqueue = Effect.fn("BillingSales.enqueue")(function* (

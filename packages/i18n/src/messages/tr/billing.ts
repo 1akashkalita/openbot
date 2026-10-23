@@ -88,8 +88,20 @@ export const messages = {
   "billing.license.ended": "Lisans {date} tarihinde sona erdi.",
   "billing.license.buy": "Lisans satın al",
   "billing.license.checkout": "Ödemeye geç",
-  "billing.license.work.title": "İş lisansı",
   "billing.license.work.used": "{used} / {users} kullanıcı",
+  "billing.license.tier.label": "Lisans türü",
+  "billing.license.tier.starter.name": "Starter",
+  "billing.license.tier.team.name": "Team",
+  "billing.license.tier.teamYear.name": "Team yıllık",
+  "billing.license.tier.starter.title": "Starter lisansı",
+  "billing.license.tier.team.title": "Team lisansı",
+  "billing.license.devices": {
+    one: "Kullanıcı başına en fazla {count} cihaz.",
+    other: "Kullanıcı başına en fazla {count} cihaz.",
+  },
+  "billing.license.serverPrice": "Starter sunucu için ödeme yaptığınızdan fiyat daha düşük.",
+  "billing.license.yearSaving": "Aylığa göre %{percent} tasarruf edin.",
+  "billing.license.starter.inUse": "Sunucularınızı {used} kişi kullanıyor. Starter 1 kullanıcı içindir.",
   "billing.license.users.label": "Kullanıcılar",
   "billing.license.users.add": "Kullanıcı ekle",
   "billing.license.users.remove": "Kullanıcı kaldır",
@@ -98,6 +110,7 @@ export const messages = {
   "billing.license.line.base": { one: "İlk {count} kullanıcı", other: "İlk {count} kullanıcı" },
   "billing.license.line.extra": "{extra} ek kullanıcı × {price}",
   "billing.license.total.month": "/ ay, {currency}",
+  "billing.license.total.year": "/ yıl, {currency}",
   "billing.license.contact.question": {
     one: "{count} kullanıcıdan fazla mı?",
     other: "{count} kullanıcıdan fazla mı?",
@@ -106,12 +119,16 @@ export const messages = {
   "billing.license.action.menu": "Lisans işlemleri",
   "billing.license.action.users": "Kullanıcılar",
   "billing.license.action.changeUsers": "Kullanıcı sayısını değiştir",
+  "billing.license.action.changeToTeam": "Team'e geç",
+  "billing.license.action.changeToYear": "Yıllığa geç",
   "billing.license.action.cancel": "Lisansı iptal et",
   "billing.license.action.renew": "Lisansı yenile",
   "billing.license.paymentFailed":
     "Bir lisans ödemesi başarısız oldu. Lisansı sürdürmek için ödeme yöntemini güncelleyin.",
   "billing.license.overLimit":
     "Lisansı {used} kişi kullanıyor, ancak lisans {users} kullanıcı içindir. Lisansa kullanıcı ekleyene kadar yeni kişiler katılamaz.",
+  "billing.license.overLimitOneUser":
+    "Lisansı {used} kişi kullanıyor, ancak lisans 1 kullanıcı içindir. Yeni kişilerin katılabilmesi için Team'e geçin.",
   "billing.license.covered.title": "Lisans kapsamında",
   "billing.license.covered.description":
     "Sahipleri {owners} olan sunuculardaki çalışma, onların lisansı kapsamındadır.",
@@ -126,6 +143,11 @@ export const messages = {
     other: "{count} kullanıcıdan fazlası için fiyatı ve koşulları sizinle birlikte belirleriz.",
   },
   "billing.license.change.increase": "Eklenen kullanıcılar için bu ayın kalanını şimdi ödersiniz.",
+  "billing.license.change.increaseYear": "Eklenen kullanıcılar için bu yılın kalanını şimdi ödersiniz.",
+  "billing.license.plan.teamDescription": "Team, {min} ile {max} arası kullanıcı içindir.",
+  "billing.license.plan.yearDescription": "Bir yıllık ödeyin, %{percent} tasarruf edin.",
+  "billing.license.plan.confirm": "Planı değiştir",
+  "billing.license.plan.charge": "Bu dönemin kalanı için farkı şimdi ödersiniz.",
   "billing.license.change.decrease": "Düşük fiyat bir sonraki faturada başlar. İade yapılmaz.",
   "billing.license.users.title": "Lisans kullanıcıları",
   "billing.license.users.description":
@@ -139,6 +161,9 @@ export const messages = {
   "billing.license.invite.title": "Lisansa kullanıcı eklensin mi?",
   "billing.license.invite.description": "Bu davet lisansınıza 1 kullanıcı ekler: ayda {price} daha fazla.",
   "billing.license.invite.confirm": "Ekle ve davet et",
+  "billing.license.invite.oneUser":
+    "Lisansınız 1 kullanıcı içindir. Bu davet lisansı {users} kullanıcılı Team'e çevirir: ayda {price} daha fazla.",
+  "billing.license.invite.confirmTeam": "Team'e geç ve davet et",
   "billing.license.invite.max": {
     one: "Lisansınızda azami sayı olan {count} kullanıcı var. Daha büyük bir lisans için bize ulaşın. Yeni kişiler sunucularınıza katılamaz.",
     other:
