@@ -3,8 +3,9 @@ export type ExternalLinkTarget = "Default browser" | "OpenBot";
 import { type AgentMemoryLimit, type BusyMessageMode, DEFAULT_AGENT_MEMORY_LIMIT } from "@openbot/contracts/ipc";
 /** Which chord sends a message. Re-exported here so settings state can name the same type. */
 import type { SendShortcutMode } from "../conversation/send-shortcut";
+import { type AgentActivityMode, DEFAULT_AGENT_ACTIVITY_MODE } from "../conversation/turn-activity";
 
-export type { SendShortcutMode };
+export type { AgentActivityMode, SendShortcutMode };
 
 /** The sound materials of sound feedback, by their cuelume theme names. */
 export const SOUND_THEMES = ["default", "mech", "bubble", "press"] as const;
@@ -36,6 +37,8 @@ export interface GeneralSettingsValue {
   taskCompletionSound: boolean;
   /** How the user sends a message: plain Enter, or the platform modifier with Enter. */
   sendShortcut: SendShortcutMode;
+  /** How much the chat shows about each agent turn: its steps, memories and skills. */
+  agentActivity: AgentActivityMode;
   /** What a message sent to a busy agent does, unless the agent or the message sets its own. */
   busyMessageMode: BusyMessageMode;
   /** How many memories one agent on this computer can hold. Read only here: Server settings set it. */
@@ -70,6 +73,7 @@ export const DEFAULT_GENERAL_SETTINGS: GeneralSettingsValue = {
   macBookNotchNewServers: true,
   taskCompletionSound: true,
   sendShortcut: "enter",
+  agentActivity: DEFAULT_AGENT_ACTIVITY_MODE,
   busyMessageMode: "queue",
   agentMemoryLimit: DEFAULT_AGENT_MEMORY_LIMIT,
   keepRemoteSessions: true,

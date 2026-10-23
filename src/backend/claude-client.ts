@@ -1376,7 +1376,14 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
           typeof input.file_path === "string"
             ? [input.file_path]
             : undefined,
-        item: { id, type: "toolCall", name, status: completed ? "completed" : "in_progress" },
+        item: {
+          id,
+          type: "toolCall",
+          name,
+          status: completed ? "completed" : "in_progress",
+          // The chat lists the skills that a turn used.
+          ...(name === "Skill" && isRecord(input) && typeof input.skill === "string" ? { skill: input.skill } : {}),
+        },
       },
     });
   }

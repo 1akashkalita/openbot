@@ -1,0 +1,66 @@
+/* The activity row of one agent turn. It reuses the marker row, the history panel and the subagent
+   step list, so only its own parts are here. */
+
+.turn-activity-icon svg,
+.turn-activity-chevron {
+  width: var(--openbot-icon-xs);
+  height: var(--openbot-icon-xs);
+  flex: 0 0 auto;
+}
+
+.ui-button.turn-activity-toggle {
+  max-width: 100%;
+}
+
+.turn-activity-summary {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.turn-activity-chevron {
+  transition: transform var(--openbot-duration-fast) var(--openbot-ease-out);
+}
+
+.turn-activity-chevron[data-open="true"] {
+  transform: rotate(180deg);
+}
+
+.chat-action-marker-turn-activity[data-memory="dropped"] {
+  color: var(--openbot-warning-text);
+}
+
+.turn-activity-body {
+  gap: var(--openbot-space-2);
+}
+
+.turn-activity-changes {
+  display: grid;
+  gap: var(--openbot-space-1-5);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.turn-activity-change {
+  display: grid;
+  grid-template-columns: var(--openbot-icon-xs) minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--openbot-space-2);
+  color: var(--openbot-text-secondary);
+  font-size: var(--openbot-text-sm);
+  line-height: var(--openbot-leading-sm);
+}
+
+.turn-activity-change-text {
+  display: grid;
+  min-width: 0;
+  gap: var(--openbot-space-0-5);
+  overflow-wrap: anywhere;
+}
+
+.turn-activity-change-text del,
+.turn-activity-change-action {
+  color: var(--openbot-text-muted);
+}

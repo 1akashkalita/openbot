@@ -65,8 +65,18 @@ export const CONVERSATION_STORY_MESSAGES: RendererAgentMessage[] = STORY_CONVERS
     : {}),
   ...(message.exchange === undefined ? {} : { exchange: message.exchange }),
   ...(message.reaction === undefined ? {} : { reaction: message.reaction }),
-  kind: message.exchange ? "exchange" : message.plan ? "plan" : "text",
+  kind: message.exchange ? "exchange" : message.plan ? "plan" : message.activity ? "action-marker" : "text",
   ...(message.plan ? { plan: { ...message.plan, stopped: false } } : {}),
+  ...(message.activity && message.turnId
+    ? {
+        actionMarker: {
+          kind: "turn-activity" as const,
+          turnId: message.turnId,
+          activity: message.activity,
+          timestamp: message.createdAt,
+        },
+      }
+    : {}),
 }));
 
 /**

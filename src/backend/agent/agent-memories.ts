@@ -4,6 +4,8 @@ import type {
   AgentEvent,
   AgentMemory,
   AgentMemorySelectionState,
+  ConversationMemoryChange,
+  ConversationTurnMemory,
   CreateAgentMemoryInput,
   DeleteAgentMemoryInput,
   SetAgentMemoryInclusionInput,
@@ -82,6 +84,8 @@ export class AgentMemories {
   readonly #emitError: (code: string, error: unknown, agentId?: string) => void;
   readonly #memories: AgentMemoryStore;
   readonly #pending = new Map<string, PendingMemoryMutation[]>();
+  /** How many memories each search or list of a turn returned, oldest first, for the turn's activity. */
+  readonly #recalls = new Map<string, number[]>();
   readonly #epochs = new Map<string, number>();
 
   constructor(options: AgentMemoriesOptions) {
@@ -188,12 +192,18 @@ export class AgentMemories {
     if (params.tool === "search_memories") {
       const parsed = searchMemoriesInput.safeParse(params.arguments);
       if (!parsed.success) return openBotToolFailure(sourceText("error.backend.memorySearchQuery"));
-      return memoryRecallResult(this.#memories.search(senderAgentId, parsed.data.query, parsed.data.limit), redact);
+      const result = this.#memories.search(senderAgentId, parsed.data.query, parsed.data.limit);
+      const response = memoryRecallResult(result, redact);
+      this.#recordRecall(params.turnId, result.memories.length);
+      return response;
     }
     if (params.tool === "list_memories") {
       const parsed = listMemoriesInput.safeParse(params.arguments);
       if (!parsed.success) return openBotToolFailure("after must be a memory ID or null.");
-      return memoryRecallResult(this.#memories.listPage(senderAgentId, parsed.data.after ?? null), redact);
+      const result = this.#memories.listPage(senderAgentId, parsed.data.after ?? null);
+      const response = memoryRecallResult(result, redact);
+      this.#recordRecall(params.turnId, result.memories.length);
+      return response;
     }
     if (params.tool === "set_memory_inclusion") {
       const parsed = setMemoryInclusionInput.safeParse(params.arguments);
@@ -347,11 +357,37 @@ export class AgentMemories {
     return null;
   }
 
-  /** Commits a turn's staged mutations, or discards them when the turn did not complete. */
-  finishTurn(turnId: string, status: string): void {
+  /**
+   * How many memories the oldest search or list of this turn that no step has taken yet returned.
+   * The provider reports the tool step after the call, so the step takes the count of its own call.
+   */
+  takeRecallCount(turnId: string): number | undefined {
+    const counts = this.#recalls.get(turnId);
+    const count = counts?.shift();
+    if (counts?.length === 0) this.#recalls.delete(turnId);
+    return count;
+  }
+
+  #recordRecall(turnId: string, count: number): void {
+    this.#recalls.set(turnId, [...(this.#recalls.get(turnId) ?? []), count]);
+  }
+
+  /**
+   * Commits a turn's staged mutations, or discards them when the turn did not complete. Returns what
+   * the turn did to the memories, for the turn's activity, or null when it staged no change.
+   */
+  finishTurn(turnId: string, status: string): ConversationTurnMemory | null {
     const pending = this.#pending.get(turnId) ?? [];
     this.#pending.delete(turnId);
-    if (status !== "completed" || pending.length === 0) return;
+    this.#recalls.delete(turnId);
+    const changes = pending.filter((mutation) => mutation.type !== "selection");
+    if (status !== "completed") {
+      return changes.length > 0 ? { status: "dropped", changes: [], dropped: changes.length } : null;
+    }
+    if (pending.length === 0) return null;
+
+    const agentIds = [...new Set(pending.map((mutation) => mutation.agentId))];
+    const textsBefore = new Map(agentIds.map((agentId) => [agentId, this.#memoryTexts(agentId)]));
 
     const affectedAgents = new Set<string>();
     const createdMemories = new Set<string>();
@@ -429,6 +465,18 @@ export class AgentMemories {
       if (this.#storedState(mutation.agentId) !== before) affectedAgents.add(mutation.agentId);
     }
     for (const agentId of affectedAgents) this.stateChanged(agentId);
+    if (changes.length === 0) return null;
+    return {
+      status: "committed",
+      changes: agentIds.flatMap((agentId) =>
+        memoryChanges(textsBefore.get(agentId) ?? new Map(), this.#memoryTexts(agentId)),
+      ),
+      dropped: 0,
+    };
+  }
+
+  #memoryTexts(agentId: string): Map<string, string> {
+    return new Map(this.#memories.list(agentId).map((memory) => [memory.id, memory.text]));
   }
 
   /** Reserve prompt space for this turn's staged changes, without making them visible to search. */
@@ -533,6 +581,7 @@ export class AgentMemories {
 
   clearPending(): void {
     this.#pending.clear();
+    this.#recalls.clear();
   }
 
   /**
@@ -619,6 +668,21 @@ export class AgentMemories {
   #epoch(agentId: string): number {
     return this.#epochs.get(agentId) ?? 0;
   }
+}
+
+/** What a commit did to the texts of one agent's memories: new, changed and removed ids. */
+function memoryChanges(
+  before: ReadonlyMap<string, string>,
+  after: ReadonlyMap<string, string>,
+): ConversationMemoryChange[] {
+  const changes: ConversationMemoryChange[] = [];
+  for (const [id, text] of after) {
+    const previousText = before.get(id);
+    if (previousText === undefined) changes.push({ id, action: "saved", text });
+    else if (previousText !== text) changes.push({ id, action: "updated", text, previousText });
+  }
+  for (const [id, text] of before) if (!after.has(id)) changes.push({ id, action: "forgotten", text });
+  return changes;
 }
 
 /** Redaction can expand text, so bound the final provider payload as well as the store result. */

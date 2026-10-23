@@ -8,6 +8,7 @@ import { currentText } from "@openbot/ui/text";
 import { createEffect, createSignal, onSettled } from "solid-js";
 import { isActionSoundEnabled, readActionSoundTheme, setActionSoundChoice } from "../../action-sounds";
 import { actionToast } from "../../action-toast";
+import { readAgentActivityMode, setAgentActivityMode, useAgentActivityMode } from "../../agent-activity-preference";
 import { desktopAnalytics } from "../../analytics";
 import { isCompletionSoundEnabled, setCompletionSoundEnabled } from "../../completion-sound";
 import { usePlatform } from "../../platform";
@@ -95,6 +96,7 @@ const Settings = createSimpleContext({
       ...DEFAULT_GENERAL_SETTINGS,
       taskCompletionSound: isCompletionSoundEnabled(),
       sendShortcut: readSendShortcutMode(),
+      agentActivity: readAgentActivityMode(),
       soundFeedback: isActionSoundEnabled(),
       soundTheme: readActionSoundTheme(),
     });
@@ -106,6 +108,15 @@ const Settings = createSimpleContext({
       () => sendShortcutMode(),
       (mode) => {
         setGeneralSettings((current) => (current.sendShortcut === mode ? current : { ...current, sendShortcut: mode }));
+      },
+    );
+    const agentActivityMode = useAgentActivityMode();
+    createEffect(
+      () => agentActivityMode(),
+      (mode) => {
+        setGeneralSettings((current) =>
+          current.agentActivity === mode ? current : { ...current, agentActivity: mode },
+        );
       },
     );
     const [approvalAutomation, setApprovalAutomation] = createSignal<ApprovalAutomationPreference>({
@@ -183,6 +194,9 @@ const Settings = createSimpleContext({
       }
       if (previous.sendShortcut !== value.sendShortcut) {
         setSendShortcutMode(value.sendShortcut);
+      }
+      if (previous.agentActivity !== value.agentActivity) {
+        setAgentActivityMode(value.agentActivity);
       }
       if (previous.soundFeedback !== value.soundFeedback || previous.soundTheme !== value.soundTheme) {
         setActionSoundChoice(value.soundFeedback ? value.soundTheme : "off");

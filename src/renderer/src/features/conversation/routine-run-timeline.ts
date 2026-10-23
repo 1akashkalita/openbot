@@ -1,4 +1,4 @@
-import { ROUTINE_QUIET_ANSWER_ITEM_TYPE } from "@openbot/contracts/ipc";
+import { CONVERSATION_ACTIVITY_ITEM_TYPE, ROUTINE_QUIET_ANSWER_ITEM_TYPE } from "@openbot/contracts/ipc";
 import type {
   AgentMessage,
   ChatActionMarkerModel,
@@ -208,7 +208,11 @@ export function placeRoutineRunTurns(
 
 function routineRunOpenByDefault(marker: RoutineRunMarker, messages: readonly AgentMessage[]): boolean {
   if (marker.status === "queued" || marker.status === "running" || marker.status === "needs-attention") return true;
-  return messages.some((message) => message.itemType !== ROUTINE_QUIET_ANSWER_ITEM_TYPE);
+  // A run's activity row is how it worked, not a report, so it does not open the run.
+  return messages.some(
+    (message) =>
+      message.itemType !== ROUTINE_QUIET_ANSWER_ITEM_TYPE && message.itemType !== CONVERSATION_ACTIVITY_ITEM_TYPE,
+  );
 }
 
 /**

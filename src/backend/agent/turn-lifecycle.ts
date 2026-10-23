@@ -1,3 +1,4 @@
+import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import {
   type AgentEvent,
   type AgentSummary,
@@ -9,11 +10,15 @@ import {
   type ConversationPlan,
   type ConversationSnapshot,
   type ConversationSubagent,
+  type ConversationTurnActivity,
   clampConversationSubagents,
+  clampConversationTurnMemory,
+  conversationActivityMessageId,
   conversationPlanText,
   conversationSubagentsText,
   isAgentContextCategories,
   latestTurnAnswer,
+  withConversationActivityStep,
 } from "@openbot/contracts/ipc";
 import { type DynamicRecord, isString } from "@openbot/contracts/runtime-values";
 import { createOpenBotLogger } from "@openbot/logging";
@@ -66,6 +71,7 @@ import {
   toolUsage,
   toThreadItem,
 } from "./thread-items";
+import { activityStepForItem, emptyActivity, newActivityMessage } from "./turn-activity";
 import { collectProviderUsage } from "./usage-collection";
 import { USAGE_LIMIT_METHOD, type UsageLimitGate } from "./usage-limit-gate";
 
@@ -524,6 +530,14 @@ export class TurnLifecycle {
         if (item.type === "collabAgentToolCall") this.#applyCodexSubagents(agentId, threadId, turnId, item);
         const threadItem = toThreadItem(item);
         if (!threadItem) return;
+        this.#recordActivityStep(
+          agentId,
+          threadId,
+          turnId,
+          threadItem,
+          getArray(params, "filePaths"),
+          notification.method === "item/completed",
+        );
         yield* this.#applyItem(agentId, threadId, turnId, threadItem, notification.method === "item/completed");
         return;
       }
@@ -833,7 +847,11 @@ export class TurnLifecycle {
       yield* this.#images.waitForOperations(threadId, turnId);
       const association = this.#turnAssociations.get(turnId);
       if (association) yield* Deferred.await(association).pipe(Effect.catch(() => Effect.void));
-      this.#memories.finishTurn(turnId, status);
+      const memory = this.#memories.finishTurn(turnId, status);
+      if (memory) {
+        const turnMemory = clampConversationTurnMemory(memory);
+        this.#updateActivity(agentId, threadId, turnId, (activity) => ({ ...activity, memory: turnMemory }));
+      }
       // A refused session is closed below, and a spent plan would refuse the summary turn too, so
       // neither is compacted.
       // A routine run's own session closes after this turn, so it is not compacted either. Nor is a
@@ -944,6 +962,13 @@ export class TurnLifecycle {
         reportedFailure === undefined &&
         this.#quietRoutineTurn(snapshot.threadId, deliveries) &&
         settleQuietRoutineTurn(snapshot, turnId, noUpdateCalled);
+      // A quiet run tells the user nothing, so its activity goes with its answers.
+      if (quiet) {
+        const activityIndex = snapshot.messages.findIndex(
+          (message) => message.id === conversationActivityMessageId(turnId),
+        );
+        if (activityIndex >= 0) snapshot.messages.splice(activityIndex, 1);
+      }
       const latestAssistant = latestTurnAnswer(snapshot.messages, turnId);
       // A routine run that answered only the no-update marker, also a Test run that shows it in the
       // chat, does not put the marker in the preview.
@@ -1293,6 +1318,62 @@ export class TurnLifecycle {
     this.#itemTurns.set(item.id, turnId);
     this.#conversation.emitConversation(snapshot);
   });
+
+  /** Adds a tool step to the turn's activity. A search or list of memories gets its count when it completes. */
+  #recordActivityStep(
+    agentId: string,
+    threadId: string,
+    turnId: string,
+    item: ThreadItem,
+    filePaths: readonly unknown[],
+    completed: boolean,
+  ): void {
+    const itemId = getString(item, "id");
+    const step = itemId && itemId.length <= INPUT_LIMITS.identifier ? activityStepForItem(item, filePaths) : null;
+    if (!itemId || !step) return;
+    const count =
+      completed && (step.kind === "memory-search" || step.kind === "memory-list")
+        ? this.#memories.takeRecallCount(turnId)
+        : undefined;
+    this.#updateActivity(agentId, threadId, turnId, (activity) => {
+      const known = activity.steps.find((candidate) => candidate.id === itemId);
+      if (known && count === undefined) return activity;
+      return withConversationActivityStep(
+        activity,
+        { id: itemId, ...step, ...(count === undefined ? {} : { count }) },
+        completed,
+      );
+    });
+  }
+
+  /**
+   * Changes the turn's activity, which is one message of the turn, as the plan is. The first change
+   * places it in the transcript; later ones keep that place, so the row does not move while it fills.
+   * A channel's task thread shows no activity: the channel shows the agents' answers only.
+   */
+  #updateActivity(
+    agentId: string,
+    threadId: string,
+    turnId: string,
+    update: (activity: ConversationTurnActivity) => ConversationTurnActivity,
+  ): void {
+    const snapshot = this.#conversation.ensureSnapshot(agentId, threadId);
+    if (this.#conversation.isExecutionThread(snapshot.threadId) && !this.#conversation.isTaskThread(snapshot.threadId))
+      return;
+    const id = conversationActivityMessageId(turnId);
+    const existing = snapshot.messages.find((candidate) => candidate.id === id);
+    const message = existing ?? newActivityMessage(id, turnId);
+    const current = message.activity ?? emptyActivity();
+    const next = update(current);
+    if (existing && next === current) return;
+    message.activity = next;
+    if (existing) {
+      this.#conversation.emitReplacedMessage(snapshot, id, "turn.activity-updated");
+      return;
+    }
+    snapshot.messages.push(message);
+    this.#conversation.emitConversation(snapshot);
+  }
 
   /**
    * Shows a turn's plan as one message, which each update replaces. The first update places it in

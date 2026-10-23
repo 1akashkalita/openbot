@@ -15,6 +15,7 @@ import {
   SettingsSection,
   SwitchField,
 } from "@openbot/ui";
+import { AGENT_ACTIVITY_MODES, type AgentActivityMode } from "@openbot/ui/features/conversation/turn-activity";
 import type { GeneralSettingsValue } from "@openbot/ui/features/settings/app-settings";
 import { LanguageSelect } from "@openbot/ui/features/settings/LanguageSelect";
 import { LogoColorPicker } from "@openbot/ui/features/settings/LogoColorPicker";
@@ -36,6 +37,16 @@ const LINK_TARGET_KEYS = {
   "Default browser": "settings.externalLinks.defaultBrowser",
   OpenBot: "settings.externalLinks.openbot",
 } as const satisfies Record<GeneralSettingsValue["externalLinkTarget"], AppTextKey>;
+
+const agentActivityOptions = [...AGENT_ACTIVITY_MODES];
+
+/** The saved mode stays in English; only the label a reader sees is translated. */
+const AGENT_ACTIVITY_KEYS = {
+  detailed: "settings.agentActivity.detailed",
+  compact: "settings.agentActivity.compact",
+  summary: "settings.agentActivity.summary",
+  off: "settings.agentActivity.off",
+} as const satisfies Record<AgentActivityMode, AppTextKey>;
 
 interface SettingsGeneralTabProps {
   value: GeneralSettingsValue;
@@ -121,6 +132,33 @@ export function SettingsGeneralTab(props: SettingsGeneralTabProps) {
                 devicePlatform={props.platform ?? "darwin"}
                 mount={props.selectMount}
               />
+            </ItemActions>
+          </Item>
+          <Item data-settings-row="settings.agentActivity.title" class="settings-modal-row">
+            <ItemContent>
+              <ItemTitle>{i18n.t("settings.agentActivity.title")}</ItemTitle>
+              <ItemDescription>{i18n.t("settings.agentActivity.description")}</ItemDescription>
+            </ItemContent>
+            <ItemActions>
+              <Select<AgentActivityMode>
+                class="settings-modal-select"
+                options={agentActivityOptions}
+                value={props.value.agentActivity}
+                onChange={(value) => value && props.onUpdateSetting("agentActivity", value)}
+                placement="bottom-end"
+                itemComponent={(selectProps) => (
+                  <SelectItem item={selectProps.item}>
+                    {i18n.t(AGENT_ACTIVITY_KEYS[selectProps.item.rawValue])}
+                  </SelectItem>
+                )}
+              >
+                <SelectTrigger size="sm" aria-label={i18n.t("settings.agentActivity.title")}>
+                  <SelectValue<AgentActivityMode>>
+                    {(state) => i18n.t(AGENT_ACTIVITY_KEYS[state.selectedOption()])}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent mount={props.selectMount} />
+              </Select>
             </ItemActions>
           </Item>
           <SwitchField

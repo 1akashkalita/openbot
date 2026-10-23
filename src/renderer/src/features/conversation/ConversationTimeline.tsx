@@ -27,6 +27,7 @@ import { VoicePlayer } from "@openbot/ui/features/conversation/VoicePlayer";
 import { teamMemberName } from "@openbot/ui/features/team/TeamPersonAvatar";
 import { useText } from "@openbot/ui/text";
 import { createMemo, createSignal, For, Loading, lazy, onCleanup, Show, untrack } from "solid-js";
+import { useAgentActivityMode } from "../../agent-activity-preference";
 import { planItems, planTitle } from "../../app-message-projection";
 import { deviceSendShortcut } from "../../send-shortcut-preference";
 import { remoteRoutineRecovery } from "../servers/server-capabilities";
@@ -178,6 +179,7 @@ export function ConversationTimeline() {
     toggleSubagentPanel,
   } = useConversationViewScope();
   const { t, format } = useText();
+  const agentActivityMode = useAgentActivityMode();
   /** An agent reply can be read aloud by this computer's speech model, in this chat's voice. */
   const readAloudAction = (message: AgentMessage) => {
     const agentId = props.agent?.id;
@@ -659,6 +661,8 @@ export function ConversationTimeline() {
                                                 onOpenRoutine={openRoutineSettings}
                                                 onOpenHostedSite={(url) => void openExternalMessageUrl(url)}
                                                 onToggleRoutineRun={toggleRoutineRun}
+                                                activityMode={agentActivityMode()}
+                                                activeTurnId={props.activeTurnId}
                                               />
                                             }
                                           >

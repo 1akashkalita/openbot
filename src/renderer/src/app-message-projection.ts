@@ -1,5 +1,6 @@
 import type { ClientAgentSummary, ConversationMessage, QueueDeliveryStatus } from "@openbot/contracts/ipc";
 import {
+  CONVERSATION_ACTIVITY_ITEM_TYPE,
   CONVERSATION_PLAN_ITEM_TYPE,
   CONVERSATION_SUBAGENTS_ITEM_TYPE,
   hostedSiteConversationEvent,
@@ -306,6 +307,11 @@ function chatActionMarker(
     };
   }
   if (isContextResetMarker(message)) return { kind: "context-reset", timestamp: message.createdAt };
+  if (message.itemType === CONVERSATION_ACTIVITY_ITEM_TYPE && message.author === "system") {
+    // A message without its activity is a malformed row: it shows nothing rather than an empty bubble.
+    if (!message.activity || !message.turnId) return null;
+    return { kind: "turn-activity", turnId: message.turnId, activity: message.activity, timestamp: message.createdAt };
+  }
   const switchReason = modelSwitchReason(message);
   if (switchReason)
     return { kind: "model-switch", reason: switchReason, text: message.text, timestamp: message.createdAt };

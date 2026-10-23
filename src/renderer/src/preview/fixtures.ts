@@ -35,7 +35,9 @@ import type {
   UpdateStatus,
 } from "@openbot/contracts/ipc";
 import {
+  CONVERSATION_ACTIVITY_ITEM_TYPE,
   CONVERSATION_PLAN_ITEM_TYPE,
+  type ConversationTurnActivity,
   conversationPlanText,
   isAgentStatus,
   isForeignProviderId,
@@ -368,6 +370,36 @@ const STORY_PLAN: ConversationPlan = {
   ],
 };
 
+/** One turn's activity: memory searches, a skill, tool steps, and the memory changes it committed. */
+export const STORY_TURN_ACTIVITY: ConversationTurnActivity = {
+  steps: [
+    { id: "story-step-search", kind: "memory-search", count: 3 },
+    { id: "story-step-skill", kind: "skill", name: "release-notes" },
+    { id: "story-step-read-1", kind: "read" },
+    { id: "story-step-read-2", kind: "read" },
+    { id: "story-step-command", kind: "command" },
+  ],
+  moreSteps: 0,
+  memory: {
+    status: "committed",
+    changes: [
+      {
+        id: "story-memory-1",
+        action: "saved",
+        text: "Launch plans group the work by milestone, and each milestone has one owner.",
+      },
+      {
+        id: "story-memory-2",
+        action: "updated",
+        text: "Research checks every source before a plan goes to the team.",
+        previousText: "Research checks the sources when asked.",
+      },
+      { id: "story-memory-3", action: "forgotten", text: "Release notes go to the #general channel." },
+    ],
+    dropped: 0,
+  },
+};
+
 export const STORY_CONVERSATION_MESSAGES: ConversationMessage[] = [
   {
     id: "message-user-1",
@@ -385,6 +417,17 @@ export const STORY_CONVERSATION_MESSAGES: ConversationMessage[] = [
     text: conversationPlanText(STORY_PLAN),
     plan: STORY_PLAN,
     createdAt: "2026-08-19T09:42:30.000Z",
+    status: "completed",
+  },
+  {
+    id: "story-turn-1:activity",
+    turnId: "story-turn-1",
+    author: "system",
+    source: "system",
+    itemType: CONVERSATION_ACTIVITY_ITEM_TYPE,
+    text: "",
+    activity: STORY_TURN_ACTIVITY,
+    createdAt: "2026-08-19T09:42:45.000Z",
     status: "completed",
   },
   {

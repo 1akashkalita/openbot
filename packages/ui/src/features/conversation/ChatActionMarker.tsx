@@ -33,6 +33,8 @@ import { useText } from "../../text";
 import { prefersReducedMotion } from "../../utils";
 import { AgentAvatar } from "../agents/AgentAvatar";
 import { formatChatTimestamp } from "./chat-timestamp";
+import { TurnActivityLog } from "./TurnActivityLog";
+import { type AgentActivityMode, DEFAULT_AGENT_ACTIVITY_MODE } from "./turn-activity";
 
 interface ChatActionMarkerProps {
   marker: ChatActionMarkerModel;
@@ -45,6 +47,10 @@ interface ChatActionMarkerProps {
   onOpenHostedSite?: ((url: string) => void) | undefined;
   /** Opens or closes the messages of a run, or the runs of a group, whose marker sets `expanded`. */
   onToggleRoutineRun?: ((marker: RoutineRunToggleMarkerModel) => void) | undefined;
+  /** How much a turn's activity row shows. */
+  activityMode?: AgentActivityMode | undefined;
+  /** The turn that runs now, whose activity row names its current step. */
+  activeTurnId?: string | null | undefined;
 }
 
 const STATUS_LABELS = {
@@ -61,8 +67,9 @@ const STATUS_LABELS = {
 
 type SingleChatActionMarkerModel = Exclude<
   ChatActionMarkerModel,
-  { kind: "agent-message-group" } | { kind: "routine-run-group" }
+  { kind: "agent-message-group" } | { kind: "routine-run-group" } | { kind: "turn-activity" }
 >;
+type TurnActivityMarkerModel = Extract<ChatActionMarkerModel, { kind: "turn-activity" }>;
 type AgentMessageGroupMarkerModel = Extract<ChatActionMarkerModel, { kind: "agent-message-group" }>;
 type RoutineRunGroupMarkerModel = Extract<ChatActionMarkerModel, { kind: "routine-run-group" }>;
 export type RoutineRunToggleMarkerModel = Extract<ChatActionMarkerModel, { kind: "routine-run" | "routine-run-group" }>;
@@ -76,7 +83,13 @@ function routineRunGroup(marker: ChatActionMarkerModel): RoutineRunGroupMarkerMo
 }
 
 function singleMarker(marker: ChatActionMarkerModel): SingleChatActionMarkerModel | undefined {
-  return marker.kind === "agent-message-group" || marker.kind === "routine-run-group" ? undefined : marker;
+  return marker.kind === "agent-message-group" || marker.kind === "routine-run-group" || marker.kind === "turn-activity"
+    ? undefined
+    : marker;
+}
+
+function turnActivity(marker: ChatActionMarkerModel): TurnActivityMarkerModel | undefined {
+  return marker.kind === "turn-activity" ? marker : undefined;
 }
 
 export function ChatActionMarker(props: ChatActionMarkerProps) {
@@ -96,7 +109,21 @@ export function ChatActionMarker(props: ChatActionMarkerProps) {
         <Show
           when={routineRunGroup(props.marker)}
           fallback={
-            <Show when={singleMarker(props.marker)}>
+            <Show
+              when={singleMarker(props.marker)}
+              fallback={
+                <Show when={turnActivity(props.marker)}>
+                  {(marker) => (
+                    <TurnActivityLog
+                      activity={marker().activity}
+                      mode={props.activityMode ?? DEFAULT_AGENT_ACTIVITY_MODE}
+                      running={props.activeTurnId === marker().turnId}
+                      timestamp={marker().timestamp}
+                    />
+                  )}
+                </Show>
+              }
+            >
               {(marker) => (
                 <SingleChatActionMarker
                   marker={marker()}

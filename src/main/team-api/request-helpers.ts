@@ -12,6 +12,7 @@ import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import {
   type AgentAccessLevel,
   agentAccessRank,
+  CONVERSATION_ACTIVITY_ITEM_TYPE,
   type ConversationMessageSender,
   type ConversationPageAnchor,
   type ConversationSnapshot,
@@ -127,10 +128,11 @@ export function markerExclusionsForCapabilities(capabilities: ReadonlySet<string
 
 /**
  * Whether a client can show a message of this kind. No client can collapse a quiet routine answer
- * into its run, so a quiet answer goes to none: it would show as a new answer to every client.
+ * into its run, so a quiet answer goes to none: it would show as a new answer to every client. A
+ * turn's activity stays on the host's own desktop, so it goes to none either.
  */
 function markerSupported(itemType: string | undefined, capabilities: ReadonlySet<string>): boolean {
-  if (itemType === ROUTINE_QUIET_ANSWER_ITEM_TYPE) return false;
+  if (itemType === ROUTINE_QUIET_ANSWER_ITEM_TYPE || itemType === CONVERSATION_ACTIVITY_ITEM_TYPE) return false;
   if (itemType?.startsWith(ROUTINE_EVENT_ITEM_TYPE_PREFIX)) return capabilities.has("routine-event-markers");
   // Paged history drops suggestions with routine events, so live events drop them the same way.
   if (itemType?.startsWith(MARKETPLACE_SUGGESTION_ITEM_TYPE_PREFIX)) return capabilities.has("routine-event-markers");

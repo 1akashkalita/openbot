@@ -42,6 +42,14 @@ export const messages = defineMessages("settings", {
   "settings.sendShortcut.enter": "Enter to send",
   "settings.sendShortcut.modEnterMac": "⌘Enter to send",
   "settings.sendShortcut.modEnterWin": "Ctrl+Enter to send",
+  // What the chat shows about each agent turn. The saved mode stays in English; only the labels are translated.
+  "settings.agentActivity.title": "Agent activity",
+  "settings.agentActivity.description":
+    "What the chat shows about an agent's steps, memories and skills on this device. Detailed opens every step. Compact shows one line. Summary shows the steps after the turn.",
+  "settings.agentActivity.detailed": "Detailed",
+  "settings.agentActivity.compact": "Compact",
+  "settings.agentActivity.summary": "Summary",
+  "settings.agentActivity.off": "Off",
   "settings.busyMessage.title": "Steer agents while they work",
   "settings.busyMessage.description":
     "New messages join the agent’s current work, not the queue. Works with ChatGPT and Claude.",

@@ -38,6 +38,7 @@ import {
   type ClientAgentModelOption,
   type ClientAgentSummary,
   CONTEXT_RESET_ITEM_TYPE,
+  CONVERSATION_ACTIVITY_ITEM_TYPE,
   type ComputerUseState,
   type ConversationMessage,
   type ConversationSnapshot,
@@ -2121,9 +2122,20 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
             createdAt: new Date().toISOString(),
             status: "completed",
           };
+          const activityMessage: ConversationMessage = {
+            id: `${turnId}:activity`,
+            turnId,
+            author: "system",
+            source: "system",
+            itemType: CONVERSATION_ACTIVITY_ITEM_TYPE,
+            text: "",
+            activity: { steps: [{ id: `${turnId}:search`, kind: "memory-search", count: 0 }], moreSteps: 0 },
+            createdAt: new Date().toISOString(),
+            status: "completed",
+          };
           updateSnapshot(input.agentId, (snapshot) => {
             snapshot.activeTurnId = null;
-            snapshot.messages = [...snapshot.messages, assistantMessage];
+            snapshot.messages = [...snapshot.messages, activityMessage, assistantMessage];
           });
           queues.set(input.agentId, {
             agentId: input.agentId,

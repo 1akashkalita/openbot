@@ -10,6 +10,7 @@ import type {
   ConversationSnapshot,
 } from "@openbot/contracts/ipc";
 import {
+  CONVERSATION_ACTIVITY_ITEM_TYPE,
   HOSTED_SITE_EVENT_ITEM_TYPE_PREFIX,
   isAttachmentSummary,
   MARKETPLACE_SUGGESTION_ITEM_TYPE_PREFIX,
@@ -706,7 +707,10 @@ function conversationMarkerSqlFilter(exclusions: ConversationMarkerExclusions): 
     exclusions.excludeHostedSiteEvents
       ? `AND COALESCE(item_type, '') NOT LIKE '${HOSTED_SITE_EVENT_ITEM_TYPE_PREFIX}%'`
       : "",
-    exclusions.excludeRoutineQuietAnswers ? `AND COALESCE(item_type, '') != '${ROUTINE_QUIET_ANSWER_ITEM_TYPE}'` : "",
+    // A Team API client shows neither a quiet routine answer nor a turn's activity.
+    exclusions.excludeRoutineQuietAnswers
+      ? `AND COALESCE(item_type, '') NOT IN ('${ROUTINE_QUIET_ANSWER_ITEM_TYPE}', '${CONVERSATION_ACTIVITY_ITEM_TYPE}')`
+      : "",
   ]
     .filter(Boolean)
     .join("\n");

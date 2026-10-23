@@ -1,3 +1,4 @@
+import { CONVERSATION_ACTIVITY_ITEM_TYPE } from "@openbot/contracts/ipc";
 import { createScrollFades } from "@openbot/ui/components/createScrollFades";
 import type { AgentMessage } from "@openbot/ui/data";
 import type { RoutineRunToggleMarkerModel } from "@openbot/ui/features/conversation/ChatActionMarker";
@@ -15,12 +16,18 @@ import {
   tallyNewMessages,
 } from "@openbot/ui/features/conversation/new-message-tally";
 import {
+  type AgentActivityMode,
+  showsTurnActivity,
+  turnActivityHasContent,
+} from "@openbot/ui/features/conversation/turn-activity";
+import {
   scrollToUnreadBoundary,
   unreadMessagesDividerIsVisible,
 } from "@openbot/ui/features/conversation/UnreadMessages";
 import { currentText } from "@openbot/ui/text";
 import type { VirtualItem } from "@tanstack/virtual-core";
 import { createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js";
+import { useAgentActivityMode } from "../../../agent-activity-preference";
 import { groupAgentMessageMarkers } from "../agent-message-timeline";
 import type { ConversationProps, ConversationTarget } from "../conversation-types";
 import {
@@ -70,8 +77,14 @@ export function createScrollStore(deps: ScrollStoreDeps) {
   let talliedConversationIdentity: string | undefined;
 
   const [openRoutineRuns, setOpenRoutineRuns] = createSignal<RoutineRunOpenState>(new Map());
+  const activityMode = useAgentActivityMode();
   const shownMessages = createMemo(() =>
-    deps.props.messages.filter((message) => message.kind !== "thinking" && !silentAgentAnswer(message)),
+    deps.props.messages.filter(
+      (message) =>
+        message.kind !== "thinking" &&
+        !silentAgentAnswer(message) &&
+        turnActivityShown(message, activityMode(), deps.props.activeTurnId),
+    ),
   );
   const routineRunTurns = createMemo(() => routineRunTurnMessages(deps.props.messages, shownMessages()));
   /* The messages of a routine run follow its row and open and close with it. */
@@ -320,4 +333,19 @@ export function createScrollStore(deps: ScrollStoreDeps) {
     jumpToUnreadMessages,
     jumpToLatestMessage,
   };
+}
+
+/**
+ * A turn's activity row shows as the "Agent activity" setting says. A row with nothing in it, or a
+ * malformed one that has no activity, never shows.
+ */
+function turnActivityShown(
+  message: AgentMessage,
+  mode: AgentActivityMode,
+  activeTurnId: string | null | undefined,
+): boolean {
+  if (message.itemType !== CONVERSATION_ACTIVITY_ITEM_TYPE) return true;
+  const marker = message.actionMarker;
+  if (marker?.kind !== "turn-activity") return false;
+  return showsTurnActivity(mode, marker.turnId === activeTurnId) && turnActivityHasContent(marker.activity);
 }

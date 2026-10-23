@@ -1,4 +1,4 @@
-import type { ScopedAgentEvent } from "@openbot/contracts/ipc";
+import type { ConversationMessage, ScopedAgentEvent } from "@openbot/contracts/ipc";
 import { describe, expect, it } from "vitest";
 import { decodeScopedAgentEvent } from "./agent-event-decoding";
 
@@ -39,6 +39,54 @@ const largeApproval = {
   },
 } satisfies ScopedAgentEvent;
 
+const activityMessage: ConversationMessage & { activity: NonNullable<ConversationMessage["activity"]> } = {
+  id: "turn-1:activity",
+  turnId: "turn-1",
+  author: "system",
+  source: "system",
+  status: "completed",
+  itemType: "turn_activity",
+  text: "",
+  createdAt: "2026-10-23T10:00:00.000Z",
+  activity: {
+    steps: [
+      { id: "step-1", kind: "memory-search", count: 3 },
+      { id: "step-2", kind: "skill", name: "todoist-cli" },
+    ],
+    moreSteps: 0,
+    memory: {
+      status: "committed",
+      changes: [{ id: "memory-1", action: "updated", text: "New text", previousText: "Old text" }],
+      dropped: 0,
+    },
+  },
+};
+
+const activityConversation = {
+  serverId: "local",
+  event: {
+    type: "conversation",
+    snapshot: {
+      agentId: "agent-1",
+      threadId: "thread-1",
+      activeTurnId: null,
+      revision: 4,
+      messages: [activityMessage],
+    },
+  },
+} satisfies ScopedAgentEvent;
+
+/** The conversation event with the activity of its one message changed. */
+function withActivity(activity: unknown) {
+  return {
+    ...activityConversation,
+    event: {
+      ...activityConversation.event,
+      snapshot: { ...activityConversation.event.snapshot, messages: [{ ...activityMessage, activity }] },
+    },
+  };
+}
+
 const hiddenAgents = {
   serverId: "server-1",
   event: { type: "hidden-agents-changed", agents: [{ agentId: "agent-1", hiddenAt: "2026-10-16T09:00:00.000Z" }] },
@@ -53,6 +101,7 @@ describe("decodeScopedAgentEvent", () => {
     ],
     ["a hidden agents change", hiddenAgents],
     ["an empty hidden agents change", { serverId: "local", event: { type: "hidden-agents-changed", agents: [] } }],
+    ["a turn's activity", activityConversation],
   ] satisfies [string, ScopedAgentEvent][])("keeps %s", (_name, value) => {
     expect(decodeScopedAgentEvent(value)).toEqual(value);
   });
@@ -81,6 +130,32 @@ describe("decodeScopedAgentEvent", () => {
     ],
     ["hidden agents that are not a list", { ...hiddenAgents, event: { ...hiddenAgents.event, agents: null } }],
     ["a bufferedLive that is not a boolean", { ...delta, bufferedLive: "yes" }],
+    [
+      "an activity step of an unknown kind",
+      withActivity({ ...activityMessage.activity, steps: [{ id: "step-1", kind: "shell" }] }),
+    ],
+    [
+      "an activity step with a negative count",
+      withActivity({ ...activityMessage.activity, steps: [{ id: "step-1", kind: "memory-search", count: -1 }] }),
+    ],
+    [
+      "a memory change longer than a memory",
+      withActivity({
+        ...activityMessage.activity,
+        memory: {
+          status: "committed",
+          changes: [{ id: "memory-1", action: "saved", text: "x".repeat(501) }],
+          dropped: 0,
+        },
+      }),
+    ],
+    [
+      "too many activity steps",
+      withActivity({
+        steps: Array.from({ length: 101 }, (_, index) => ({ id: `step-${index}`, kind: "read" })),
+        moreSteps: 0,
+      }),
+    ],
     ["a value that is not a record", "event"],
   ])("rejects %s", (_name, value) => {
     expect(() => decodeScopedAgentEvent(value)).toThrow(/^Invalid /);

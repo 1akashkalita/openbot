@@ -13,6 +13,7 @@ import type {
   ConversationQuestionPrompt,
   ConversationReaction,
   ConversationSubagent,
+  ConversationTurnActivity,
   HostedSiteConversationEvent,
   ImageGenerationInfo,
   InstalledSkill,
@@ -144,6 +145,8 @@ export type ChatActionMarkerModel =
   | { kind: "mcp-sign-in"; mcpServerId: string; timestamp: string }
   /** The user started a new chat: the agent does not see the messages above this marker. */
   | { kind: "context-reset"; timestamp: string }
+  /** What the agent did in one turn: its steps, and the memory changes once the turn ends. */
+  | { kind: "turn-activity"; turnId: string; activity: ConversationTurnActivity; timestamp: string }
   /** The agent left its model for a usage limit, or went back to it. `text` is the host's note. */
   | { kind: "model-switch"; reason: ModelSwitchReason; text: string; timestamp: string }
   /** A member agent changed the channel at a person's request. `text` is the host's note. */
