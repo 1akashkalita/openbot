@@ -87,6 +87,8 @@ export const messages = {
   "billing.license.status.ended": "Sona erdi",
   "billing.license.ended": "Lisans {date} tarihinde sona erdi.",
   "billing.license.buy": "Lisans satın al",
+  "billing.license.buy.description": "OpenBot'u işte kaç kişi kullanıyor? Yapay zeka ajanları kullanıcı sayılmaz.",
+  "billing.license.buy.confirm": "Ödemeye geç",
   "billing.license.work.used": "{used} / {users} kullanıcı",
   "billing.license.tier.starter.title": "Starter lisansı",
   "billing.license.tier.team.title": "Team lisansı",

@@ -88,6 +88,8 @@ export const messages = {
   "billing.license.status.ended": "終了",
   "billing.license.ended": "ライセンスは{date}に終了しました。",
   "billing.license.buy": "ライセンスを購入",
+  "billing.license.buy.description": "業務で OpenBot を使う人は何人ですか？AI エージェントはユーザーに含まれません。",
+  "billing.license.buy.confirm": "お支払いへ進む",
   "billing.license.work.used": "ユーザー {used} / {users} 人",
   "billing.license.tier.starter.title": "Starter ライセンス",
   "billing.license.tier.team.title": "Team ライセンス",

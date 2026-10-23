@@ -90,6 +90,8 @@ export const messages = {
   "billing.license.status.ended": "Beendet",
   "billing.license.ended": "Die Lizenz endete am {date}.",
   "billing.license.buy": "Lizenz kaufen",
+  "billing.license.buy.description": "Wie viele Personen nutzen OpenBot bei der Arbeit? KI-Agenten sind keine Nutzer.",
+  "billing.license.buy.confirm": "Weiter zur Zahlung",
   "billing.license.work.used": "{used} von {users} Nutzern",
   "billing.license.tier.starter.title": "Starter-Lizenz",
   "billing.license.tier.team.title": "Team-Lizenz",
