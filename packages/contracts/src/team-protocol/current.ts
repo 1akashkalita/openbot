@@ -14,6 +14,7 @@ import { AGENT_MEMORIES_CAPABILITY } from "./agent-memories-v1";
 import { AGENT_MEMORY_LIMIT_CAPABILITY } from "./agent-memory-limit-v1";
 import { AGENT_PUBLISH_CAPABILITY } from "./agent-publish-v1";
 import { AGENT_SESSION_SETTINGS_CAPABILITY } from "./agent-session-settings-v1";
+import { AGENT_TASK_LIMIT_CAPABILITY } from "./agent-task-limit-v1";
 import { AGENT_TASKS_CAPABILITY } from "./agent-tasks-v1";
 import { AGENT_UPDATE_CAPABILITY } from "./agent-update-v1";
 import { BITWARDEN_CONNECTOR_CAPABILITY } from "./bitwarden-connector-v1";
@@ -122,6 +123,7 @@ export {
   AGENT_MEMORY_LIMIT_CAPABILITY,
   AGENT_PUBLISH_CAPABILITY,
   AGENT_SESSION_SETTINGS_CAPABILITY,
+  AGENT_TASK_LIMIT_CAPABILITY,
   AGENT_TASKS_CAPABILITY,
   AGENT_UPDATE_CAPABILITY,
   ANDROID_PUSH_NOTIFICATIONS_CAPABILITY,
@@ -277,6 +279,7 @@ export const TEAM_CURRENT_CAPABILITIES = [
   WEBHOOK_TESTS_CAPABILITY,
   PROVIDER_USAGE_RESET_CAPABILITY,
   BITWARDEN_CONNECTOR_CAPABILITY,
+  AGENT_TASK_LIMIT_CAPABILITY,
 ] as const;
 
 export type TeamCurrentCapability = (typeof TEAM_CURRENT_CAPABILITIES)[number];
@@ -386,7 +389,8 @@ export const TEAM_BOOTSTRAP_CAPABILITIES = TEAM_CURRENT_CAPABILITIES.filter(
     capability !== ROUTINE_RESULTS_CAPABILITY &&
     capability !== WEBHOOK_TESTS_CAPABILITY &&
     capability !== PROVIDER_USAGE_RESET_CAPABILITY &&
-    capability !== BITWARDEN_CONNECTOR_CAPABILITY,
+    capability !== BITWARDEN_CONNECTOR_CAPABILITY &&
+    capability !== AGENT_TASK_LIMIT_CAPABILITY,
 );
 // A v7 host does not know the v8 markers, so a client sends them only after it negotiates protocol 8.
 const TEAM_PROTOCOL_V7_CURRENT_CAPABILITIES = TEAM_CURRENT_CAPABILITIES.filter(
@@ -439,6 +443,7 @@ export function legacyTeamCapabilities(capabilities: readonly string[]): string[
       capability !== ROUTINE_RESULTS_CAPABILITY &&
       capability !== WEBHOOK_TESTS_CAPABILITY &&
       capability !== PROVIDER_USAGE_RESET_CAPABILITY &&
-      capability !== BITWARDEN_CONNECTOR_CAPABILITY,
+      capability !== BITWARDEN_CONNECTOR_CAPABILITY &&
+      capability !== AGENT_TASK_LIMIT_CAPABILITY,
   );
 }
