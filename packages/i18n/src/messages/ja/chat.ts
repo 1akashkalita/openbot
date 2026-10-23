@@ -180,6 +180,8 @@ export const messages = {
   "chat.code.copied": "コードをコピーしました",
   "chat.code.copy": "コードをコピー",
   "chat.visual.loadFailed": "{title} を読み込めません",
+  "chat.visual.fullScreen": "全画面表示",
+  "chat.visual.exitFullScreen": "全画面表示を終了",
   "chat.preview.switchLabel": "プレビューまたはコード",
   "chat.preview.code": "コード",
   "chat.preview.preview": "プレビュー",
