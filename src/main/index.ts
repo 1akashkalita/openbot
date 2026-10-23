@@ -519,6 +519,7 @@ function registerIpcHandlers({
   approvalAutomation,
   agentAdminSettings,
   agentHostSettings,
+  browserProfiles,
   language,
   logoColor,
   appearance,
@@ -672,6 +673,7 @@ function registerIpcHandlers({
     ...agentAdminIpcHandlers({
       settings: agentAdminSettings,
       hostSettings: agentHostSettings,
+      browserProfiles,
       skills,
       marketplaceAgents,
       agentTemplates,
