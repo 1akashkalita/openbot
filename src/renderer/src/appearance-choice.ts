@@ -1,126 +1,82 @@
-import {
-  type AppAppearance,
-  type AppAppearancePreference,
-  DEFAULT_APP_APPEARANCE,
-  DEFAULT_TRANSPARENT_WINDOW,
-  isAppAppearance,
-} from "@openbot/contracts/app-appearance";
+import { type AppAppearance, DEFAULT_APP_APPEARANCE, isAppAppearance } from "@openbot/contracts/app-appearance";
 import { createSignal, onSettled } from "solid-js";
 import { appPort } from "./app-port";
 import { syncColorScheme } from "./color-scheme";
 
-/** One Settings control's value. Set optimistically, and reverted if main refuses the write. */
-function optimisticChoice<T extends string | boolean>(initial: T, save: (next: T) => Promise<T>) {
-  const [value, setValue] = createSignal<T>(() => initial);
-  let confirmed = initial;
+/** The Settings control state. Set optimistically, and reverted if main refuses the write. */
+export function useAppearanceChoice() {
+  const [appearance, setAppearance] = createSignal<AppAppearance>(DEFAULT_APP_APPEARANCE);
+  let confirmed: AppAppearance = DEFAULT_APP_APPEARANCE;
   let latestRequest = 0;
   let pending = 0;
 
   /** A saved value from main. A choice that is still in flight is newer, so it stays on screen. */
-  function confirm(next: T): void {
+  function confirm(next: AppAppearance): void {
     confirmed = next;
-    if (pending === 0) setValue(() => next);
+    if (pending === 0) setAppearance(next);
   }
 
-  function change(next: T): void {
+  function changeAppearance(next: AppAppearance): void {
     const request = ++latestRequest;
     pending += 1;
-    setValue(() => next);
-    void save(next)
-      .then((saved) => {
-        confirmed = saved;
-        if (request === latestRequest) setValue(() => saved);
+    setAppearance(next);
+    void appPort()
+      .setAppAppearancePreference({ appearance: next })
+      .then((preference) => {
+        confirmed = preference.appearance;
+        if (request === latestRequest) setAppearance(preference.appearance);
       })
       .catch(() => {
-        if (request === latestRequest) setValue(() => confirmed);
+        if (request === latestRequest) setAppearance(confirmed);
       })
       .finally(() => {
         pending -= 1;
       });
   }
 
-  return { value, confirm, change };
-}
-
-/** The Settings control state of the theme and of the transparent window. */
-export function useAppearanceChoice() {
-  const appearance = optimisticChoice<AppAppearance>(DEFAULT_APP_APPEARANCE, (next) =>
-    appPort()
-      .setAppAppearancePreference({ appearance: next })
-      .then((preference) => preference.appearance),
-  );
-  const transparentWindow = optimisticChoice<boolean>(DEFAULT_TRANSPARENT_WINDOW, (next) =>
-    appPort()
-      .setAppAppearancePreference({ transparentWindow: next })
-      .then((preference) => preference.transparentWindow),
-  );
-  const confirm = (preference: AppAppearancePreference) => {
-    appearance.confirm(preference.appearance);
-    transparentWindow.confirm(preference.transparentWindow);
-  };
-
   onSettled(() => {
     void appPort()
       .getAppAppearancePreference()
-      .then(confirm)
+      .then((preference) => confirm(preference.appearance))
       .catch(() => undefined);
-    return appPort().onAppAppearancePreference(confirm);
+    return appPort().onAppAppearancePreference((preference) => confirm(preference.appearance));
   });
 
-  return {
-    appearance: appearance.value,
-    changeAppearance: appearance.change,
-    transparentWindow: transparentWindow.value,
-    changeTransparentWindow: transparentWindow.change,
-  };
+  return { appearance, changeAppearance };
 }
 
 /** This window's copy of the choice, so the first paint after a launch has the saved colors. */
 const CACHED_APPEARANCE_KEY = "openbot.appearance";
-const CACHED_TRANSPARENT_WINDOW_KEY = "openbot.transparentWindow";
 
 /** Reading `window.localStorage` throws when the browser blocks storage, so it is read inside the guard. */
-function cachedPreference(): AppAppearancePreference {
+function cachedAppearance(): AppAppearance {
   try {
-    const appearance = window.localStorage.getItem(CACHED_APPEARANCE_KEY);
-    return {
-      appearance: isAppAppearance(appearance) ? appearance : DEFAULT_APP_APPEARANCE,
-      transparentWindow: window.localStorage.getItem(CACHED_TRANSPARENT_WINDOW_KEY) === "true",
-    };
+    const value = window.localStorage.getItem(CACHED_APPEARANCE_KEY);
+    return isAppAppearance(value) ? value : DEFAULT_APP_APPEARANCE;
   } catch {
-    return { appearance: DEFAULT_APP_APPEARANCE, transparentWindow: DEFAULT_TRANSPARENT_WINDOW };
+    return DEFAULT_APP_APPEARANCE;
   }
 }
 
 /**
  * Keeps a desktop window on the appearance that main keeps. The copy in browser storage gives the
  * first paint; main's value then replaces it. The Dynamic Island does not call this: it stays dark.
- *
- * Only the main window passes `windowGlass`: main gives the macOS blur to that window alone, so in
- * another window a transparent page would show the desktop with no blur.
  */
-export function syncAppearance(options: { windowGlass?: boolean } = {}): void {
-  let preference = cachedPreference();
-  const scheme = syncColorScheme(() => preference.appearance);
-  const showGlass = () => {
-    if (options.windowGlass)
-      document.documentElement.toggleAttribute("data-openbot-window-glass", preference.transparentWindow);
-  };
-  showGlass();
-  const apply = (next: AppAppearancePreference) => {
-    preference = next;
+export function syncAppearance(): void {
+  let appearance = cachedAppearance();
+  const scheme = syncColorScheme(() => appearance);
+  const apply = (next: AppAppearance) => {
+    appearance = next;
     try {
-      window.localStorage.setItem(CACHED_APPEARANCE_KEY, next.appearance);
-      window.localStorage.setItem(CACHED_TRANSPARENT_WINDOW_KEY, String(next.transparentWindow));
+      window.localStorage.setItem(CACHED_APPEARANCE_KEY, next);
     } catch {
       // Main's value still applies; only the next first paint can show the default.
     }
     scheme.refresh();
-    showGlass();
   };
   void appPort()
     .getAppAppearancePreference()
-    .then(apply)
+    .then((preference) => apply(preference.appearance))
     .catch(() => undefined);
-  appPort().onAppAppearancePreference(apply);
+  appPort().onAppAppearancePreference((preference) => apply(preference.appearance));
 }

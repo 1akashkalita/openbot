@@ -1226,9 +1226,9 @@ if (!hasSingleInstanceLock) {
           sendToRenderer(window, IPC_ENDPOINTS.app.appLogoColorPreference, preference);
         }
       });
-      setWindowAppearance(appearance.preference);
+      setWindowAppearance(appearance.preference.appearance);
       appearance.subscribe((preference) => {
-        setWindowAppearance(preference);
+        setWindowAppearance(preference.appearance);
         for (const window of BrowserWindow.getAllWindows()) {
           sendToRenderer(window, IPC_ENDPOINTS.app.appAppearancePreference, preference);
         }

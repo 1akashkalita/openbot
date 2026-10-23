@@ -17,7 +17,7 @@ if (!root) {
 // A startup mark for `dev:bench`, after the bundle is parsed.
 performance.mark("openbot:renderer-start");
 installPointerFocusGuard();
-syncAppearance({ windowGlass: true });
+syncAppearance();
 syncLogoColor();
 startActionSounds();
 
