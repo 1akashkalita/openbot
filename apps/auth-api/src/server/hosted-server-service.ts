@@ -6,6 +6,7 @@ import {
   type BillingInterval,
   type BillingPlanId,
   isOpenBillingStatus,
+  memberLimitForPlan,
 } from "@openbot/contracts/billing";
 import {
   HOSTED_PLAN_SIZE,
@@ -24,6 +25,7 @@ import {
   type HostedServerSummary,
   parseHostedServerName,
 } from "@openbot/contracts/hosted-servers";
+import { type LicenseOrder, parseLicenseOrder } from "@openbot/contracts/license";
 import { isDynamicRecord, isOneOf, isString } from "@openbot/contracts/runtime-values";
 import type { RouteHostState } from "@openbot/contracts/signal-protocol/ingress-queue";
 import { sourceText } from "@openbot/i18n/source";
@@ -359,13 +361,21 @@ export class HostedServerService {
   /**
    * Adds a server that waits for payment, and returns its Stripe Checkout page. The sandbox is made only
    * when Stripe confirms the payment. The same Idempotency-Key returns the same server with a new page.
+   * A license order adds the license at the bundle price to the same page, so one payment buys both.
    */
 
   readonly create = Effect.fn("HostedServerService.create")(
     function* (
       this: HostedServerService,
       user: AuthUser,
-      input: { name: unknown; plan: unknown; interval: unknown; currency: unknown; entryPoint?: unknown },
+      input: {
+        name: unknown;
+        plan: unknown;
+        interval: unknown;
+        currency: unknown;
+        entryPoint?: unknown;
+        license?: unknown;
+      },
       idempotencyKeyHeader: string | null,
       checkoutReturn: CheckoutReturn,
     ): Effect.fn.Return<HostedServerCheckout, HostedFailure, HostedServerDependencies> {
@@ -387,6 +397,15 @@ export class HostedServerService {
       if (!isOneOf(BILLING_PLAN_IDS, input.plan)) return yield* invalid("plan");
       if (!isOneOf(BILLING_INTERVALS, input.interval)) return yield* invalid("interval");
       if (!isOneOf(BILLING_CURRENCIES, input.currency)) return yield* invalid("currency");
+      const license = input.license === undefined ? undefined : parseLicenseOrder(input.license);
+      // A Starter server has one member, so it takes only the Starter license. A Team license has no more
+      // users than the plan has members.
+      if (
+        license === null ||
+        (license &&
+          ((input.plan === "starter" && license.tier !== "starter") || license.users > memberLimitForPlan(input.plan)))
+      )
+        return yield* invalid("license");
       const size = HOSTED_PLAN_SIZE[input.plan];
       const previous = yield* hostedCall(() =>
         dependencies.database
@@ -394,7 +413,7 @@ export class HostedServerService {
           .bind(user.id, idempotencyKey)
           .first<HostedServerRow>(),
       );
-      if (previous) return yield* this.#checkout(previous, user, billing, returnTo);
+      if (previous) return yield* this.#checkout(previous, user, billing, returnTo, license);
       const unpaid = yield* hostedCall(() =>
         dependencies.database
           .prepare(
@@ -411,7 +430,7 @@ export class HostedServerService {
       );
       if (unpaid) {
         const choice = { plan: input.plan, interval: input.interval, currency: input.currency };
-        return yield* this.#reuseUnpaid(unpaid, choice, idempotencyKey, user, billing, returnTo);
+        return yield* this.#reuseUnpaid(unpaid, choice, idempotencyKey, user, billing, returnTo, license);
       }
       const count = yield* hostedCall(() =>
         dependencies.database
@@ -451,9 +470,9 @@ export class HostedServerService {
         );
         if (!concurrent)
           return yield* new HostedServerServiceError(409, "hosted_server_conflict", "Try the request again.");
-        return yield* this.#checkout(concurrent, user, billing, returnTo);
+        return yield* this.#checkout(concurrent, user, billing, returnTo, license);
       }
-      return yield* this.#checkout(yield* this.#requireRow(serverId), user, billing, returnTo);
+      return yield* this.#checkout(yield* this.#requireRow(serverId), user, billing, returnTo, license);
     },
     (operation) => operation.pipe(Effect.provide(this.#layer)),
   ).bind(this);
@@ -1314,13 +1333,17 @@ export class HostedServerService {
     (operation, _now?: number) => operation.pipe(Effect.provide(this.#layer)),
   ).bind(this);
 
-  /** A Checkout page for a server that waits for payment, or none when the server needs no page. */
+  /**
+   * A Checkout page for a server that waits for payment, or none when the server needs no page. A license
+   * order adds a second line to the page. The row does not keep the order, so a later page has no license.
+   */
   readonly #checkout = Effect.fn("HostedServerService.checkout")(function* (
     this: HostedServerService,
     row: HostedServerRow,
     user: AuthUser,
     billing: HostedServerBilling,
     returnTo: CheckoutReturn,
+    license?: LicenseOrder,
   ): Effect.fn.Return<HostedServerCheckout, HostedFailure, HostedServerDependencies> {
     const dependencies = yield* HostedServerDependencies;
     // A scheduled deletion must be withdrawn before a replacement plan can be purchased.
@@ -1353,6 +1376,7 @@ export class HostedServerService {
         target: returnTo.target,
         origin: returnTo.origin,
         ...(returnTo.entryPoint ? { entryPoint: returnTo.entryPoint } : {}),
+        ...(license ? { license } : {}),
       })
       .pipe(Effect.mapError(hostedFailure));
     // A new plan choice changes the key of an unpaid server, so a page for the plan before it is not stored.
@@ -1388,6 +1412,7 @@ export class HostedServerService {
     user: AuthUser,
     billing: HostedServerBilling,
     returnTo: CheckoutReturn,
+    license?: LicenseOrder,
   ): Effect.fn.Return<HostedServerCheckout, HostedFailure, HostedServerDependencies> {
     const dependencies = yield* HostedServerDependencies;
     const previous = row.checkout_session_id;
@@ -1426,7 +1451,7 @@ export class HostedServerService {
     // A second request changed the server first, or changed it again before its page was made.
     if (updated.meta.changes !== 1 || claimed.idempotency_key !== idempotencyKey)
       return yield* new HostedServerServiceError(409, "hosted_server_conflict", "Try the request again.");
-    return yield* this.#checkout(claimed, user, billing, returnTo);
+    return yield* this.#checkout(claimed, user, billing, returnTo, license);
   });
 
   /**

@@ -6,7 +6,9 @@
 ALTER TABLE hosted_servers ADD COLUMN legacy_starter_members INTEGER NOT NULL DEFAULT 1
   CHECK (legacy_starter_members IN (0, 1));
 
--- The tier and interval of the license Price. NULL is a row that the old Worker wrote: Team, monthly.
-ALTER TABLE licenses ADD COLUMN tier TEXT CHECK (tier IS NULL OR tier IN ('starter', 'server', 'team'));
+-- The tier, interval and bundle price of the license Price. NULL is a row that the old Worker wrote: Team,
+-- monthly. The old Worker does not name `bundle`, so its rows get 0, the plain price.
+ALTER TABLE licenses ADD COLUMN tier TEXT CHECK (tier IS NULL OR tier IN ('starter', 'team'));
 ALTER TABLE licenses ADD COLUMN billing_interval TEXT
   CHECK (billing_interval IS NULL OR billing_interval IN ('month', 'year'));
+ALTER TABLE licenses ADD COLUMN bundle INTEGER NOT NULL DEFAULT 0 CHECK (bundle IN (0, 1));

@@ -6,6 +6,7 @@ import { LicenseSection } from "@openbot/ui/features/billing/LicenseSection";
 import { createLicenseStore } from "@openbot/ui/features/billing/license-store";
 import type { Meta, StoryObj } from "storybook-solidjs-vite";
 import { createMockBilling, previewBillingServers } from "../src/preview/mock-billing";
+import { MOCK_HOSTED_SERVER_CATALOG } from "../src/preview/mock-hosted-servers";
 import { createMockLicense, previewLicenseUsers } from "../src/preview/mock-license";
 
 const DAY = 24 * 60 * 60_000;
@@ -16,7 +17,7 @@ const SERVERS = previewBillingServers().filter((server) => server.status === "ac
 function license(
   users: number,
   change: Partial<License> = {},
-  plan: LicensePlan = { tier: "team", interval: "month" },
+  plan: LicensePlan = { tier: "team", interval: "month", bundle: false },
 ): License {
   return {
     subscriptionId: "sub_story_license",
@@ -47,7 +48,15 @@ function LicenseStory(props: { calls: LicenseDesktopApi }) {
       <BillingPanel
         store={billing}
         available
-        license={<LicenseSection store={store} onManagePayment={() => undefined} onContactUs={() => undefined} />}
+        license={
+          <LicenseSection
+            store={store}
+            onManagePayment={() => undefined}
+            onContactUs={() => undefined}
+            loadPlans={async () => MOCK_HOSTED_SERVER_CATALOG.plans}
+            onOrderServer={() => undefined}
+          />
+        }
       />
     </main>
   );
@@ -68,36 +77,43 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 /**
- * No license, and 4 people use the owner's servers. "Buy a license" opens the tiers, the users, the
- * price and "Continue to checkout". Starter is not available.
+ * No license, and 4 people use the owner's servers. "Buy a license" opens the order form with the
+ * servers and the license. Starter is not available.
  */
 export const Buy: Story = story({});
 
-/** No license, and only the owner. Starter is €30 a month for 1 user. */
+/** No license, and only the owner. The order form starts on the Starter license. */
 export const BuyStarter: Story = story({ used: 1, users: previewLicenseUsers().slice(0, 1) });
 
-/** No license, and the account pays for a Starter server. Starter is €20 a month. */
-export const BuyWithStarterServer: Story = story({
+/** No license, and the account pays for a server. Each license has the bundle price. */
+export const BuyWithServer: Story = story({
   used: 1,
   users: previewLicenseUsers().slice(0, 1),
-  serverPrice: true,
+  bundle: true,
 });
+
+/** No license and no open subscription. The order form has a currency choice. */
+export const BuyNewCustomer: Story = story({ currency: null, used: 1, users: previewLicenseUsers().slice(0, 1) });
+
+/** No license, and the account pays in złoty. */
+export const BuyPln: Story = story({ currency: "pln" });
 
 /** A Starter license. The row menu has Change to Team in place of Change users. */
 export const Starter: Story = story({
-  license: license(1, {}, { tier: "starter", interval: "month" }),
+  license: license(1, {}, { tier: "starter", interval: "month", bundle: false }),
   used: 1,
   users: previewLicenseUsers().slice(0, 1),
 });
 
 /** A Starter license that 3 people use: the warning offers Change to Team. */
 export const StarterOverLimit: Story = story({
-  license: license(1, {}, { tier: "server", interval: "month" }),
+  license: license(1, {}, { tier: "starter", interval: "month", bundle: true }),
+  bundle: true,
   used: 3,
 });
 
 /** A yearly Team license. The row shows the yearly price, and the menu has no Change to yearly. */
-export const TeamYearly: Story = story({ license: license(7, {}, { tier: "team", interval: "year" }) });
+export const TeamYearly: Story = story({ license: license(7, {}, { tier: "team", interval: "year", bundle: false }) });
 
 /** 4 of 10 users. The row menu has Users, Change users, Update payment method and Cancel. */
 export const Active: Story = story({ license: license(10) });

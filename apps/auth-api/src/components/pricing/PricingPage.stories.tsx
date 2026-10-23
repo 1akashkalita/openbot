@@ -42,9 +42,10 @@ const meta = {
   title: "Site/Pricing page",
   component: PricingPage,
   args: {
-    text: pricingPageText(translateFor("en"), LIST_PRICE_PLANS),
+    text: pricingPageText(translateFor("en")),
     offer: { plans: LIST_PRICE_PLANS, inEu: false },
     lang: "en",
+    locale: "en",
   },
   parameters: { layout: "fullscreen", a11y: { test: "error" } },
   render: (args) => <WithRouter>{() => <PricingPage {...args} />}</WithRouter>,

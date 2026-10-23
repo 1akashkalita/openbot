@@ -1,7 +1,9 @@
-import type { BillingInterval } from "@openbot/contracts/billing";
+import type { BillingCurrency, BillingInterval, BillingPlanId } from "@openbot/contracts/billing";
 import type { HostedServerEntryPoint, HostedServerList, HostedServerSummary } from "@openbot/contracts/hosted-servers";
 import type { HostedServersDesktopApi, ServerSummary } from "@openbot/contracts/ipc";
+import type { LicenseOrder } from "@openbot/contracts/license";
 import { classifyFailure } from "@openbot/telemetry";
+import type { ServerOrder } from "@openbot/ui/features/billing/OrderForm";
 import type {
   CreatedHostedServer,
   CreateHostedServerInput,
@@ -45,6 +47,8 @@ interface AddServerOverlayProps {
    */
   onRefreshServers?: (() => Promise<void>) | undefined;
   resume?: AddServerResume | null | undefined;
+  /** A server, with or without a license, that Billing's order form chose. The dialog creates it and shows its payment. */
+  order?: ServerOrder | null | undefined;
   onClose: () => void;
   onOpenServer: (serverId: string) => void;
   onContactUs?: (() => void) | undefined;
@@ -114,6 +118,7 @@ function AddServerSession(
   });
   const requestIds = untrack(() => props.requestIds);
   const resume = untrack(() => props.resume) ?? null;
+  const order = untrack(() => props.order) ?? null;
   const entryPoint = untrack(() => props.entryPoint) ?? (resume ? "checkout_resume" : undefined);
   const analytics = desktopAnalytics.scope();
   const trackPlans = (action: PlansEvent["action"], properties: Omit<PlansEvent, "action" | "entry_point"> = {}) =>
@@ -153,6 +158,7 @@ function AddServerSession(
       });
       trackPlans("viewed");
       if (serverLimit() !== null) analytics.track("limit_reached", { kind: "servers", action: "shown" });
+      else if (order && !resumed) void createOrder(order);
     } catch (error) {
       const text = currentText();
       const title = text.t("settings.hostedServers.loadFailed");
@@ -240,25 +246,51 @@ function AddServerSession(
       : text.t("server.hosted.defaultNameNumbered", { number: state.serverCount + 1 });
   }
 
-  async function create(input: CreateHostedServerInput): Promise<CreatedHostedServer> {
+  function create(input: CreateHostedServerInput): Promise<CreatedHostedServer> {
     const interval: BillingInterval = input.billing === "yearly" ? "year" : "month";
-    const currency = HOSTED_BILLING_CURRENCY[input.currency];
-    const choice = `${input.plan}:${interval}:${currency}`;
+    return createPlan(input.plan, interval, HOSTED_BILLING_CURRENCY[input.currency], null);
+  }
+
+  /** The order of Billing goes to the payment step at once. A failure leaves the plans open, to choose again. */
+  async function createOrder(next: ServerOrder): Promise<void> {
+    try {
+      await createPlan(next.plan, next.interval, next.currency, next.license);
+    } catch (error) {
+      const text = currentText();
+      const title = text.t("settings.hostedServers.createFailed");
+      actionToast.error(title, {
+        error,
+        fallback: title,
+        report: { operation: "team", source: "action", cause_code: classifyFailure(error) },
+      });
+    }
+  }
+
+  async function createPlan(
+    plan: BillingPlanId,
+    interval: BillingInterval,
+    currency: BillingCurrency,
+    license: LicenseOrder | null,
+  ): Promise<CreatedHostedServer> {
+    const choice = license
+      ? `${plan}:${interval}:${currency}:${license.tier}:${license.users}`
+      : `${plan}:${interval}:${currency}`;
     const key = requestIds.get(choice) ?? { requestId: crypto.randomUUID(), serverId: null };
     requestIds.set(choice, key);
-    trackPlans("plan_selected", { plan: input.plan, interval, currency });
+    trackPlans("plan_selected", { plan, interval, currency });
     const server = await props.calls
       .create({
         name: nextName(),
-        plan: input.plan,
+        plan,
         interval,
         currency,
         requestId: key.requestId,
         ...(entryPoint ? { entryPoint } : {}),
+        ...(license ? { license } : {}),
       })
       .catch(async (error: unknown) => {
         await refreshCount();
-        trackPlans("create_failed", { plan: input.plan, interval, currency, failure_code: "create_failed" });
+        trackPlans("create_failed", { plan, interval, currency, failure_code: "create_failed" });
         if (serverLimit() !== null) analytics.track("limit_reached", { kind: "servers", action: "shown" });
         throw error;
       });

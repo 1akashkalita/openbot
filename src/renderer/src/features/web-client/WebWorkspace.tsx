@@ -401,6 +401,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     onHostingReturnConsumed: () => props.onHostingReturnConsumed?.(),
     onJoin: () => setJoinOpen(true),
   });
+  const loadHostedPlans = async () => (await hostedServers.calls.plans()).plans;
   const [creating, setCreating] = createSignal(false);
   /** The new agent form's avatar. The first-agent row in an empty sidebar shows it. */
   const [agentAvatar, setAgentAvatar] = createSignal(newAgentAvatar());
@@ -807,6 +808,8 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     },
   );
   const [billingOpen, setBillingOpen] = createSignal(false);
+  /** `/app?start=license` opens Billing with the order form open. */
+  const [licenseStart, setLicenseStart] = createSignal(false);
   const billingCalls = createWebBillingCalls(props.accountFetch);
   const billing = createBillingStore(() => billingCalls, billingOpen);
   const licenseCalls = createWebLicenseCalls(props.accountFetch);
@@ -876,7 +879,10 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     (start) => {
       if (!start) return;
       if (start === "server") hostedServers.openAddServer("pricing_page");
-      else setBillingOpen(true);
+      else {
+        setLicenseStart(true);
+        setBillingOpen(true);
+      }
       props.onStartConsumed?.();
     },
   );
@@ -1733,6 +1739,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                   servers={servers()}
                   onRefreshServers={workspace.retryHosts}
                   resume={hostedServers.addServer()?.resume}
+                  order={hostedServers.addServer()?.order}
                   onClose={hostedServers.closeAddServer}
                   onOpenServer={(serverId) => {
                     hostedServers.closeAddServer();
@@ -1943,7 +1950,10 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                 />
                 <BillingDialog
                   open={billingOpen()}
-                  onOpenChange={setBillingOpen}
+                  onOpenChange={(open) => {
+                    setBillingOpen(open);
+                    if (!open) setLicenseStart(false);
+                  }}
                   store={billing}
                   hostedServers={billingHostedServers}
                   license={
@@ -1951,6 +1961,17 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                       store={license}
                       onManagePayment={() => void billing.openPortal({ flow: "manage" })}
                       onContactUs={licenseContactUs(() => window.location.assign(HOSTED_SERVER_CONTACT_URL))}
+                      startBuying={licenseStart()}
+                      loadPlans={hostedServers.available() ? loadHostedPlans : undefined}
+                      onOrderServer={
+                        hostedServers.available()
+                          ? (order) => {
+                              setBillingOpen(false);
+                              setLicenseStart(false);
+                              hostedServers.openAddServer("settings_billing", order);
+                            }
+                          : undefined
+                      }
                     />
                   }
                 />

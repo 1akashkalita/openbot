@@ -9,7 +9,6 @@ import {
   memberLimitForPlan,
 } from "@openbot/contracts/billing";
 import { DEFAULT_TEAM_MEMBER_LIMIT } from "@openbot/contracts/input-limits";
-import { LICENSE_SERVER_BUNDLE_PLANS } from "@openbot/contracts/license";
 
 export interface BillingEntitlement {
   plan: BillingPlanId;
@@ -72,10 +71,10 @@ export const getServerEntitlement = Effect.fn("Billing.getServerEntitlement")(fu
 });
 
 /**
- * True when the account owns a hosted server whose plan includes the lower license price
- * (`LICENSE_SERVER_BUNDLE_PLANS`). The status and grace rules are the same as `getServerEntitlement`.
+ * True when the account pays for a hosted server of any plan, so its license gets the bundle price. The
+ * status and grace rules are the same as `getServerEntitlement`.
  */
-export const accountHasServerBundlePlan = Effect.fn("Billing.accountHasServerBundlePlan")(function* (
+export const accountHasServerPlan = Effect.fn("Billing.accountHasServerPlan")(function* (
   database: D1Database,
   userId: string,
   now = Date.now(),
@@ -84,13 +83,12 @@ export const accountHasServerBundlePlan = Effect.fn("Billing.accountHasServerBun
     try: () =>
       database
         .prepare(
-          `SELECT s.plan, s.status, s.current_period_end FROM billing_subscriptions s
+          `SELECT s.status, s.current_period_end FROM billing_subscriptions s
        JOIN hosted_servers hs ON hs.server_id = s.server_id AND hs.owner_user_id = s.user_id
-       WHERE s.user_id = ? AND s.status IN ('active', 'trialing', 'past_due')
-         AND s.plan IN (${LICENSE_SERVER_BUNDLE_PLANS.map(() => "?").join(", ")})`,
+       WHERE s.user_id = ? AND s.status IN ('active', 'trialing', 'past_due')`,
         )
-        .bind(userId, ...LICENSE_SERVER_BUNDLE_PLANS)
-        .all<{ plan: string; status: BillingSubscriptionStatus; current_period_end: number | null }>(),
+        .bind(userId)
+        .all<{ status: BillingSubscriptionStatus; current_period_end: number | null }>(),
     catch: () => new BillingEntitlementError({}),
   });
   return rows.results.some((row) => entitled(row, now));

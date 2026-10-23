@@ -59,6 +59,11 @@ when a server is idle or boat stops a sandbox; and `error` and `deleted`. The Wo
    `{name, plan, interval, currency}` and an `Idempotency-Key`. The Worker stores a row in
    `awaiting_payment` with no claim and no sandbox, makes the Stripe customer, and returns a Stripe
    Checkout URL (35 minutes). A repeated request expires the old Checkout and returns a new one.
+   An optional `license: {tier, users}` adds the commercial license at the bundle price to the same
+   page, so one payment buys both. The first sync moves the license to its own subscription that
+   renews on the same day as the server ([Commercial license](architecture/servers.md#commercial-license)).
+   Refunds are by email only: email licenses@openbot.run within 24 hours of the first payment for a
+   refund less a €3 / $3.60 / 13.20 zł fee, once per account. There are no refunds for later changes.
    The desktop main process opens the URL only when it is an `https://checkout.stripe.com` URL; the
    renderer never gets it. The web client goes to the page in the same tab, and Stripe returns to
    `/app?hosting=checkout&hosted_server=<id>` (`&cancelled=1` when the user went back).

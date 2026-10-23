@@ -26,15 +26,18 @@
  * with the license metadata stands for a paid license Checkout page, as for a server plan.
  *
  * The license tiers have their own scenarios:
- * - `license-prices`: the 4 license lookup keys give active Prices with the tier, the interval and the
- *   amounts of `LICENSE_PLAN_PRICES` in EUR, USD and PLN. No license key is a server plan key.
+ * - `license-prices`: the 8 license lookup keys give active Prices with the tier, the interval, the bundle
+ *   flag and the amounts of `LICENSE_PLAN_PRICES` in EUR, USD and PLN. No license key is a server plan key.
  * - `license-starter`: a Starter license is 1 user at €30. It cannot change its users, and no member joins.
- * - `license-bundle`: an account with a Starter server plan buys the Starter license at the server price
+ * - `license-bundle-align`: an account with a server plan buys the Starter license at the bundle price
  *   (€20). When the server plan ends, the license moves to the Starter price, and the next renewal is €30.
+ * - `order-bundle`: a server create with a license order gives one Checkout page with the server Price and
+ *   the Team bundle Price. After the payment the license moves to its own subscription with no second
+ *   charge, renews with the server, and a second license order is refused.
  * - `license-team-year`: a yearly Team license of 7 users. The state, the invoice and the sales facts
  *   show the yearly interval.
  * - `license-upgrade`: Starter → Team monthly → Team yearly. A move to a lower plan is refused.
- * - `license-legacy-request`: a checkout request from an app before the tiers buys Team monthly (€80).
+ * - `license-legacy-request`: a checkout request from an app before the tiers buys Team monthly (€100).
  * - `license-member-limits`: a new Starter hosted server takes 1 member (the owner). A server made before
  *   the 1-member limit (`legacy_starter_members = 1`) takes 3.
  */
@@ -47,6 +50,7 @@ import { fileURLToPath } from "node:url";
 import {
   BILLING_CURRENCIES,
   type BillingCurrency,
+  type BillingPlanId,
   type BillingPortalRequest,
   parseBillingLookupKey,
 } from "@openbot/contracts/billing";
@@ -56,6 +60,7 @@ import {
   LICENSE_METADATA_KIND,
   LICENSE_PLANS,
   type LicenseCheckoutRequest,
+  type LicenseOrder,
   type LicensePlan,
   type LicensePlanRequest,
   type LicenseRenewalRequest,
@@ -64,7 +69,7 @@ import {
   licenseLookupKey,
   licenseMonthlyAmount,
   licensePeriodAmount,
-  licensePlanPrices,
+  licensePlanPrice,
 } from "@openbot/contracts/license";
 import { type Browser, chromium } from "playwright-core";
 import { z } from "zod";
@@ -99,7 +104,8 @@ const SCENARIOS = [
   "license-limit",
   "license-prices",
   "license-starter",
-  "license-bundle",
+  "license-bundle-align",
+  "order-bundle",
   "license-team-year",
   "license-upgrade",
   "license-legacy-request",
@@ -107,10 +113,11 @@ const SCENARIOS = [
 ] as const;
 type Scenario = (typeof SCENARIOS)[number];
 const DAY = 86_400;
-const STARTER_MONTH: LicensePlan = { tier: "starter", interval: "month" };
-const SERVER_MONTH: LicensePlan = { tier: "server", interval: "month" };
-const TEAM_MONTH: LicensePlan = { tier: "team", interval: "month" };
-const TEAM_YEAR: LicensePlan = { tier: "team", interval: "year" };
+const STARTER_MONTH: LicensePlan = { tier: "starter", interval: "month", bundle: false };
+const STARTER_BUNDLE_MONTH: LicensePlan = { tier: "starter", interval: "month", bundle: true };
+const TEAM_MONTH: LicensePlan = { tier: "team", interval: "month", bundle: false };
+const TEAM_BUNDLE_MONTH: LicensePlan = { tier: "team", interval: "month", bundle: true };
+const TEAM_YEAR: LicensePlan = { tier: "team", interval: "year", bundle: false };
 /** `WELCOME_EMAIL_CLAIM_PREFIX` of `billing-service.ts`. That module needs the Worker types. */
 const WELCOME_EMAIL_CLAIM_PREFIX = "openbot_welcome_email:";
 
@@ -204,6 +211,7 @@ const licenseStateSchema = z.object({
       amount: z.number(),
       tier: z.string().optional(),
       interval: z.string().optional(),
+      bundle: z.boolean().optional(),
       status: z.string(),
       currentPeriodEnd: z.number().nullable(),
       cancelAtPeriodEnd: z.boolean(),
@@ -214,7 +222,7 @@ const licenseStateSchema = z.object({
     z.object({ name: z.string().nullable(), email: z.string(), servers: z.array(z.string()), owner: z.boolean() }),
   ),
   coveredBy: z.array(z.object({ ownerName: z.string().nullable(), ownerEmail: z.string() })),
-  serverPrice: z.boolean().optional(),
+  bundle: z.boolean().optional(),
 });
 type LicenseView = z.infer<typeof licenseStateSchema>;
 const licenseCheckoutSchema = z.object({ url: z.string() });
@@ -258,6 +266,7 @@ const licenseItemSchema = z.object({
   items: z.object({
     data: z.array(
       z.object({
+        id: z.string(),
         quantity: z.number().nullable().optional(),
         price: z.object({ id: z.string(), lookup_key: z.string().nullable() }),
       }),
@@ -269,7 +278,7 @@ const hostListSchema = z.object({ hosts: z.array(z.object({ hostId: z.string(), 
 
 /** The request bodies of the browser API routes that this check calls. */
 type BrowserApiBody =
-  | { name: string; plan: "starter"; interval: "month"; currency: "eur" }
+  | { name: string; plan: BillingPlanId; interval: "month"; currency: "eur"; license?: LicenseOrder }
   | { confirmName: string }
   | BillingPortalRequest
   | LicenseCheckoutRequest
@@ -457,14 +466,19 @@ class Account {
   }
 
   async createServer(name: string) {
-    const response = await this.request(
-      "POST",
-      "v2/hosting/servers",
-      { name, plan: "starter", interval: "month", currency: "eur" },
-      { "Idempotency-Key": `e2e-${this.scenario}-${randomBytes(8).toString("hex")}` },
-    );
+    const response = await this.orderServer(name, "starter");
     if (response.status !== 201) throw new Error(`create ${response.status}: ${response.code}`);
     return createdSchema.parse(response.body);
+  }
+
+  /** A server create request, monthly in EUR, with a license order when one is given. */
+  orderServer(name: string, plan: BillingPlanId, license?: LicenseOrder) {
+    return this.request(
+      "POST",
+      "v2/hosting/servers",
+      { name, plan, interval: "month", currency: "eur", ...(license ? { license } : {}) },
+      { "Idempotency-Key": `e2e-${this.scenario}-${randomBytes(8).toString("hex")}` },
+    );
   }
 
   /**
@@ -552,6 +566,27 @@ class Account {
       [`metadata[${LICENSE_METADATA.kind}]`]: LICENSE_METADATA_KIND,
       [`metadata[${LICENSE_METADATA.tier}]`]: plan.tier,
       [`metadata[${LICENSE_METADATA.interval}]`]: plan.interval,
+      [`metadata[${LICENSE_METADATA.bundle}]`]: String(plan.bundle),
+      payment_behavior: "error_if_incomplete",
+    });
+    return created.id;
+  }
+
+  /**
+   * Pays for a server order as a completed Checkout page does: the open page closes, and one subscription
+   * starts with the server Price and the license bundle Price. It has the server metadata only.
+   */
+  async payOrder(serverId: string, plan: BillingPlanId, license: LicenseOrder) {
+    const session = this.row(serverId)?.checkout_session_id;
+    if (session) await stripe("POST", `/v1/checkout/sessions/${session}/expire`, idSchema).catch(() => null);
+    const created = await stripe("POST", "/v1/subscriptions", idSchema, {
+      customer: this.customer,
+      "items[0][price]": await priceId(plan, "month"),
+      "items[1][price]": await licensePriceId({ tier: license.tier, interval: "month", bundle: true }),
+      "items[1][quantity]": String(license.users),
+      currency: "eur",
+      "metadata[openbot_user_id]": this.id,
+      "metadata[openbot_server_id]": serverId,
       payment_behavior: "error_if_incomplete",
     });
     return created.id;
@@ -1060,42 +1095,43 @@ async function licensePrice(plan: LicensePlan): Promise<LicensePriceView> {
  * each extra user. A 1-user Price is a flat amount.
  */
 function licensePriceMatches(price: LicensePriceView, plan: LicensePlan): boolean {
-  const amounts = licensePlanPrices(plan);
   if (
-    !amounts ||
     !price.active ||
     price.lookup_key !== licenseLookupKey(plan) ||
     price.currency !== "eur" ||
     price.recurring?.interval !== plan.interval ||
     price.metadata[LICENSE_METADATA.kind] !== LICENSE_METADATA_KIND ||
     price.metadata[LICENSE_METADATA.tier] !== plan.tier ||
-    price.metadata[LICENSE_METADATA.interval] !== plan.interval
+    price.metadata[LICENSE_METADATA.interval] !== plan.interval ||
+    price.metadata[LICENSE_METADATA.bundle] !== String(plan.bundle)
   )
     return false;
   if (plan.tier !== "team")
     return BILLING_CURRENCIES.every(
       (currency) =>
         (currency === "eur" ? price.unit_amount : price.currency_options?.[currency]?.unit_amount) ===
-        amounts[currency].base,
+        licensePlanPrice(plan, currency).base,
     );
   return (
     price.tiers_mode === "graduated" &&
     BILLING_CURRENCIES.every((currency) => {
       const [base, extra] = (currency === "eur" ? price.tiers : price.currency_options?.[currency]?.tiers) ?? [];
+      const amounts = licensePlanPrice(plan, currency);
       return (
         base?.up_to === licenseIncludedUsers(plan.tier) &&
-        base.flat_amount === amounts[currency].base &&
+        base.flat_amount === amounts.base &&
         (base.unit_amount ?? 0) === 0 &&
         extra?.up_to === null &&
-        extra.unit_amount === amounts[currency].extraUser
+        extra.unit_amount === amounts.extraUser
       );
     })
   );
 }
 
-/** The Price and quantity of the license item of a subscription in Stripe. */
+/** The Price and quantity of the license item of a subscription in Stripe. A server order also has a server item. */
 async function licenseItem(subscriptionId: string) {
-  return (await stripe("GET", `/v1/subscriptions/${subscriptionId}`, licenseItemSchema)).items.data[0] ?? null;
+  const { items } = await stripe("GET", `/v1/subscriptions/${subscriptionId}`, licenseItemSchema);
+  return items.data.find((item) => LICENSE_LOOKUP_KEYS.includes(item.price.lookup_key ?? "")) ?? null;
 }
 
 /** The tier and interval that D1 stores for a license. */
@@ -2331,7 +2367,7 @@ const scenarios: Record<Scenario, (account: Account) => Promise<void>> = {
       const price = await licensePrice(plan);
       record(
         "license-prices",
-        `${licenseLookupKey(plan)}: an active Price of the ${plan.tier} tier, each ${plan.interval}, with the amounts of LICENSE_PLAN_PRICES in EUR, USD and PLN`,
+        `${licenseLookupKey(plan)}: an active Price of the ${plan.tier} tier, each ${plan.interval}, bundle ${plan.bundle}, with the amounts of LICENSE_PLAN_PRICES in EUR, USD and PLN`,
         licensePriceMatches(price, plan),
         {
           id: price.id,
@@ -2349,10 +2385,18 @@ const scenarios: Record<Scenario, (account: Account) => Promise<void>> = {
     const parsed = LICENSE_LOOKUP_KEYS.map((key) => ({ key, parsed: parseBillingLookupKey(key) }));
     record(
       "license-prices",
-      "the 4 license keys are the released Team monthly key and 3 new keys, and none is a server plan key",
+      "the 8 license keys are the released Team monthly key and 7 new keys, and none is a server plan key",
       keys.join(",") ===
-        "openbot_license_starter_month,openbot_license_server_month,openbot_license_month,openbot_license_year" &&
-        parsed.every((entry) => entry.parsed === null),
+        [
+          "openbot_license_starter_month",
+          "openbot_license_starter_bundle_month",
+          "openbot_license_starter_year",
+          "openbot_license_starter_bundle_year",
+          "openbot_license_month",
+          "openbot_license_bundle_month",
+          "openbot_license_year",
+          "openbot_license_bundle_year",
+        ].join(",") && parsed.every((entry) => entry.parsed === null),
       { keys, parsed },
     );
   },
@@ -2372,12 +2416,13 @@ const scenarios: Record<Scenario, (account: Account) => Promise<void>> = {
         bought.license.users === 1 &&
         bought.license.amount === amount &&
         bought.used === 1 &&
-        bought.serverPrice === false &&
+        bought.bundle === false &&
+        bought.license.bundle === false &&
         paid[0]?.amount === amount,
       {
         license: bought.license,
         used: bought.used,
-        serverPrice: bought.serverPrice,
+        bundle: bought.bundle,
         invoices: paid,
         row: licenseRow(sub),
       },
@@ -2399,17 +2444,17 @@ const scenarios: Record<Scenario, (account: Account) => Promise<void>> = {
     );
   },
 
-  async "license-bundle"(account) {
+  async "license-bundle-align"(account) {
     const before = await account.license();
     const { server } = await account.createServer("Bundle");
     const planSub = await account.pay(server.serverId);
     await planWhere(account, planSub, "plan", () => true);
-    const bundled = await licenseWhere(account, "server price", (state) => state.serverPrice === true);
+    const bundled = await licenseWhere(account, "bundle price", (state) => state.bundle === true);
     record(
-      "license-bundle",
-      "an account with no server plan has no server price, and a Starter server plan gives it",
-      before.serverPrice === false && bundled.serverPrice === true,
-      { before: before.serverPrice, after: bundled.serverPrice },
+      "license-bundle-align",
+      "an account with no server plan has no bundle price, and a server plan gives it",
+      before.bundle === false && bundled.bundle === true,
+      { before: before.bundle, after: bundled.bundle },
     );
     const opened = await account.request("POST", "v1/me/license/checkout", {
       users: 1,
@@ -2420,24 +2465,28 @@ const scenarios: Record<Scenario, (account: Account) => Promise<void>> = {
     const session = url ? await licenseSession(url) : null;
     const line = session?.line_items.data[0];
     record(
-      "license-bundle",
-      "a Starter checkout gives a page for the server Price, 1 user, with the server tier metadata",
+      "license-bundle-align",
+      "a Starter checkout gives a page for the Starter bundle Price, 1 user, with the bundle metadata",
       opened.status === 200 &&
         line?.quantity === 1 &&
-        line.price.lookup_key === licenseLookupKey(SERVER_MONTH) &&
-        session?.metadata?.[LICENSE_METADATA.tier] === "server" &&
-        session.metadata[LICENSE_METADATA.interval] === "month",
+        line.price.lookup_key === licenseLookupKey(STARTER_BUNDLE_MONTH) &&
+        session?.metadata?.[LICENSE_METADATA.tier] === "starter" &&
+        session.metadata[LICENSE_METADATA.interval] === "month" &&
+        session.metadata[LICENSE_METADATA.bundle] === "true",
       { status: opened.status, code: opened.code, line, metadata: session?.metadata ?? null },
     );
     if (url) await expireCheckout(url);
-    const sub = await account.buyLicense(1, "eur", SERVER_MONTH);
+    const sub = await account.buyLicense(1, "eur", STARTER_BUNDLE_MONTH);
     const bought = await licenseWhere(account, "license active", (state) => state.license?.status === "active");
     const paid = await invoices(sub);
-    const serverAmount = licensePeriodAmount(SERVER_MONTH, 1, "eur");
+    const bundleAmount = licensePeriodAmount(STARTER_BUNDLE_MONTH, 1, "eur");
     record(
-      "license-bundle",
-      "the license is the server tier at €20, and Stripe charged €20",
-      bought.license?.tier === "server" && bought.license.amount === serverAmount && paid[0]?.amount === serverAmount,
+      "license-bundle-align",
+      "the license is Starter with the bundle at €20, and Stripe charged €20",
+      bought.license?.tier === "starter" &&
+        bought.license.bundle === true &&
+        bought.license.amount === bundleAmount &&
+        paid[0]?.amount === bundleAmount,
       { license: bought.license, invoices: paid },
     );
 
@@ -2452,22 +2501,20 @@ const scenarios: Record<Scenario, (account: Account) => Promise<void>> = {
       },
       120_000,
     ).catch(() => null);
-    const starter = await licenseWhere(
-      account,
-      "starter tier",
-      (state) => state.license?.tier === "starter",
-      30_000,
-    ).catch(() => null);
+    const starter = await licenseWhere(account, "no bundle", (state) => state.license?.bundle === false, 30_000).catch(
+      () => null,
+    );
     const afterMove = await invoices(sub);
     const starterAmount = licensePeriodAmount(STARTER_MONTH, 1, "eur");
     record(
-      "license-bundle",
-      "the server plan ends: alignOneUserPrice moves the subscription item to the Starter Price with no new invoice, and the state shows the starter tier at €30 and no server price",
+      "license-bundle-align",
+      "the server plan ends: alignBundlePrice moves the subscription item to the Starter Price with no new invoice, and the state shows the Starter tier at €30 and no bundle",
       moved !== null &&
-        starter?.license?.amount === starterAmount &&
-        starter.serverPrice === false &&
+        starter?.license?.tier === "starter" &&
+        starter.license.amount === starterAmount &&
+        starter.bundle === false &&
         afterMove.length === paid.length,
-      { item: moved, license: starter?.license ?? null, serverPrice: starter?.serverPrice, invoices: afterMove },
+      { item: moved, license: starter?.license ?? null, bundle: starter?.bundle, invoices: afterMove },
     );
     await account.advance(32);
     const renewed = await waitFor(
@@ -2479,9 +2526,136 @@ const scenarios: Record<Scenario, (account: Account) => Promise<void>> = {
       120_000,
     );
     record(
-      "license-bundle",
+      "license-bundle-align",
       "the test clock passes the period end: the renewal invoice is the Starter price, €30",
       renewed[0]?.reason === "subscription_cycle" && renewed[0].amount === starterAmount,
+      { invoices: renewed },
+    );
+  },
+
+  async "order-bundle"(account) {
+    const team = (users: number): LicenseOrder => ({ tier: "team", users });
+    const starterPlan = await account.orderServer("Solo", "starter", team(1));
+    const tooMany = await account.orderServer("Big", "standard", team(11));
+    record(
+      "order-bundle",
+      "a Team license on a Starter server, and 11 Team users on a 10-member Standard server: 400 invalid_hosted_server_request",
+      starterPlan.status === 400 &&
+        starterPlan.code === "invalid_hosted_server_request" &&
+        tooMany.status === 400 &&
+        tooMany.code === "invalid_hosted_server_request",
+      { starter: { status: starterPlan.status, code: starterPlan.code }, tooMany },
+    );
+
+    const order = team(6);
+    const opened = await account.orderServer("Order", "standard", order);
+    const created = createdSchema.safeParse(opened.body).data;
+    const session = created?.checkoutUrl ? await licenseSession(created.checkoutUrl) : null;
+    const lines = session?.line_items.data ?? [];
+    const serverLine = lines.find((line) => line.price.lookup_key === "openbot_standard_month");
+    const licenseLine = lines.find((line) => line.price.lookup_key === licenseLookupKey(TEAM_BUNDLE_MONTH));
+    record(
+      "order-bundle",
+      "a Standard server with a Team order of 6 users: 201 and one Checkout page with 2 lines, the server Price and the Team bundle Price for 6 users",
+      opened.status === 201 &&
+        lines.length === 2 &&
+        serverLine?.quantity === 1 &&
+        licenseLine?.quantity === order.users,
+      { status: opened.status, code: opened.code, lines },
+    );
+    if (!created) return;
+
+    const serverId = created.server.serverId;
+    const planSub = await account.payOrder(serverId, "standard", order);
+    const first = await invoices(planSub);
+    const serverPrice = await stripe(
+      "GET",
+      `/v1/prices/${await priceId("standard", "month")}`,
+      z.object({ unit_amount: z.number().nullable() }),
+    );
+    const licenseAmount = licensePeriodAmount(TEAM_BUNDLE_MONTH, order.users, "eur");
+    record(
+      "order-bundle",
+      "one invoice charges the server and the license together",
+      first.length === 1 && first[0]?.amount === (serverPrice.unit_amount ?? 0) + licenseAmount,
+      { invoices: first, serverAmount: serverPrice.unit_amount, licenseAmount },
+    );
+
+    const licensed = await licenseWhere(
+      account,
+      "split license active",
+      (state) => state.license?.status === "active" && state.license.subscriptionId !== planSub,
+      120_000,
+    );
+    const licenseSub = licensed.license?.subscriptionId ?? "";
+    const split = await stripe(
+      "GET",
+      `/v1/subscriptions/${licenseSub}`,
+      z.object({ metadata: z.record(z.string(), z.string()) }),
+    );
+    const left = await waitFor(
+      "no license item on the server plan",
+      async () => ((await licenseItem(planSub)) === null ? "removed" : null),
+      60_000,
+    ).catch(() => null);
+    const splitInvoices = await invoices(licenseSub);
+    record(
+      "order-bundle",
+      "the license moves to its own subscription: Team, 6 users, the bundle amount, the server subscription named in its metadata, no charge, and no license item on the server plan",
+      licensed.license?.tier === "team" &&
+        licensed.license.bundle === true &&
+        licensed.license.users === order.users &&
+        licensed.license.amount === licenseAmount &&
+        licensed.bundle === true &&
+        split.metadata[LICENSE_METADATA.orderSubscription] === planSub &&
+        splitInvoices.every((invoice) => invoice.amount === 0) &&
+        left !== null,
+      { license: licensed.license, metadata: split.metadata, invoices: splitInvoices, removed: left },
+    );
+    const plan = await planWhere(account, planSub, "server plan active", (entry) => entry.status === "active");
+    record(
+      "order-bundle",
+      "the server plan stays active and renews on the same day as the license",
+      plan.plan === "standard" && plan.currentPeriodEnd === licensed.license?.currentPeriodEnd,
+      { plan, license: licensed.license },
+    );
+
+    const invoice = (await subscription(planSub)).latest_invoice;
+    if (invoice && (await recordsSales(invoice))) {
+      const recorded = facts(invoice).map((fact) => ({ ...fact, attributes: factAttributes(fact.attributes_json) }));
+      const paidFacts = recorded.filter((fact) => fact.fact_type === "payment_succeeded");
+      record(
+        "order-bundle",
+        "the order payment gives 2 sales facts: the server and the license",
+        paidFacts.some((fact) => fact.attributes?.product === "server") &&
+          paidFacts.some((fact) => fact.attributes?.product === "license"),
+        recorded,
+      );
+    } else {
+      print("SKIP [order-bundle] sales facts: the Worker has no OpenPanel client");
+    }
+
+    const again = await account.orderServer("Second", "standard", order);
+    record(
+      "order-bundle",
+      "a second server order with a license: 409 license_exists",
+      again.status === 409 && again.code === "license_exists",
+      { status: again.status, code: again.code },
+    );
+
+    await account.advance(32);
+    const renewed = await waitFor(
+      "license renewal invoice",
+      async () => {
+        const list = await invoices(licenseSub);
+        return list.length > splitInvoices.length && list[0]?.status === "paid" ? list : null;
+      },
+      120_000,
+    );
+    record(
+      "order-bundle",
+      "the test clock passes the period end: the license renews at the Team bundle amount for 6 users",
+      renewed[0]?.reason === "subscription_cycle" && renewed[0].amount === licenseAmount,
       { invoices: renewed },
     );
   },
@@ -2545,7 +2719,7 @@ const scenarios: Record<Scenario, (account: Account) => Promise<void>> = {
     const monthInvoices = await invoices(sub);
     record(
       "license-upgrade",
-      "Starter → Team monthly with 5 users: 200, Team monthly at €80 in the state, the Team monthly Price in Stripe, and one paid invoice now",
+      "Starter → Team monthly with 5 users: 200, Team monthly at €100 in the state, the Team monthly Price in Stripe, and one paid invoice now",
       toMonth.status === 200 &&
         month?.tier === "team" &&
         month.interval === "month" &&
@@ -2625,7 +2799,7 @@ const scenarios: Record<Scenario, (account: Account) => Promise<void>> = {
     const base = licensePeriodAmount(TEAM_MONTH, 5, "eur");
     record(
       "license-legacy-request",
-      "the license is Team monthly with 5 users at the €80 base, and Stripe charged €80",
+      "the license is Team monthly with 5 users at the €100 base, and Stripe charged €100",
       bought.license?.tier === "team" &&
         bought.license.interval === "month" &&
         bought.license.users === 5 &&

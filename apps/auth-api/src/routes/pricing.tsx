@@ -9,8 +9,9 @@ import { OPENBOT_SOCIAL_IMAGE_ALT, OPENBOT_SOCIAL_IMAGE_URL, OPENBOT_X_HANDLE } 
 export const Route = createFileRoute("/pricing")({
   loader: async ({ context }) => {
     const offer = await readPricingOffer();
-    const page = await loadPageText(context.locale, (t) => pricingPageText(t, offer.plans));
-    return { ...page, offer };
+    const page = await loadPageText(context.locale, pricingPageText);
+    // The order form reads the catalog in the browser too, so `getRouter` loads this one before hydration.
+    return { ...page, offer, textCatalog: page.locale };
   },
   head: ({ match, loaderData }) => {
     const url = new URL(PRICING_ROUTE, match.context.siteUrl).toString();
@@ -45,5 +46,5 @@ export const Route = createFileRoute("/pricing")({
 
 function Pricing() {
   const page = Route.useLoaderData();
-  return <PricingPage lang={page().lang} text={page().text} offer={page().offer} />;
+  return <PricingPage lang={page().lang} locale={page().locale} text={page().text} offer={page().offer} />;
 }

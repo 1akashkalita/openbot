@@ -40,10 +40,11 @@ export function createMockLicense(initial: Partial<LicenseState> = {}): LicenseD
     getState: async () => structuredClone(state),
     openCheckout: async (request) => {
       if (request.users < state.used) throw new Error(sourceText("error.billing.licenseUsersInUse"));
-      const plan: LicensePlan =
-        request.tier === "starter"
-          ? { tier: state.serverPrice ? "server" : "starter", interval: "month" }
-          : { tier: "team", interval: request.interval ?? "month" };
+      const plan: LicensePlan = {
+        tier: request.tier ?? "team",
+        interval: request.interval ?? "month",
+        bundle: state.bundle ?? false,
+      };
       state.license = {
         subscriptionId: "sub_preview_license",
         users: request.users,
@@ -76,7 +77,7 @@ export function createMockLicense(initial: Partial<LicenseState> = {}): LicenseD
       if (request.users < Math.max(LICENSE_INCLUDED_USERS, state.used)) {
         throw new Error(sourceText("error.billing.licenseUsersInUse"));
       }
-      const plan: LicensePlan = { tier: "team", interval: request.interval };
+      const plan: LicensePlan = { tier: "team", interval: request.interval, bundle: from.bundle };
       Object.assign(license, {
         ...plan,
         users: request.users,

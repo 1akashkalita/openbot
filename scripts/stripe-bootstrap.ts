@@ -1,4 +1,5 @@
 import {
+  BILLING_CURRENCIES,
   BILLING_INTERVALS,
   BILLING_PLAN_IDS,
   type BillingCurrency,
@@ -17,7 +18,7 @@ import {
   type LicensePrice,
   licenseIncludedUsers,
   licenseLookupKey,
-  licensePlanPrices,
+  licensePlanPrice,
 } from "@openbot/contracts/license";
 import { createOpenBotLogger, toLogValue } from "@openbot/logging";
 import { z } from "zod";
@@ -217,14 +218,17 @@ async function ensureLicenseProduct(stripe: StripeAdmin): Promise<void> {
 /**
  * The Price of one license plan. The quantity is the number of users. A Team Price is graduated tiers:
  * the first tier is the base amount for the included users, and the second tier is the amount of each
- * extra user. A 1-user Price is a flat amount for each user. EUR is the base currency, and USD and PLN
- * are currency options with the same amounts. Only an active Price with the same amounts is kept, so
+ * extra user. A 1-user Price is a flat amount for each user. A bundle Price is for an account that pays
+ * for a hosted server. EUR is the base currency, and USD and PLN are currency options with their own
+ * amounts. Only an active Price with the same amounts is kept, so
  * an archived Price stays archived and a new Price takes its lookup key.
  */
 async function ensureLicensePrice(stripe: StripeAdmin, existing: readonly Price[], plan: LicensePlan): Promise<string> {
   const lookupKey = licenseLookupKey(plan);
-  const prices = licensePlanPrices(plan);
-  if (!prices) throw new Error(`License plan ${lookupKey} has no prices.`);
+  const prices = Object.fromEntries(
+    BILLING_CURRENCIES.map((currency) => [currency, licensePlanPrice(plan, currency)] as const),
+  );
+  const bundle = String(plan.bundle);
   const signature = licensePriceSignature(prices);
   const current = existing.find((price) => price.lookup_key === lookupKey);
   if (
@@ -235,7 +239,8 @@ async function ensureLicensePrice(stripe: StripeAdmin, existing: readonly Price[
     current.recurring?.interval === plan.interval &&
     current.metadata?.openbot_license_prices === signature &&
     current.metadata?.[LICENSE_METADATA.tier] === plan.tier &&
-    current.metadata?.[LICENSE_METADATA.interval] === plan.interval
+    current.metadata?.[LICENSE_METADATA.interval] === plan.interval &&
+    current.metadata?.[LICENSE_METADATA.bundle] === bundle
   ) {
     logger.info(`Price ${lookupKey} is up to date.`);
     return current.id;
@@ -249,6 +254,7 @@ async function ensureLicensePrice(stripe: StripeAdmin, existing: readonly Price[
     [`metadata[${LICENSE_METADATA.kind}]`]: LICENSE_METADATA_KIND,
     [`metadata[${LICENSE_METADATA.tier}]`]: plan.tier,
     [`metadata[${LICENSE_METADATA.interval}]`]: plan.interval,
+    [`metadata[${LICENSE_METADATA.bundle}]`]: bundle,
     "metadata[openbot_license_prices]": signature,
   });
   const included = licenseIncludedUsers(plan.tier);

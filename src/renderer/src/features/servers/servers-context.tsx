@@ -4,6 +4,7 @@ import type { TeamCurrentCapability } from "@openbot/contracts/team-protocol/cur
 import { WAKE_RECONNECT_STATES } from "@openbot/team-client/hosted-server-wake";
 import { classifyFailure } from "@openbot/telemetry";
 import { toast } from "@openbot/ui";
+import type { ServerOrder } from "@openbot/ui/features/billing/OrderForm";
 import { currentText } from "@openbot/ui/text";
 import { createEffect, createMemo, createSignal, flush, onSettled, untrack } from "solid-js";
 import { actionToast } from "../../action-toast";
@@ -58,9 +59,15 @@ const Servers = createSimpleContext({
     const [joinServerOpen, setJoinServerOpen] = createSignal(false);
     /** Where the user opened the hosted server plans, or null while they are closed. */
     const [addServerEntryPoint, setAddServerEntryPoint] = createSignal<HostedServerEntryPoint | null>(null);
+    /** The order of Billing's order form, which the dialog creates at once. */
+    const [addServerOrder, setAddServerOrder] = createSignal<ServerOrder | null>(null);
     const addServerOpen = () => addServerEntryPoint() !== null;
-    const setAddServerOpen = (...args: [open: false] | [open: true, entryPoint: HostedServerEntryPoint]) =>
+    const setAddServerOpen = (
+      ...args: [open: false] | [open: true, entryPoint: HostedServerEntryPoint, order?: ServerOrder]
+    ) => {
+      setAddServerOrder(args[0] ? (args[2] ?? null) : null);
       setAddServerEntryPoint(args[0] ? args[1] : null);
+    };
     // True when the account can create hosted servers. The plus button then opens the plans.
     const [hostedServersAvailable, setHostedServersAvailable] = createSignal(false);
     /** The hosted servers of this account. The server menu can delete these. */
@@ -425,6 +432,7 @@ const Servers = createSimpleContext({
       setJoinServerOpen,
       addServerOpen,
       addServerEntryPoint,
+      addServerOrder,
       setAddServerOpen,
       hostedServersAvailable,
       hostedServerIds,

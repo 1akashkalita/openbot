@@ -3,7 +3,7 @@ import { Effect, Schema } from "effect";
 import { readBillingCohortCounts } from "./billing-cohorts";
 import { BillingUsd } from "./billing-usd";
 import { SalesAnalyticsDelivery, SalesAnalyticsDeliveryError } from "./sales-analytics-delivery";
-import { STRIPE_API_VERSION } from "./stripe-client";
+import { isLicensePrice, STRIPE_API_VERSION } from "./stripe-client";
 
 const STRIPE_API_ORIGIN = "https://api.stripe.com";
 const STRIPE_TIMEOUT_MS = 10_000;
@@ -339,7 +339,8 @@ function subscriptionSample(
     if (!isBillingUsdCurrency(subscription.currency)) return yield* new BillingSnapshotError({ code: "currency" });
     const amount = yield* subscriptionAmountAfterDiscount(subscription, subscription.currency, row.product, timestamp);
     const quantity = yield* Effect.try({
-      try: () => subscription.items.reduce((total, item) => addSafe(total, item.quantity), 0),
+      try: () =>
+        productItems(subscription.items, row.product).reduce((total, item) => addSafe(total, item.quantity), 0),
       catch: () => snapshotError("invalid_subscription"),
     });
     return {
@@ -482,7 +483,7 @@ function subscriptionAmountAfterDiscount(
     try: () => {
       let subtotal = 0;
       const appliedDiscounts = new Set<string>();
-      for (const item of subscription.items) {
+      for (const item of productItems(subscription.items, product)) {
         const amount =
           product === "license"
             ? licensePriceAmount(item.price, item.quantity, currency)
@@ -502,6 +503,21 @@ function subscriptionAmountAfterDiscount(
     },
     catch: (error) => (error instanceof BillingSnapshotError ? error : snapshotError("invalid_subscription")),
   });
+}
+
+/**
+ * The items of one product. A server order has a server item and a license item until its split moves the
+ * license to its own subscription, so the server row does not count the license.
+ */
+function productItems(
+  items: readonly StripeSubscriptionItem[],
+  product: StoredSubscription["product"],
+): StripeSubscriptionItem[] {
+  return items.filter(
+    (item) =>
+      isLicensePrice({ lookup_key: item.price.lookup_key ?? null, metadata: item.price.metadata ?? {} }) ===
+      (product === "license"),
+  );
 }
 
 /**

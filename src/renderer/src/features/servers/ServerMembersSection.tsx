@@ -959,7 +959,7 @@ export function createServerMembersSection(
             users() > LICENSE_MAX_USERS
               ? null
               : licenseMonthlyAmount(
-                  toTeam() ? { tier: "team", interval: "month" } : plan(),
+                  toTeam() ? { tier: "team", interval: "month", bundle: plan().bundle } : plan(),
                   users(),
                   step().license.currency,
                 ) - step().license.amount;

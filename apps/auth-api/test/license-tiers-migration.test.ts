@@ -41,7 +41,9 @@ describe("license tiers migration", () => {
     expect(after.customers).toEqual(before.customers);
     expect(after.subscriptions).toEqual(before.subscriptions);
     expect(after.servers).toEqual(before.servers.map((row) => ({ ...row, legacy_starter_members: 1 })));
-    expect(after.licenses).toEqual(before.licenses.map((row) => ({ ...row, tier: null, billing_interval: null })));
+    expect(after.licenses).toEqual(
+      before.licenses.map((row) => ({ ...row, tier: null, billing_interval: null, bundle: 0 })),
+    );
 
     // The old Worker's writes name their columns, so they still run. Its new server keeps 3 members.
     database.exec(`
@@ -63,9 +65,11 @@ describe("license tiers migration", () => {
     ).toEqual({ legacy_starter_members: 1 });
     expect(
       database
-        .prepare("SELECT users, tier, billing_interval FROM licenses WHERE stripe_subscription_id = 'sub_license'")
+        .prepare(
+          "SELECT users, tier, billing_interval, bundle FROM licenses WHERE stripe_subscription_id = 'sub_license'",
+        )
         .get(),
-    ).toEqual({ users: 9, tier: null, billing_interval: null });
+    ).toEqual({ users: 9, tier: null, billing_interval: null, bundle: 0 });
 
     // The new Worker's writes.
     database.exec(`
@@ -73,10 +77,13 @@ describe("license tiers migration", () => {
         server_id, owner_user_id, name, size, plan, billing_interval, currency, desired_state, observed_state,
         idempotency_key, legacy_starter_members, created_at, updated_at
       ) VALUES ('server-3', 'owner', 'New', 'small', 'starter', 'month', 'eur', 'running', 'awaiting_payment', 'key-3', 0, 3, 3);
-      UPDATE licenses SET tier = 'server', billing_interval = 'month' WHERE stripe_subscription_id = 'sub_license';
+      UPDATE licenses SET tier = 'starter', billing_interval = 'year', bundle = 1
+      WHERE stripe_subscription_id = 'sub_license';
     `);
     expect(() => database.exec("UPDATE hosted_servers SET legacy_starter_members = 2")).toThrow();
     expect(() => database.exec("UPDATE licenses SET tier = 'gold'")).toThrow();
+    expect(() => database.exec("UPDATE licenses SET tier = 'server'")).toThrow();
+    expect(() => database.exec("UPDATE licenses SET bundle = 2")).toThrow();
     expect(() => database.exec("UPDATE licenses SET billing_interval = 'week'")).toThrow();
     expect(database.prepare("PRAGMA foreign_key_check").all()).toEqual([]);
     expect(database.prepare("PRAGMA integrity_check").get()).toEqual({ integrity_check: "ok" });

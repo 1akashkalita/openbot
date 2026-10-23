@@ -8,7 +8,7 @@ import {
   isBillingAmount,
 } from "@openbot/contracts/billing";
 import { HOSTED_SERVER_ENTRY_POINTS, type HostedServerEntryPoint } from "@openbot/contracts/hosted-servers";
-import { LICENSE_METADATA, LICENSE_METADATA_KIND } from "@openbot/contracts/license";
+import { LICENSE_METADATA, LICENSE_METADATA_KIND, LICENSE_PRODUCT_ID } from "@openbot/contracts/license";
 import { isOneOf } from "@openbot/contracts/runtime-values";
 import { Effect, Schema } from "effect";
 import {
@@ -69,6 +69,8 @@ export interface BillingSalesLicenseCheckout {
   /** The amount of one period of the license. */
   amount: number;
   createdAt: number;
+  /** True for the license of a server order: the page is the server's, and it has its own fact. */
+  order?: boolean;
 }
 
 interface BillingSalesSyncedSubscription {
@@ -287,7 +289,7 @@ export class BillingSales {
              ) VALUES (?, 'checkout_started', ?, NULL, ?, (SELECT id FROM users WHERE id = ?), NULL, ?, ?, NULL, ?)`,
         )
         .bind(
-          `checkout:${input.sessionId}:started`,
+          `checkout:${input.sessionId}:${input.order ? "license:" : ""}started`,
           input.sessionId,
           input.sessionId,
           input.userId,
@@ -546,6 +548,9 @@ export class BillingSales {
     const object = event.data.object;
     const invoiceId = stringValue(object.id) ?? event.id;
     if (!INVOICE_ID_PATTERN.test(invoiceId)) return yield* new BillingSalesError({ code: "invalid_input" });
+    // The split of a server order makes the license subscription with a first invoice of 0. The order's
+    // invoice already holds that sale.
+    if (isOrderSplitInvoice(object)) return;
     const subscriptionId = invoiceSubscriptionId(object);
     const stored = subscriptionId
       ? yield* d1(this.#database, () =>
@@ -581,18 +586,26 @@ export class BillingSales {
       billingCurrency(stringValue(object.currency)) ?? synced?.currency ?? stored?.currency ?? license?.currency;
     const amountValue = event.type === "invoice.paid" ? object.amount_paid : object.amount_due;
     const amount = isBillingAmount(amountValue) ? amountValue : null;
+    // A server order invoices the server and the license together. Each is its own sale line, with its
+    // share of the amount from the invoice lines.
+    const lines = license ? null : orderLicenseLines(object);
+    const licenseAmount = lines && amount !== null ? Math.round((amount * lines.amount) / lines.total) : null;
     const paymentKind = yield* this.#paymentKind(object.billing_reason, userId, eventTimestamp, product);
     const failureReason = event.type === "invoice.payment_failed" ? failureCode(object) : undefined;
+    const shared: FactAttributes = {
+      ...(interval ? { interval } : {}),
+      ...(currency ? { currency } : {}),
+      ...(failureReason ? { failureReason } : {}),
+      ...(options.suppressBillingAction ? { suppressBillingAction: true } : {}),
+    };
+    const lineAmount = amount !== null && licenseAmount !== null ? amount - licenseAmount : amount;
     const attributes: FactAttributes = {
       product,
       ...(plan ? { plan } : {}),
       ...(license && isAnalyticsLicenseUsers(license.users) ? { users: license.users } : {}),
-      ...(interval ? { interval } : {}),
-      ...(currency ? { currency } : {}),
-      ...(amount !== null ? { amount } : {}),
+      ...shared,
+      ...(lineAmount !== null ? { amount: lineAmount } : {}),
       ...(paymentKind ? { paymentKind } : {}),
-      ...(failureReason ? { failureReason } : {}),
-      ...(options.suppressBillingAction ? { suppressBillingAction: true } : {}),
     };
     const failedAttemptKey =
       event.type === "invoice.payment_failed"
@@ -602,26 +615,46 @@ export class BillingSales {
         : null;
     const sourceKey =
       event.type === "invoice.paid" ? `invoice:${invoiceId}:paid` : `invoice:${invoiceId}:failed:${failedAttemptKey}`;
+    const facts: { sourceKey: string; serverId: string | null; attributes: FactAttributes }[] = [
+      { sourceKey, serverId, attributes },
+    ];
+    if (lines) {
+      const licenseKind = yield* this.#paymentKind(object.billing_reason, userId, eventTimestamp, "license");
+      facts.push({
+        sourceKey: `${sourceKey}:license`,
+        serverId: null,
+        attributes: {
+          product: "license",
+          ...(isAnalyticsLicenseUsers(lines.users) ? { users: lines.users } : {}),
+          ...shared,
+          ...(licenseAmount !== null ? { amount: licenseAmount } : {}),
+          ...(licenseKind ? { paymentKind: licenseKind } : {}),
+        },
+      });
+    }
     yield* d1(this.#database, () =>
-      this.#database
-        .prepare(
-          `INSERT OR IGNORE INTO billing_sales_facts(
-               source_key, fact_type, source_id, invoice_id, session_id, user_id, server_id,
-               event_timestamp, attributes_json, delivery_enqueued_at, created_at
-             ) VALUES (?, ?, ?, ?, NULL, (SELECT id FROM users WHERE id = ?), ?, ?, ?, NULL, ?)`,
-        )
-        .bind(
-          sourceKey,
-          event.type === "invoice.paid" ? "payment_succeeded" : "payment_failed",
-          event.id,
-          invoiceId,
-          userId,
-          serverId,
-          eventTimestamp,
-          JSON.stringify(attributes),
-          this.#now(),
-        )
-        .run(),
+      this.#database.batch(
+        facts.map((fact) =>
+          this.#database
+            .prepare(
+              `INSERT OR IGNORE INTO billing_sales_facts(
+                   source_key, fact_type, source_id, invoice_id, session_id, user_id, server_id,
+                   event_timestamp, attributes_json, delivery_enqueued_at, created_at
+                 ) VALUES (?, ?, ?, ?, NULL, (SELECT id FROM users WHERE id = ?), ?, ?, ?, NULL, ?)`,
+            )
+            .bind(
+              fact.sourceKey,
+              event.type === "invoice.paid" ? "payment_succeeded" : "payment_failed",
+              event.id,
+              invoiceId,
+              userId,
+              fact.serverId,
+              eventTimestamp,
+              JSON.stringify(fact.attributes),
+              this.#now(),
+            ),
+        ),
+      ),
     );
   }).bind(this);
 
@@ -1133,6 +1166,43 @@ function invoiceSubscriptionId(object: StripeEvent["data"]["object"]): string | 
   const parent = recordValue(object.parent);
   const details = recordValue(parent?.subscription_details);
   return stringValue(details?.subscription);
+}
+
+/**
+ * The license lines of a server order's invoice: their amount, the amount of all lines, and the users.
+ * Null for an invoice with no license line or with only license lines. The license Product names a line.
+ */
+function orderLicenseLines(
+  object: StripeEvent["data"]["object"],
+): { amount: number; total: number; users: number } | null {
+  const lines = recordValue(object.lines)?.data;
+  if (!Array.isArray(lines)) return null;
+  let amount = 0;
+  let total = 0;
+  let users = 0;
+  let server = false;
+  for (const value of lines) {
+    const line = recordValue(value);
+    if (!line || !isBillingAmount(line.amount)) continue;
+    total += line.amount;
+    const product = stringValue(recordValue(recordValue(line.pricing)?.price_details)?.product);
+    if (product !== LICENSE_PRODUCT_ID) {
+      server = true;
+      continue;
+    }
+    amount += line.amount;
+    if (positiveInteger(line.quantity)) users += line.quantity;
+  }
+  return server && amount > 0 && total > 0 ? { amount, total, users } : null;
+}
+
+/** True for the first invoice of a license that the split of a server order made. */
+function isOrderSplitInvoice(object: StripeEvent["data"]["object"]): boolean {
+  const details = recordValue(recordValue(object.parent)?.subscription_details);
+  return (
+    object.billing_reason === "subscription_create" &&
+    stringValue(recordValue(details?.metadata)?.[LICENSE_METADATA.orderSubscription]) !== null
+  );
 }
 
 function positiveInteger(value: unknown): value is number {

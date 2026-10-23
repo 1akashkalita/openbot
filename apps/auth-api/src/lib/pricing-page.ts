@@ -1,12 +1,7 @@
 // The /pricing page: hosted servers and the license, as one order form. No JSX here, for the same
 // reason `content-collection.ts` holds none.
 
-import {
-  BILLING_PLANS,
-  type BillingCurrency,
-  type BillingInterval,
-  billingListPrices,
-} from "@openbot/contracts/billing";
+import { BILLING_PLANS, billingListPrices } from "@openbot/contracts/billing";
 import type { HostedServerCatalogPlan } from "@openbot/contracts/hosted-servers";
 
 export const PRICING_ROUTE = "/pricing";
@@ -50,27 +45,6 @@ export function isEuCountry(country: string | undefined): boolean {
   return country !== undefined && EU_COUNTRIES.has(country.toUpperCase());
 }
 
-/**
- * The monthly price of the Starter license, for one member, in minor units. Only this page shows it:
- * the app's Billing sells the Team license, so "Buy a license" opens that.
- */
-export const STARTER_LICENSE_MONTHLY: Readonly<Record<BillingCurrency, number>> = { eur: 3000, usd: 3600, pln: 13200 };
-
-/** Yearly billing takes this much off a license. Like the bundle discount, only this page uses it for now. */
-export const LICENSE_YEARLY_DISCOUNT_PERCENT = 10;
-
-/** A license bought with any server costs this much less a month, in minor units. */
-export const LICENSE_BUNDLE_DISCOUNT: Readonly<Record<"starter" | "team", Readonly<Record<BillingCurrency, number>>>> =
-  {
-    starter: { eur: 1000, usd: 1200, pln: 4400 },
-    team: { eur: 2000, usd: 2400, pln: 8800 },
-  };
-
-/** The price for one month of a license, in minor units, from its monthly price. */
-export function licenseMonthlyPrice(month: number, interval: BillingInterval): number {
-  return interval === "month" ? month : Math.round((month * (100 - LICENSE_YEARLY_DISCOUNT_PERCENT)) / 100);
-}
-
 /** What the page sells: the server plans with their prices. */
 export interface PricingOffer {
   plans: readonly HostedServerCatalogPlan[];
@@ -97,35 +71,3 @@ export const LIST_PRICE_PLANS: readonly HostedServerCatalogPlan[] = BILLING_PLAN
     },
   };
 });
-
-export function formatMoney(minor: number, currency: BillingCurrency): string {
-  // Polish writes the złoty after the amount: "440 zł".
-  return new Intl.NumberFormat(currency === "pln" ? "pl" : "en", {
-    style: "currency",
-    currency: currency.toUpperCase(),
-    currencyDisplay: "narrowSymbol",
-    maximumFractionDigits: minor % 100 === 0 ? 0 : 2,
-  }).format(minor / 100);
-}
-
-/** The price for one month of a plan, in minor units. On yearly billing it is the yearly price divided by 12. */
-export function planMonthlyPrice(
-  plan: HostedServerCatalogPlan,
-  interval: BillingInterval,
-  currency: BillingCurrency,
-): number {
-  const prices = plan.prices[currency];
-  return interval === "month" ? prices.month : Math.round(prices.year / 12);
-}
-
-/**
- * How much less yearly billing costs than twelve monthly payments, in whole percent. It is the smallest
- * discount of the plans, so the text is true for each plan, as in the app's create dialog.
- */
-export function yearlyDiscountPercent(plans: readonly HostedServerCatalogPlan[], currency: BillingCurrency): number {
-  const discounts = plans.map((plan) => {
-    const twelveMonths = plan.prices[currency].month * 12;
-    return twelveMonths > 0 ? Math.floor(((twelveMonths - plan.prices[currency].year) * 100) / twelveMonths) : 0;
-  });
-  return discounts.length === 0 ? 0 : Math.max(0, Math.min(...discounts));
-}

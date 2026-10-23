@@ -488,35 +488,53 @@ another place.
 
 The license is a second Stripe product next to the server plans
 (`packages/contracts/src/license.ts`). One account has at most one open license. Its subscription
-quantity is the number of users. There are three tiers, one Stripe price for each plan
-(`LICENSE_PLANS`):
+quantity is the number of users. There are two tiers, Starter and Team. Each tier has a monthly and a
+yearly price, and each of these has a bundle price for an account that pays for a hosted server. That
+gives 8 Stripe prices (`LICENSE_PLANS`):
 
-| Plan | Lookup key | Price (EUR) | Users |
-| --- | --- | --- | --- |
-| Starter | `openbot_license_starter_month` | 30 / month | 1 |
-| Server (Starter with a Starter server) | `openbot_license_server_month` | 20 / month | 1 |
-| Team monthly | `openbot_license_month` | 80 / month for 5 users, + 15 for each extra user | 5–25 |
-| Team yearly | `openbot_license_year` | 12 months less 10% (`LICENSE_YEAR_DISCOUNT_PERCENT`) | 5–25 |
+| Plan | Lookup key | Month (EUR) | Year (EUR) | Users |
+| --- | --- | --- | --- | --- |
+| Starter | `openbot_license_starter_{month,year}` | 30 | 324 | 1 |
+| Starter bundle | `openbot_license_starter_bundle_{month,year}` | 20 | 204 | 1 |
+| Team | `openbot_license_{month,year}` | 100 for 5 users, + 15 for each extra user | 1080, + 162 | 5–25 |
+| Team bundle | `openbot_license_bundle_{month,year}` | 80, + 15 | 840, + 162 | 5–25 |
 
-The amounts are in `LICENSE_PLAN_PRICES` (EUR is the base currency; USD and PLN are
-`currency_options`). Team prices are graduated; the 1-user prices are flat. `stripe-bootstrap.ts`
-creates each price with the metadata `openbot_license_tier` and `openbot_license_interval`, and
-`licensePlanFromPrice` reads them. A price with no metadata is Team monthly: the license from before
+A year is 12 months less 10% (`LICENSE_YEAR_DISCOUNT_PERCENT`). The bundle discount
+(`LICENSE_BUNDLE_DISCOUNT`: 10 a month for Starter, 20 for Team) comes off after it. The amounts are
+in `LICENSE_PLAN_PRICES` (EUR is the base currency; USD and PLN are `currency_options` with their own
+amounts). Team prices are graduated; the 1-user prices are flat. `stripe-bootstrap.ts` creates each
+price with the metadata `openbot_license_tier`, `openbot_license_interval` and
+`openbot_license_bundle`, and `licensePlanFromPrice` reads them. A price with no metadata is Team monthly: the license from before
 the tiers used the same lookup key. The license terms allow 3 devices for each user
 (`LICENSE_DEVICES_PER_USER`); the app shows this and does not count devices.
 
 - A checkout names `tier: "starter" | "team"` and `interval`. A request with no tier is Team monthly,
-  as an app before the tiers sends. The Worker sells `server` in place of `starter` when the account
-  pays for a server whose plan is in `LICENSE_SERVER_BUNDLE_PLANS`
-  (`accountHasServerBundlePlan`). After each server plan sync, `LicenseService.alignOneUserPrice`
-  moves an open 1-user license to the other price with `proration: none`, so the change starts at the
-  next renewal. It logs a Stripe failure and does not fail the sync.
-- The 1-user tiers refuse `POST /v1/me/license/users` with 409 `license_one_user`.
-  `POST /v1/me/license/plan` sells upgrades only: Starter or Server to Team monthly or yearly, and
+  as an app before the tiers sends. The Worker sells the bundle price when the account pays for any
+  hosted server plan (`accountHasServerPlan`: active, trialing, or past due in the grace period). The
+  `licenses` row stores `bundle`. After each server plan sync, `LicenseService.alignBundlePrice` moves
+  an open license to the price of its tier and interval with the bundle that the account now has, with
+  `proration: none`, so the change starts at the next renewal. It logs a Stripe failure and does not
+  fail the sync.
+- A server create can order a license (`license: {tier, users}` in `POST /v2/hosting/servers`). The
+  Worker refuses a Team license on a Starter server, and more Team users than the server plan has
+  members (400 `invalid_hosted_server_request`). An account with an open license gets 409
+  `license_exists`. One Checkout page then has 2 line items: the server price, and the license bundle
+  price for the same interval and currency, with the users as its quantity. The customer pays one
+  invoice. On the first sync of the paid subscription, `LicenseService.splitOrder` makes a license
+  subscription with the metadata `openbot_order_subscription` (the server subscription), anchored at
+  the server period end with `proration_behavior=none`, so its first invoice is 0. Then it deletes the
+  license item from the server subscription, also with no proration. Each later sync runs the split
+  again until it is done, and the metadata stops a second license subscription. The sales ledger
+  divides the order invoice into a server fact and a license fact, and ignores the 0 invoice of the
+  split. Only the create request carries the order: "Open the payment page again" makes a page for the
+  server only.
+- The 1-user tier refuses `POST /v1/me/license/users` with 409 `license_one_user`.
+  `POST /v1/me/license/plan` sells upgrades only: Starter to Team monthly or yearly, and
   Team monthly to yearly. It bills the difference now (`always_invoice`,
   `payment_behavior=error_if_incomplete`). Any other change is 409 `license_plan_change`: to go down,
   the owner cancels at the period end and buys again.
-- The `licenses` table stores `tier` and `billing_interval` (migration `0039`). NULL is Team monthly.
+- The `licenses` table stores `tier`, `billing_interval` and `bundle` (migration `0039`). NULL is Team
+  monthly.
 - Users are people, not servers or computers: the owner, plus each distinct account that is an
   active member (`remote_memberships`) of a server that the owner owns. AI agents and chat-app
   participants do not count.
@@ -546,6 +564,9 @@ the tiers used the same lookup key. The license terms allow 3 devices for each u
   then reads the customer's subscriptions in Stripe, not only D1, so a license paid before its
   webhook stops the new page with `license_exists`. A second open license can still come from the
   Stripe Dashboard; `sync` logs a warning, and a person refunds it.
+- Refunds are by email only; the app and the Worker have no refund action. A customer emails
+  licenses@openbot.run within 24 hours of the first payment for a refund less a €3 / $3.60 /
+  13.20 zł fee, once per account. There are no refunds for later changes.
 - When the owner of a full license creates an invite, the members section asks to add 1 user and
   shows the extra price, then adds the user and creates the invite. A 1-user license changes to Team
   monthly for 5 users in place of the added user. At 25 users it shows "Contact

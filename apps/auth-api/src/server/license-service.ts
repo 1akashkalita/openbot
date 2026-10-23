@@ -1,5 +1,6 @@
 import {
   BILLING_INTERVALS,
+  BILLING_METADATA,
   BILLING_SUBSCRIPTION_STATUSES,
   type BillingCurrency,
   type BillingInterval,
@@ -20,7 +21,6 @@ import {
   type LicensePlan,
   type LicensePlanRequest,
   type LicenseState,
-  type LicenseTier,
   type LicenseUser,
   licenseLookupKey,
   licenseMonthlyAmount,
@@ -37,7 +37,7 @@ import {
   type PlanChangeDirection,
   type PlanEndReason,
 } from "./account-analytics";
-import { accountHasServerBundlePlan } from "./billing-entitlement";
+import { accountHasServerPlan } from "./billing-entitlement";
 import {
   BillingError,
   BillingOperationError,
@@ -49,6 +49,7 @@ import {
 import type { BillingSales } from "./billing-sales";
 import {
   isBillingCurrency,
+  isLicensePrice,
   type StripeClient,
   type StripePrice,
   StripeRequestError,
@@ -56,7 +57,10 @@ import {
   type StripeTransportError,
   subscriptionCustomerId,
   subscriptionLatestInvoiceId,
+  subscriptionLicenseItem,
+  subscriptionPaymentMethodId,
   subscriptionPeriodEnd,
+  subscriptionServerItem,
 } from "./stripe-client";
 
 /** Prices change only when `stripe-bootstrap.ts` runs, so each isolate reads the price once in this time. */
@@ -83,6 +87,7 @@ interface StoredLicense {
   cancel_at_period_end: number;
   tier: string | null;
   billing_interval: string | null;
+  bundle: number;
 }
 
 interface LicenseRow {
@@ -94,10 +99,11 @@ interface LicenseRow {
   cancel_at_period_end: number;
   tier: string | null;
   billing_interval: string | null;
+  bundle: number;
 }
 
 const LICENSE_ROW_COLUMNS =
-  "stripe_subscription_id, users, currency, status, current_period_end, cancel_at_period_end, tier, billing_interval";
+  "stripe_subscription_id, users, currency, status, current_period_end, cancel_at_period_end, tier, billing_interval, bundle";
 
 interface LicenseUserRow {
   id: string;
@@ -123,14 +129,6 @@ class LicenseDependencies extends Context.Service<
   LicenseDependencies,
   { database: D1Database; stripe: StripeClient; now: () => number }
 >()("auth-api/LicenseService/Dependencies") {}
-
-/** True for a Stripe Price of the license. A changed amount moves the lookup key, so the metadata also counts. */
-export function isLicensePrice(price: { lookup_key: string | null; metadata: Readonly<Record<string, string>> }) {
-  return (
-    (price.lookup_key !== null && LICENSE_LOOKUP_KEYS.includes(price.lookup_key)) ||
-    price.metadata[LICENSE_METADATA.kind] === LICENSE_METADATA_KIND
-  );
-}
 
 /**
  * The commercial license of an account: one subscription whose quantity is the number of users. Its
@@ -167,7 +165,7 @@ export class LicenseService {
       userId: string,
     ): Effect.fn.Return<LicenseState, BillingError | BillingOperationError, LicenseDependencies> {
       const dependencies = yield* LicenseDependencies;
-      const [license, currency, userRows, coveredBy, serverPrice] = yield* Effect.all(
+      const [license, currency, userRows, coveredBy, bundle] = yield* Effect.all(
         [
           this.#latestLicense(userId),
           this.#lockedCurrency(userId),
@@ -200,7 +198,7 @@ export class LicenseService {
               .bind(userId)
               .all<{ owner_name: string | null; owner_email: string }>(),
           ),
-          this.#serverPrice(userId),
+          this.#bundle(userId),
         ],
         { concurrency: "unbounded" },
       );
@@ -216,7 +214,7 @@ export class LicenseService {
         coveredBy: coveredBy.results.map(
           (row): LicenseCoverage => ({ ownerName: row.owner_name, ownerEmail: row.owner_email }),
         ),
-        serverPrice,
+        bundle,
       };
     },
     (operation) => operation.pipe(Effect.provide(this.#layer)),
@@ -226,7 +224,7 @@ export class LicenseService {
    * A Stripe Checkout page for a new license. An account has one open license and one open license page.
    * Two requests at the same time keep the newer page and both return it. Stripe is the source of truth:
    * a page paid before its webhook, or a page paid while this request runs, stops the new page.
-   * A Starter request buys the `server` price when the account pays for a Starter server.
+   * An account that pays for a hosted server buys the bundle price.
    */
   readonly createCheckout = Effect.fn("LicenseService.createCheckout")(
     function* (
@@ -237,10 +235,11 @@ export class LicenseService {
       origin: string,
     ): Effect.fn.Return<string, BillingError | BillingOperationError, LicenseDependencies> {
       const dependencies = yield* LicenseDependencies;
-      const plan: LicensePlan =
-        request.tier === "team"
-          ? { tier: "team", interval: request.interval }
-          : { tier: (yield* this.#serverPrice(user.id)) ? "server" : "starter", interval: "month" };
+      const plan: LicensePlan = {
+        tier: request.tier,
+        interval: request.interval,
+        bundle: yield* this.#bundle(user.id),
+      };
       const price = yield* this.#price(plan);
       if (!price) return yield* licenseUnavailable();
       if (yield* this.#openLicense(user.id)) return yield* licenseExists();
@@ -262,11 +261,7 @@ export class LicenseService {
           currency: request.currency,
           userId: user.id,
           quantity: request.users,
-          metadata: {
-            [LICENSE_METADATA.kind]: LICENSE_METADATA_KIND,
-            [LICENSE_METADATA.tier]: plan.tier,
-            [LICENSE_METADATA.interval]: plan.interval,
-          },
+          metadata: licenseMetadata(plan),
           successUrl: returnUrl,
           cancelUrl: `${returnUrl}${returnUrl.includes("?") ? "&" : "?"}cancelled=1`,
           nowSeconds: Math.floor(dependencies.now() / 1_000),
@@ -295,7 +290,7 @@ export class LicenseService {
           isOpenBillingStatus(subscription.status) &&
           subscription.items.data.some((item) => isLicensePrice(item.price)),
       );
-      if (open) yield* this.sync(open, user.id, readAt);
+      if (open && !subscriptionServerItem(open)) yield* this.sync(open, user.id, readAt);
       if (paid || open) {
         yield* this.#stripeCall(() => dependencies.stripe.expireCheckoutSession(kept.id));
         return yield* licenseExists();
@@ -330,8 +325,8 @@ export class LicenseService {
       const current = yield* this.#stripeCall(() =>
         dependencies.stripe.getSubscription(license.stripe_subscription_id),
       );
-      const item = current.items.data[0];
-      if (!item || !isLicensePrice(item.price)) return yield* noLicense();
+      const item = subscriptionLicenseItem(current);
+      if (!item) return yield* noLicense();
       if (licensePlanFromPrice(item.price).tier !== "team") return yield* licenseOneUser();
       const quantity = item.quantity ?? 1;
       // Fewer users apply with no refund, so the users that this period already paid for stay paid. Only
@@ -377,7 +372,7 @@ export class LicenseService {
               const after = yield* stripeRequest(() => dependencies.stripe.getSubscription(current.id)).pipe(
                 Effect.mapError(stripeFailure),
               );
-              if (after.items.data[0]?.quantity === users) return { updated: after, readAt };
+              if (subscriptionLicenseItem(after)?.quantity === users) return { updated: after, readAt };
             }
             if (quantity !== paid)
               yield* setQuantity(quantity, "none").pipe(
@@ -422,10 +417,11 @@ export class LicenseService {
       const current = yield* this.#stripeCall(() =>
         dependencies.stripe.getSubscription(license.stripe_subscription_id),
       );
-      const item = current.items.data[0];
-      if (!item || !isLicensePrice(item.price)) return yield* noLicense();
+      const item = subscriptionLicenseItem(current);
+      if (!item) return yield* noLicense();
       const from = licensePlanFromPrice(item.price);
-      const to: LicensePlan = { tier: "team", interval: request.interval };
+      // The new plan is invoiced now, so it takes the bundle price that the account has now.
+      const to: LicensePlan = { tier: "team", interval: request.interval, bundle: yield* this.#bundle(userId) };
       if (!isUpgrade(from, to)) return yield* licensePlanChange();
       const price = yield* this.#price(to);
       if (!price) return yield* licenseUnavailable();
@@ -449,7 +445,7 @@ export class LicenseService {
               const after = yield* stripeRequest(() => dependencies.stripe.getSubscription(current.id)).pipe(
                 Effect.mapError(stripeFailure),
               );
-              if (after.items.data[0]?.price.id === price.id) return after;
+              if (subscriptionLicenseItem(after)?.price.id === price.id) return after;
             }
             return yield* Effect.fail(
               error instanceof StripeRequestError && error.status === 402
@@ -466,41 +462,43 @@ export class LicenseService {
   ).bind(this);
 
   /**
-   * Moves an open 1-user license to the `server` price when the account pays for a Starter server, and
-   * back to the `starter` price when it stops. The new price applies from the next renewal, with no
-   * proration. A server plan sync calls it, so a failure is logged and does not fail that sync.
+   * Moves an open license to its bundle price when the account pays for a hosted server, and back to its
+   * plain price when it stops. The tier, interval and users stay. The new price applies from the next
+   * renewal, with no proration and no refund. A server plan sync calls it, so a failure is logged and does
+   * not fail that sync.
    */
-  readonly alignOneUserPrice = Effect.fn("LicenseService.alignOneUserPrice")(
+  readonly alignBundlePrice = Effect.fn("LicenseService.alignBundlePrice")(
     function* (this: LicenseService, userId: string): Effect.fn.Return<void, never, LicenseDependencies> {
       const self = this;
       yield* Effect.gen(function* () {
         const dependencies = yield* LicenseDependencies;
         const license = yield* self.#openLicense(userId);
-        if (!license || rowPlan(license).tier === "team") return;
-        const tier: LicenseTier = (yield* self.#serverPrice(userId)) ? "server" : "starter";
-        if (rowPlan(license).tier === tier) return;
+        if (!license) return;
+        const bundle = yield* self.#bundle(userId);
+        if (rowPlan(license).bundle === bundle) return;
         const current = yield* self.#stripeCall(() =>
           dependencies.stripe.getSubscription(license.stripe_subscription_id),
         );
-        const item = current.items.data[0];
-        if (!item || !isLicensePrice(item.price)) return;
+        const item = subscriptionLicenseItem(current);
+        // A server order that is not split yet: the split moves the license first.
+        if (!item || subscriptionServerItem(current)) return;
         const from = licensePlanFromPrice(item.price);
         const readAt = dependencies.now();
-        if (from.tier === "team" || from.tier === tier) {
+        if (from.bundle === bundle) {
           // The stored row is behind Stripe.
           yield* self.sync(current, userId, readAt);
           return;
         }
-        const price = yield* self.#price({ tier, interval: "month" });
+        const price = yield* self.#price({ ...from, bundle });
         if (!price) {
-          console.warn("billing: license price is missing", { tier });
+          console.warn("billing: license price is missing", { tier: from.tier, interval: from.interval, bundle });
           return;
         }
         const updated = yield* self.#stripeCall(() =>
           dependencies.stripe.setSubscriptionQuantity({
             subscriptionId: current.id,
             itemId: item.id,
-            quantity: 1,
+            quantity: item.quantity ?? 1,
             proration: "none",
             priceId: price.id,
           }),
@@ -511,6 +509,79 @@ export class LicenseService {
           Effect.sync(() => console.warn("billing: license price was not aligned with the server plans")),
         ),
       );
+    },
+    (operation) => operation.pipe(Effect.provide(this.#layer)),
+  ).bind(this);
+
+  /**
+   * Moves the license of a paid server order to its own subscription. The order's one Checkout made one
+   * subscription with a server item and a license item. The new subscription has the same customer, Price,
+   * users and payment method, and renews on the same date with no charge before it. Then the license item
+   * leaves the server subscription with no proration. A failed step runs again on the next webhook: the
+   * idempotency key and the `orderSubscription` metadata make the license only once.
+   */
+  readonly splitOrder = Effect.fn("LicenseService.splitOrder")(
+    function* (
+      this: LicenseService,
+      subscription: StripeSubscription,
+      ownerId: string,
+    ): Effect.fn.Return<void, BillingError | BillingOperationError, LicenseDependencies> {
+      const dependencies = yield* LicenseDependencies;
+      const item = subscriptionLicenseItem(subscription);
+      if (!item || !subscriptionServerItem(subscription) || subscription.status !== "active") return;
+      const currency = subscription.currency.toLowerCase();
+      const periodEnd = subscriptionPeriodEnd(subscription);
+      if (!isBillingCurrency(currency) || periodEnd === null) {
+        console.warn("billing: server order cannot be split", { subscriptionId: subscription.id });
+        return;
+      }
+      const customerId = subscriptionCustomerId(subscription);
+      const listed = yield* this.#stripeCall(() => dependencies.stripe.listCustomerSubscriptions(customerId));
+      const readAt = dependencies.now();
+      const license =
+        listed.find((candidate) => candidate.metadata[LICENSE_METADATA.orderSubscription] === subscription.id) ??
+        (yield* this.#stripeCall(() =>
+          dependencies.stripe.createSubscription(
+            {
+              customerId,
+              priceId: item.price.id,
+              quantity: item.quantity ?? 1,
+              currency,
+              anchorSeconds: Math.floor(periodEnd / 1_000),
+              paymentMethodId: subscriptionPaymentMethodId(subscription),
+              metadata: {
+                [BILLING_METADATA.userId]: ownerId,
+                ...licenseMetadata(licensePlanFromPrice(item.price)),
+                [LICENSE_METADATA.orderSubscription]: subscription.id,
+              },
+            },
+            `license-split:${subscription.id}`,
+          ),
+        ));
+      yield* this.#stripeCall(() => dependencies.stripe.deleteSubscriptionItem(item.id));
+      yield* this.sync(license, ownerId, readAt);
+    },
+    (operation) => operation.pipe(Effect.provide(this.#layer)),
+  ).bind(this);
+
+  /** The Price of a license plan, or null when the Stripe account has none. */
+  readonly price = Effect.fn("LicenseService.planPrice")(
+    function* (
+      this: LicenseService,
+      plan: LicensePlan,
+    ): Effect.fn.Return<StripePrice | null, BillingError | BillingOperationError, LicenseDependencies> {
+      return yield* this.#price(plan);
+    },
+    (operation) => operation.pipe(Effect.provide(this.#layer)),
+  ).bind(this);
+
+  /** Fails with `license_exists` when the account has an open license, so a server order cannot buy another. */
+  readonly assertNoLicense = Effect.fn("LicenseService.assertNoLicense")(
+    function* (
+      this: LicenseService,
+      userId: string,
+    ): Effect.fn.Return<void, BillingError | BillingOperationError, LicenseDependencies> {
+      if (yield* this.#openLicense(userId)) return yield* licenseExists();
     },
     (operation) => operation.pipe(Effect.provide(this.#layer)),
   ).bind(this);
@@ -548,10 +619,14 @@ export class LicenseService {
     ): Effect.fn.Return<LicenseSync | null, BillingError | BillingOperationError, LicenseDependencies> {
       const dependencies = yield* LicenseDependencies;
       const currency = subscription.currency.toLowerCase();
-      const item = subscription.items.data[0];
+      const item = subscriptionLicenseItem(subscription);
       const users = item?.quantity ?? 1;
-      const plan: LicensePlan = item ? licensePlanFromPrice(item.price) : { tier: "team", interval: "month" };
+      const plan: LicensePlan = item
+        ? licensePlanFromPrice(item.price)
+        : { tier: "team", interval: "month", bundle: false };
       if (
+        // A server order before its split is a server plan. The split stores its license.
+        subscriptionServerItem(subscription) ||
         !isBillingCurrency(currency) ||
         !isOneOf(BILLING_SUBSCRIPTION_STATUSES, subscription.status) ||
         !Number.isSafeInteger(users) ||
@@ -566,19 +641,20 @@ export class LicenseService {
         dependencies.database.batch<StoredLicense>([
           dependencies.database
             .prepare(
-              "SELECT users, status, cancel_at_period_end, tier, billing_interval FROM licenses WHERE stripe_subscription_id = ?",
+              "SELECT users, status, cancel_at_period_end, tier, billing_interval, bundle FROM licenses WHERE stripe_subscription_id = ?",
             )
             .bind(subscription.id),
           dependencies.database
             .prepare(
               `INSERT INTO licenses(
                stripe_subscription_id, user_id, stripe_customer_id, users, currency, status, current_period_end,
-               cancel_at_period_end, tier, billing_interval, updated_at
-             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               cancel_at_period_end, tier, billing_interval, bundle, updated_at
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
              ON CONFLICT(stripe_subscription_id) DO UPDATE SET
                users = excluded.users,
                tier = excluded.tier,
                billing_interval = excluded.billing_interval,
+               bundle = excluded.bundle,
                currency = excluded.currency,
                status = excluded.status,
                current_period_end = excluded.current_period_end,
@@ -597,6 +673,7 @@ export class LicenseService {
               cancelAtPeriodEnd ? 1 : 0,
               plan.tier,
               plan.interval,
+              plan.bundle ? 1 : 0,
               readAt,
             ),
         ]),
@@ -824,13 +901,13 @@ export class LicenseService {
     return prices.get(lookupKey) ?? null;
   });
 
-  /** True when the account pays for a server that gives the 1-user license the `server` price. */
-  readonly #serverPrice = Effect.fn("LicenseService.serverPrice")(function* (
+  /** True when the account pays for a hosted server, so a license gets the bundle price. */
+  readonly #bundle = Effect.fn("LicenseService.bundle")(function* (
     this: LicenseService,
     userId: string,
   ): Effect.fn.Return<boolean, BillingOperationError, LicenseDependencies> {
     const dependencies = yield* LicenseDependencies;
-    return yield* accountHasServerBundlePlan(dependencies.database, userId, dependencies.now()).pipe(
+    return yield* accountHasServerPlan(dependencies.database, userId, dependencies.now()).pipe(
       Effect.mapError(() => new BillingOperationError({})),
     );
   });
@@ -853,15 +930,26 @@ function licenseUsers(ownerId: string, rows: readonly LicenseUserRow[]): License
 }
 
 /** The plan of a stored license. A license from before the tiers has none and is Team monthly. */
-function rowPlan(row: { tier: string | null; billing_interval: string | null }): LicensePlan {
+function rowPlan(row: { tier: string | null; billing_interval: string | null; bundle: number }): LicensePlan {
   return {
     tier: isOneOf(LICENSE_TIERS, row.tier) ? row.tier : "team",
     interval: isOneOf(BILLING_INTERVALS, row.billing_interval) ? row.billing_interval : "month",
+    bundle: row.bundle === 1,
   };
 }
 
 function samePlan(left: LicensePlan, right: LicensePlan): boolean {
-  return left.tier === right.tier && left.interval === right.interval;
+  return left.tier === right.tier && left.interval === right.interval && left.bundle === right.bundle;
+}
+
+/** The metadata of a license Checkout and subscription. */
+function licenseMetadata(plan: LicensePlan): Record<string, string> {
+  return {
+    [LICENSE_METADATA.kind]: LICENSE_METADATA_KIND,
+    [LICENSE_METADATA.tier]: plan.tier,
+    [LICENSE_METADATA.interval]: plan.interval,
+    [LICENSE_METADATA.bundle]: String(plan.bundle),
+  };
 }
 
 /** The changes that the app sells: a 1-user license to Team, and a monthly Team license to yearly. */
@@ -882,6 +970,7 @@ function licenseFromRow(row: LicenseRow): License | null {
     amount: licenseMonthlyAmount(plan, row.users, row.currency),
     tier: plan.tier,
     interval: plan.interval,
+    bundle: plan.bundle,
     status,
     currentPeriodEnd: row.current_period_end,
     cancelAtPeriodEnd: row.cancel_at_period_end === 1 && isOpenBillingStatus(status),
