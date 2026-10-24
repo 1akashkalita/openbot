@@ -374,6 +374,7 @@ export function ConversationComposer() {
                 items={awaitingReplies()}
                 title={channel ? t("chat.awaiting.subtasks") : undefined}
                 onDismiss={dismissAwaitingReplies}
+                onOpenAgent={props.onSelectAgent}
               />
             </Show>
             <Show when={waitsVisible() && props.onCancelWait}>
