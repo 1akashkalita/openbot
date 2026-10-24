@@ -1263,7 +1263,7 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
         const name = turn.toolCalls.get(toolCallId);
         if (!name) continue;
         turn.toolCalls.delete(toolCallId);
-        this.#emitToolCall(runtime, toolCallId, name, true);
+        this.#emitToolCall(runtime, toolCallId, name, true, undefined, isError);
       }
       return;
     }
@@ -1385,9 +1385,24 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
     });
   }
 
-  #emitToolCall(runtime: ThreadRuntime, id: string, name: string, completed: boolean, input?: unknown): void {
+  /** `failed` is the tool result's `is_error`, such as a shell command with a non-zero exit. */
+  #emitToolCall(
+    runtime: ThreadRuntime,
+    id: string,
+    name: string,
+    completed: boolean,
+    input?: unknown,
+    failed = false,
+  ): void {
     const turn = runtime.activeTurn;
     if (!turn) return;
+    // A bridged call names the OpenBot tool and holds its own arguments in `arguments`.
+    const bridged = name === "mcp__openbot__tool_call" && isRecord(input) && input.name === "openbot.send_message";
+    const message = name === "mcp__openbot__send_message" ? input : bridged ? input.arguments : undefined;
+    const recipients =
+      isRecord(message) && Array.isArray(message.recipientAgentIds)
+        ? { recipientAgentIds: message.recipientAgentIds }
+        : null;
     this.emit("notification", {
       method: completed ? "item/completed" : "item/started",
       params: {
@@ -1403,11 +1418,18 @@ export class ClaudeAgentClient extends EventEmitter<ClientEvents> {
           id,
           type: "toolCall",
           name,
-          status: completed ? "completed" : "in_progress",
+          status: completed ? (failed ? "failed" : "completed") : "in_progress",
           // The skill that a `Skill` call loads, for the turn's activity line.
           ...(name === "Skill" && isRecord(input) && typeof input.skill === "string"
             ? { skill: input.skill.slice(0, INPUT_LIMITS.identifier) }
             : {}),
+          // The turn trace shows the command and the recipients; it redacts the command.
+          ...(name === "Bash" && isRecord(input) && typeof input.command === "string"
+            ? { command: input.command.slice(0, INPUT_LIMITS.messageText) }
+            : {}),
+          ...(recipients === null
+            ? {}
+            : { arguments: bridged ? { name: "openbot.send_message", arguments: recipients } : recipients }),
         },
       },
     });
@@ -2151,8 +2173,10 @@ function claudeTurnModelUsage(
       cacheReadInputTokens: 0,
       cacheCreationInputTokens: 0,
       outputTokens: 0,
+      smallestRequestInputTokens: Number.POSITIVE_INFINITY,
     };
     models[model] = total;
+    let prompt: number | null = 0;
     for (const [key, field] of [
       ["inputTokens", "input_tokens"],
       ["cacheReadInputTokens", "cache_read_input_tokens"],
@@ -2163,7 +2187,12 @@ function claudeTurnModelUsage(
       const value = usage[field] ?? 0;
       const sum = total[key];
       total[key] = isNumber(value) && isNumber(sum) ? sum + value : null;
+      if (key !== "outputTokens") prompt = isNumber(value) && prompt !== null ? prompt + value : null;
     }
+    // Some long-context prices apply to each request by its own prompt, so the smallest one shows
+    // whether all of the turn's requests pay them.
+    const smallest = total.smallestRequestInputTokens;
+    total.smallestRequestInputTokens = isNumber(smallest) && prompt !== null ? Math.min(smallest, prompt) : null;
   }
   return models;
 }
