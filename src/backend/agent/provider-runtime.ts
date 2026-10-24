@@ -540,6 +540,10 @@ export class ProviderRuntime implements ProviderPort {
           cli: (provider) =>
             this.#clients.has(provider) || this.#released.has(provider) ? this.#cli.get(provider) : undefined,
           defaultEmail: (provider) => this.#accounts.get(provider)?.email ?? null,
+          signInTemp: (provider) => {
+            const temp = provider === "antigravity" ? antigravityTemp(this.#credentials) : undefined;
+            return temp && { ...temp, provider: providerLabel(provider) };
+          },
           authenticate: (provider, cli, accountEnvironment) =>
             this.#authenticateClient(provider, cli, { accountEnvironment }).pipe(
               Effect.mapError((error) => new ProviderAccountFailed({ cause: error.cause })),
@@ -553,6 +557,13 @@ export class ProviderRuntime implements ProviderPort {
             [...this.#confined.values()].find(
               (confined) => confined.client.provider === provider && confined.accountId === accountId,
             )?.client ?? null,
+          isAccountBusy: (provider, accountId) =>
+            [...this.#confined].some(
+              ([agentId, confined]) =>
+                confined.client.provider === provider &&
+                confined.accountId === accountId &&
+                this.#hooks.isAgentBusy(agentId),
+            ),
           stopAgentClients: (provider, accountId) =>
             Effect.forEach(
               [...this.#confined].filter(
@@ -2067,6 +2078,11 @@ export class ProviderRuntime implements ProviderPort {
     if (!cli)
       return yield* new ProviderOperationFailed({
         cause: new Error(sourceText("error.provider.cliNotReady", { provider: providerLabel(provider) })),
+      });
+    // A CLI that ignores the account's folder would run the agent on the provider's own sign-in.
+    if (own.account && !this.#providerAccounts?.supported(provider))
+      return yield* new ProviderOperationFailed({
+        cause: new Error(sourceText("error.provider.accountsUnsupported", { provider: providerLabel(provider) })),
       });
     const disposals = this.#disposals;
     const accountEnvironment = own.account ? this.#providerAccounts?.environment(own.account) : undefined;

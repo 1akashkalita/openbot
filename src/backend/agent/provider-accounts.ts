@@ -14,11 +14,13 @@ import {
 import { sourceText } from "@openbot/i18n/source";
 import { createOpenBotLogger } from "@openbot/logging";
 import { Cause, Effect, Fiber, Schema, type Scope } from "effect";
+import { startAcpAuthentication } from "./../acp-sign-in";
 import type { AgentClient } from "./../agent-client";
 import { type AgentCliInfo, cliPathEnvironment } from "./../cli";
 import type { AccountReadResult } from "./../protocol";
 import { ProviderSignInError } from "../provider-client-effects";
 import { type ProviderAccountSupport, requireProviderDriver } from "./../provider-drivers";
+import type { ProviderTempOptions } from "./../provider-temp";
 import { shortenDiagnostic } from "./../stderr-diagnostics";
 import { stopProcessTree } from "../windows-process-tree";
 import { captureBrowser } from "./browser-capture";
@@ -55,6 +57,8 @@ export interface ProviderAccountsHost {
   /** The CLI of the provider's own sign-in, or undefined when it is not connected. */
   cli(provider: AgentProviderId): AgentCliInfo | undefined;
   defaultEmail(provider: AgentProviderId): string | null;
+  /** The temporary folder of an ACP sign-in process, as the provider's own sign-in gets it. */
+  signInTemp(provider: AgentProviderId): ProviderTempOptions | undefined;
   /** Starts and checks a client that signs in to the account's folder. The caller stops it. */
   authenticate(
     provider: AgentProviderId,
@@ -64,6 +68,8 @@ export interface ProviderAccountsHost {
   stopClient(client: AgentClient): Effect.Effect<void>;
   /** The running process of an agent on this account, if there is one. */
   agentClient(provider: AgentProviderId, accountId: string): AgentClient | null;
+  /** Whether an agent on this account runs a turn. */
+  isAccountBusy(provider: AgentProviderId, accountId: string): boolean;
   stopAgentClients(provider: AgentProviderId, accountId: string): Effect.Effect<void>;
   readUsage(client: AgentClient, model?: string): Effect.Effect<AccountUsage, ProviderAccountFailed>;
   /** The usage reset credits that the client's last usage reading counted; undefined for a provider with none. */
@@ -114,9 +120,22 @@ export class ProviderAccounts {
     return { [support.homeVariable]: this.#store.home(account) };
   }
 
+  /** Whether the provider's connected CLI can hold accounts after the first. */
+  supported(provider: AgentProviderId): boolean {
+    return this.#support(provider) !== undefined;
+  }
+
+  /** The support of a provider whose connected CLI reads the home folder variable. */
+  #support(provider: AgentProviderId): ProviderAccountSupport | undefined {
+    const support = ProviderAccounts.support(provider);
+    if (!support?.supports) return support;
+    const cli = this.#host.cli(provider);
+    return cli && support.supports(cli) ? support : undefined;
+  }
+
   /** The rows of a connected provider that can hold more than one account; its own sign-in first. */
   rows(provider: AgentProviderId, defaultEmail: string | null): ProviderAccountStatus[] | undefined {
-    if (!ProviderAccounts.support(provider)) return undefined;
+    if (!this.#support(provider)) return undefined;
     return [
       {
         id: DEFAULT_PROVIDER_ACCOUNT_ID,
@@ -151,7 +170,7 @@ export class ProviderAccounts {
     openExternal: (url: string) => Promise<void>,
     onHost: boolean,
   ) {
-    const support = ProviderAccounts.support(provider);
+    const support = this.#support(provider);
     const name = providerLabel(provider);
     if (!support) return yield* accountFailure(sourceText("error.provider.accountsUnsupported", { provider: name }));
     const cli = this.#host.cli(provider);
@@ -172,20 +191,42 @@ export class ProviderAccounts {
       if (!stored) return yield* accountFailure(sourceText("error.provider.accountNotFound", { provider: name }));
       account = stored;
     }
+    const command = support.signIn;
+    if (!added && "kind" in command) {
+      // The sign-out removes the token that the account's processes use.
+      if (this.#host.isAccountBusy(provider, account.id))
+        return yield* accountFailure(sourceText("error.provider.cliBusyReconnect", { provider: name }));
+      yield* this.#host.stopAgentClients(provider, account.id);
+    }
     yield* this.#interrupt(account.id);
     if (added) this.#added.add(account.id);
     this.#setState(account.id, { state: "connecting", message: null });
     const signIn = Effect.scoped(
       Effect.gen({ self: this }, function* () {
+        if ("kind" in command) {
+          // A Reconnect signs the account out first: its saved token would answer with no browser page.
+          // The server prints Google's page, which a host shows and Linux opens through the desktop.
+          const login = yield* startAcpAuthentication({
+            executable: cli.executable,
+            argv: command.argv,
+            env: { ...cliPathEnvironment(cli), ...command.env, ...this.environment(account) },
+            methodId: command.methodId,
+            timeoutMs: command.timeoutMs,
+            ...(added ? {} : { logout: true }),
+            privateTemp: this.#host.signInTemp(provider),
+            ...(onHost || process.platform === "linux" ? { openGoogleSignIn: openExternal } : {}),
+          });
+          return yield* login.done;
+        }
         const browser = onHost ? yield* captureBrowser(openExternal) : {};
         const child = yield* Effect.acquireRelease(
           Effect.sync(() =>
-            spawn(cli.executable, [...support.signIn.argv], {
+            spawn(cli.executable, [...command.argv], {
               cwd: process.cwd(),
               env: {
                 ...process.env,
                 ...cliPathEnvironment(cli),
-                ...support.signIn.env(cli),
+                ...command.env(cli),
                 ...this.environment(account),
                 ...browser,
               },
@@ -196,7 +237,7 @@ export class ProviderAccounts {
           ),
           (child) => stopProcessTree(child).pipe(Effect.ignore),
         );
-        yield* waitForSuccessfulProcess(child, support.signIn.timeoutMs);
+        yield* waitForSuccessfulProcess(child, command.timeoutMs);
       }),
     ).pipe(
       Effect.andThen(this.#check(account)),
@@ -302,7 +343,7 @@ export class ProviderAccounts {
 
   /** Checks each account of a provider whose own sign-in just connected, unless a check is recent. */
   checkAll(provider: AgentProviderId): Effect.Effect<void> {
-    if (!ProviderAccounts.support(provider)) return Effect.void;
+    if (!this.#support(provider)) return Effect.void;
     const now = Date.now();
     return Effect.forEach(
       this.#store
@@ -348,6 +389,7 @@ export class ProviderAccounts {
   ) {
     const now = Date.now();
     const limits: AccountUsageLimit[] = [];
+    if (!this.#support(provider)) return limits;
     for (const account of this.#store.list(provider)) {
       if (this.#states.get(account.id)?.state !== "connected") continue;
       const kept = this.#usage.get(account.id);
@@ -476,6 +518,8 @@ export class ProviderAccounts {
   ) {
     const running = this.#host.agentClient(account.provider, account.id);
     if (running) return yield* this.#storeUsage(account, running, yield* this.#host.readUsage(running, model));
+    if (ProviderAccounts.support(account.provider)?.usageLeavesSession)
+      return this.#usage.get(account.id)?.limit ?? null;
     const cli = this.#host.cli(account.provider);
     if (!cli) return null;
     return yield* Effect.acquireUseRelease(
