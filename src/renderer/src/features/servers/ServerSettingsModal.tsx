@@ -57,6 +57,7 @@ import { ConnectorsPanel, type ConnectorsPanelDetail } from "../connectors/Conne
 import type { ConnectorRegistry } from "../connectors/connector-registry";
 import { type ServerStorageOptions, ServerStoragePanel } from "../files/ServerStoragePanel";
 import { type HostProviderSettings, HostProviderSettingsPanel } from "../settings/ProviderSettingsSection";
+import type { HostPromptCacheTtlOptions, ProviderPromptCacheSource } from "../settings/provider-prompt-cache";
 import type { McpServerConfig, McpTestResult } from "./mcp-servers";
 import { ServerDesktopPanel } from "./ServerDesktopPanel";
 import { createServerGeneralSection } from "./ServerGeneralSection";
@@ -69,7 +70,7 @@ import { type ServerRoutineFeedOptions, ServerRoutineFeedPanel } from "./ServerR
 import type { ServerTimezoneOptions } from "./ServerTimezoneSetting";
 import { type ServerTransferOptions, ServerTransferPanel } from "./ServerTransferPanel";
 import { type ServerUpdateOptions, ServerUpdatePanel } from "./ServerUpdatePanel";
-import { serverRoleCanAdminister } from "./server-capabilities";
+import { serverCanAdminister, serverRoleCanAdminister } from "./server-capabilities";
 import type { ServerSettingsSectionHost } from "./server-settings-section";
 
 export interface ServerSettingsModalProps {
@@ -199,6 +200,12 @@ export interface ServerSettingsModalProps {
    */
   hostMemoryLimit?: ServerMemoryLimitOptions | undefined;
   /**
+   * The Claude provider page shows how long Claude keeps the prompt cache only when a caller supplies
+   * this, and only for the local server or a remote host with `prompt-cache-ttl-v1` that this member
+   * administers.
+   */
+  hostPromptCacheTtl?: HostPromptCacheTtlOptions | undefined;
+  /**
    * The Roles section appears only when a caller supplies this, and only for the local server or a
    * remote host with `agent-access-v1` that this member administers.
    */
@@ -299,6 +306,11 @@ export function ServerSettingsModal(props: ServerSettingsModalProps) {
    */
   const canManageMcp = () => serverRoleCanAdminister(props.server);
   const actionsAvailable = () => local() || props.server.state === "online";
+  function promptCacheSource(): ProviderPromptCacheSource | undefined {
+    const options = props.hostPromptCacheTtl;
+    if (!options || !actionsAvailable() || !serverCanAdminister(props.server, "prompt-cache-ttl-v1")) return undefined;
+    return { ...options, serverId: props.server.id };
+  }
   const availableInitialSection = (): Section | null =>
     props.initialSection === "updates" && !props.hostUpdate ? null : (props.initialSection ?? null);
   const published = () => (local() ? props.hostStatus?.phase === "online" : props.server.state === "online");
@@ -782,6 +794,7 @@ export function ServerSettingsModal(props: ServerSettingsModalProps) {
                   hostName={local() ? undefined : props.server.name}
                   selectMount={modalElement()}
                   onDetailChange={setProviderDetail}
+                  promptCache={promptCacheSource()}
                 />
               )}
             </Show>
