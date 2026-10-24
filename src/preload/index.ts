@@ -274,6 +274,7 @@ import {
   decodeTeamPresenceSnapshot,
   decodeTeamSessions,
 } from "./team-decoding";
+import { decodeVaultImportResult, decodeVaultSecret, decodeVaultState } from "./vault-decoding";
 
 const attachmentImportListeners = new Set<(event: AttachmentImportEvent) => void>();
 /**
@@ -779,6 +780,16 @@ const openbotApi: OpenBotDesktopApi = {
     hostStatus: decodeBitwardenConnectorStatus,
     hostConnect: decodeBitwardenConnectorStatus,
     hostDisconnect: decodeBitwardenConnectorStatus,
+  }),
+  vault: bridgeGroup(IPC_ENDPOINTS.vault, {
+    list: decodeVaultState,
+    save: decodeVaultState,
+    delete: decodeVaultState,
+    reveal: decodeVaultSecret,
+    copy: decodeVoid,
+    importCsv: decodeVaultImportResult,
+    reset: decodeVaultState,
+    changed: decodeVaultState,
   }),
   onePasswordConnector: bridgeGroup(IPC_ENDPOINTS.onePasswordConnector, {
     status: decodeOnePasswordConnectorStatus,
