@@ -840,6 +840,7 @@ const openbotApi: OpenBotDesktopApi = {
     usageResets: decodeProviderUsageResetsFromMain,
     resetUsage: decodeProviderUsageResetOutcomeFromMain,
     startRelaySignIn: decodeVoid,
+    startAccountRelaySignIn: decodeVoid,
     relaySignInStatus: decodeProviderRelaySignInStatus,
     openRelaySignIn: decodeVoid,
     pasteRelaySignIn: decodeVoid,
