@@ -21,6 +21,7 @@ import {
   type AttachmentDataInput,
   type BitwardenConnectorStatus,
   type CentralAuthUser,
+  DEFAULT_AGENT_DEFAULTS,
   type HiddenAgentsSnapshot,
   type QueueSnapshot,
   type RoutineResultConnectionOption,
@@ -599,6 +600,7 @@ try {
             }),
         },
         busyMessageMode: { get: () => ({ mode: "queue" }) },
+        agentDefaults: { get: () => DEFAULT_AGENT_DEFAULTS },
       }),
       // A routine results service over one agent routine. The host's own name of the connection wins.
       routineResults: {
