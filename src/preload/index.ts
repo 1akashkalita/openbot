@@ -275,6 +275,18 @@ import {
   decodeTeamSessions,
 } from "./team-decoding";
 import { decodeVaultImportResult, decodeVaultSecret, decodeVaultState } from "./vault-decoding";
+import {
+  decodeWorkflowDetail,
+  decodeWorkflowGraph,
+  decodeWorkflowRunDetail,
+  decodeWorkflowRunPage,
+  decodeWorkflowSaveResult,
+  decodeWorkflowStep,
+  decodeWorkflowSummaries,
+  decodeWorkflowSummary,
+  decodeWorkflowVersions,
+  decodeWorkflowWebhookSecret,
+} from "./workflow-decoding";
 
 const attachmentImportListeners = new Set<(event: AttachmentImportEvent) => void>();
 /**
@@ -677,6 +689,26 @@ const openbotApi: OpenBotDesktopApi = {
     connect: decodeRoutineFlowLink,
     disconnect: decodeVoid,
     updateLink: decodeRoutineFlowLink,
+  }),
+  workflows: bridgeGroup(IPC_ENDPOINTS.workflows, {
+    list: decodeWorkflowSummaries,
+    get: decodeWorkflowDetail,
+    create: decodeWorkflowDetail,
+    rename: decodeWorkflowSummary,
+    delete: decodeVoid,
+    saveGraph: decodeWorkflowSaveResult,
+    versions: decodeWorkflowVersions,
+    versionGraph: decodeWorkflowGraph,
+    restoreVersion: decodeWorkflowDetail,
+    startRun: decodeWorkflowRunDetail,
+    runStep: decodeWorkflowStep,
+    stopStep: decodeVoid,
+    stopRun: decodeVoid,
+    retryStep: decodeWorkflowStep,
+    decide: decodeVoid,
+    runs: decodeWorkflowRunPage,
+    run: decodeWorkflowRunDetail,
+    rotateWebhookSecret: decodeWorkflowWebhookSecret,
   }),
   routineResults: bridgeGroup(IPC_ENDPOINTS.routineResults, {
     options: decodeRoutineResultOptions,

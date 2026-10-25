@@ -12,6 +12,7 @@ import type {
   AgentMemorySelectionState,
   AgentModelId,
   AgentModelOption,
+  AgentReasoningEffort,
   AgentRuntimeSnapshot,
   AgentSessionSettings,
   AgentStatus,
@@ -117,6 +118,7 @@ import {
   type QueueSteerFallback,
   sameAgentBrowserProfile,
   sameAgentModelChoice,
+  WORKFLOWS_USAGE_ID,
   workspaceAccessEnforced,
 } from "@openbot/contracts/ipc";
 import { CLAUDE_API_KEY_ACCOUNT_ID } from "@openbot/contracts/team-protocol/claude-api-key-v1";
@@ -197,7 +199,9 @@ import {
 import { ThreadLifecycle } from "./agent/thread-lifecycle";
 import { toToolOperationFailed } from "./agent/tool-operation";
 import { type AgentBrowserHost, TurnLifecycle } from "./agent/turn-lifecycle";
+import { workflowUsageObserver } from "./agent/usage-collection";
 import { toUsageReadFailed, UsageLimitGate, type UsageLimitKey } from "./agent/usage-limit-gate";
+import { WarmGenerations } from "./agent/warm-generations";
 import type { WebhookRoutineWriter } from "./agent/webhook-routine-tool";
 import type { AgentApiKeys } from "./agent-api-keys";
 import type { AgentProvider } from "./agent-client";
@@ -229,9 +233,10 @@ import { recordAgentRestartActivity } from "./restart-activity";
 import type { RoutineFlowTools } from "./routine-flows/routine-flow-tools";
 import { RoutineRecords } from "./routine-records";
 import type { RoutineHoldWindow } from "./routine-store";
-import { RoutineTimer } from "./routine-timer";
+import { type RoutineDueSource, RoutineTimer } from "./routine-timer";
 import type { SidebarLayoutStore } from "./sidebar-layout-store";
 import type { VaultItems } from "./vault-items";
+import type { WorkflowRunEnd } from "./workflows/workflows";
 import {
   listWorkspaceDirectory,
   type ResolvedSharedFile,
@@ -257,6 +262,8 @@ interface AgentServiceEvents {
   event: [event: AgentEvent];
   /** Finished tool steps for the local host's product analytics. Never forwarded to a client. */
   toolUsage: [usage: ToolUsageSignal];
+  /** A workflow run ended, for the local host's product analytics. Never forwarded to a client. */
+  workflowRun: [end: WorkflowRunEnd];
 }
 
 export interface AgentServiceOptions {
@@ -319,6 +326,11 @@ export interface AgentServiceOptions {
    */
   timezone?: () => string;
   /**
+   * Other owners of scheduled work on the same routine timer, such as workflow triggers. They are
+   * read on each arm, because the main process builds them after this service.
+   */
+  extraRoutineSources?: () => Iterable<RoutineDueSource>;
+  /**
    * The access level of the person who asked a channel member to add or remove an agent, for that
    * agent, as the Team API gives it for their own save. Omitted, `manage`.
    */
@@ -378,6 +390,11 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
   readonly messaging: MessagingThreads;
   readonly #profileSave: ProfileSave;
   readonly #profileClients = new ProfileClients();
+  readonly #warmGenerations = new WarmGenerations({
+    ownerFor: (provider) => this.#providers.currentClient(provider),
+    createClient: (provider) => this.#providers.createProfileClient(provider),
+    profileClients: this.#profileClients,
+  });
   #scope = Scope.makeUnsafe();
   /** User sends still before their mailbox write, by idempotency key: a retry joins the first call. */
   readonly #pendingUserSends = new Map<string, Deferred.Deferred<QueuedMessageReceipt, AgentLifecycleFailed>>();
@@ -530,10 +547,10 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       emitError: (code, error, agentId) => this.#emitError(code, error, agentId),
       ...(options.agentMemoryLimit ? { limit: options.agentMemoryLimit } : {}),
     });
-    // One timer for both routine owners. The sources are read lazily because `channels` and its
+    // One timer for every routine owner. The sources are read lazily because `channels` and its
     // scheduler are built further down, and because an owner's earliest routine changes constantly.
     this.#routineTimer = new RoutineTimer(
-      () => [this.#routines, this.#channelRoutines],
+      () => [this.#routines, this.#channelRoutines, ...(options.extraRoutineSources?.() ?? [])],
       () => this.#initialized && !this.#stopping,
       (code, error) => this.#emitError(code, error),
     );
@@ -650,6 +667,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
             this.#attention.clearBrowserTakeovers(client);
             this.#attention.clearApprovals(client);
             this.#compaction.clientEnded(client);
+            yield* this.#warmGenerations.ownerStopped(client);
             yield* this.#turn.interruptTurnsOf(client);
           }),
         onAgentClientLost: (agentId, client) =>
@@ -744,7 +762,8 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
         // The model list reaches the renderer by pull, refreshed on a status event, and an exclusion
         // changes what that pull answers while no provider state moves.
         modelsChanged: () => this.#emit({ type: "status", status: this.getStatus() }),
-        stopProfileClients: () => this.#profileClients.stopOpenCode(),
+        stopProfileClients: () =>
+          this.#profileClients.stopOpenCode().pipe(Effect.andThen(this.#warmGenerations.stopIdle("opencode"))),
         emitError: (code, error, agentId) => this.#emitError(code, error, agentId),
         providerAvailable: (provider) => this.#providerAvailable(provider),
         preference: () => this.#preference(),
@@ -1367,7 +1386,11 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
   }
 
   getHostAnalytics(input: HostAnalyticsInput) {
-    if (input.agentId && !this.listAgents().some((agent) => agent.id === input.agentId))
+    if (
+      input.agentId &&
+      input.agentId !== WORKFLOWS_USAGE_ID &&
+      !this.listAgents().some((agent) => agent.id === input.agentId)
+    )
       throw new Error(sourceText("error.team.agentNotFound"));
     return this.#store.database.usage.readHost(input);
   }
@@ -1590,6 +1613,11 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       .removeAsUser(input.name)
       .pipe(Effect.mapError((cause) => new AgentLifecycleFailed({ operation: "delete table", cause })));
   }).bind(this);
+
+  /** Plans the routine timer again, after an outside source changed its next due time. */
+  armRoutines(): void {
+    this.#routineTimer.arm();
+  }
 
   /** Holds routine firing while the system sleeps. See RoutineTimer.suspend. */
   suspendRoutines(): void {
@@ -1936,6 +1964,15 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     this.#emit({ type: "routine-flows-changed", agentId });
   }
 
+  /** A workflow changed, so every view showing it reads it again. */
+  notifyWorkflowsChanged(workflowId: string): void {
+    this.#emit({ type: "workflows-changed", workflowId });
+  }
+
+  notifyWorkflowRunEnded(end: WorkflowRunEnd): void {
+    this.emit("workflowRun", end);
+  }
+
   listModels(): AgentModelOption[] {
     return this.#endpoints.available();
   }
@@ -2025,6 +2062,60 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
         );
     },
     Effect.mapError((failure) => new AgentLifecycleFailed({ operation: "ask side question", cause: failure.cause })),
+  ).bind(this);
+
+  /**
+   * Answers one model step of a workflow. Like a side question, the generation has no tools, no
+   * session and no thread. A missing provider or model falls back to the user's starting choice.
+   */
+  readonly generateWorkflowText = Effect.fn("AgentService.generateWorkflowText")(
+    function* (
+      this: AgentService,
+      input: {
+        provider: AgentProvider | null;
+        model: string | null;
+        effort: AgentReasoningEffort | null;
+        prompt: string;
+      },
+    ) {
+      const failed = (message: string) => new ProfileGenerationFailed({ cause: new Error(message) });
+      if (this.#stopping) return yield* failed(sourceText("error.backend.shuttingDown"));
+      if (this.#profileClients.busy()) return yield* failed(sourceText("error.workflow.modelBusy"));
+      const provider = input.provider ?? this.#startingChoice()?.provider ?? this.#providers.preferredProvider();
+      yield* this.#providers.ensureProvider(provider);
+      const models = this.#endpoints.available();
+      const model =
+        (input.model === null
+          ? undefined
+          : models.find((candidate) => candidate.provider === provider && candidate.id === input.model)) ??
+        startingModel(provider, models, this.#preference());
+      if (!model) return yield* failed(sourceText("error.provider.noModel"));
+      if (this.#stopping) return yield* failed(sourceText("error.backend.shuttingDown"));
+      if (this.#profileClients.busy()) return yield* failed(sourceText("error.workflow.modelBusy"));
+      return yield* this.#warmGenerations
+        .generate(
+          provider,
+          { ...model, defaultReasoningEffort: input.effort ?? model.defaultReasoningEffort },
+          input.prompt,
+          workflowUsageObserver(this.#store.database.usage, provider, model.id),
+        )
+        .pipe(
+          Effect.tapError((failure) =>
+            Effect.sync(() => logger.warn("Could not answer a workflow step.", { provider, error: failure.cause })),
+          ),
+          // The generation's own messages name a profile.
+          Effect.mapError((failure) =>
+            failed(
+              failure instanceof GenerationUsageLimitError
+                ? sourceText("error.provider.usageLimitReached")
+                : sourceText("error.workflow.modelFailed"),
+            ),
+          ),
+        );
+    },
+    Effect.mapError(
+      (failure) => new AgentLifecycleFailed({ operation: "generate workflow text", cause: failure.cause }),
+    ),
   ).bind(this);
 
   saveProfile(
@@ -3494,6 +3585,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       concurrency: "unbounded",
       discard: true,
     });
+    yield* this.#warmGenerations.dispose();
     yield* Fiber.join(channelStop);
     // After the clients: a provider that still runs would see its MCP servers fail.
     yield* this.#mcp.close();

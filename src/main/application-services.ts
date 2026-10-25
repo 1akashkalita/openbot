@@ -15,6 +15,10 @@ import { RoutineFlowStore } from "../backend/routine-flows/routine-flow-store";
 import { createRoutineFlows, type RoutineFlowsHandle } from "../backend/routine-flows/routine-flows";
 import { RoutineResultStore } from "../backend/routine-results/routine-result-store";
 import { createRoutineResults, type RoutineResultsHandle } from "../backend/routine-results/routine-results";
+import { WorkflowRunStore } from "../backend/workflows/workflow-run-store";
+import { WorkflowStore } from "../backend/workflows/workflow-store";
+import { WorkflowTriggers, workflowScheduleDueAt } from "../backend/workflows/workflow-triggers";
+import { createWorkflows, type WorkflowNotice, type WorkflowsHandle } from "../backend/workflows/workflows";
 import { type AcpRegistry, createAcpRegistry } from "./acp-registry";
 import { type AgentAdminSettingsService, createAgentAdminSettings } from "./agent-admin-settings";
 import { spawnAgentDatabaseHost } from "./agent-database-host-process";
@@ -421,6 +425,8 @@ const TEARDOWN_ORDER = {
   teamWebRtcBridge: 100,
   // Before the agent service, so no handoff is sent to an agent while the service stops.
   routineFlows: 103,
+  // Before the agent service, so no workflow step is sent to an agent while the service stops.
+  workflows: 103.5,
   // Before the agent service, so no calendar read finds it stopping.
   routineFeed: 104,
   mcpOAuthRedirect: 105,
@@ -477,6 +483,7 @@ export interface ApplicationServiceContext {
   forwardVoiceModelStatus: (status: VoiceModelStatus) => void;
   forwardVoiceStreamTranscript: (transcript: VoiceStreamTranscript) => void;
   forwardSpeechModelStatus: (status: SpeechModelStatus) => void;
+  forwardWorkflowNotice: (notice: WorkflowNotice) => void;
   prepareForUpdateInstall: () => Promise<void>;
   /** True once a quit starts, also before this function returns. See `CuaDriverRuntimeOptions.quitting`. */
   quitting: () => boolean;
@@ -486,6 +493,7 @@ export interface ApplicationServiceContext {
 export interface ApplicationServices {
   service: AgentService;
   routineFlows: RoutineFlowsHandle;
+  workflows: WorkflowsHandle;
   routineResults: RoutineResultsHandle;
   providerRuntimes: ProviderRuntimeManager;
   providerCredentials: ProviderCredentialStore;
@@ -831,6 +839,7 @@ export async function createApplicationServices({
   forwardVoiceModelStatus,
   forwardVoiceStreamTranscript,
   forwardSpeechModelStatus,
+  forwardWorkflowNotice,
   prepareForUpdateInstall,
   quitting,
 }: ApplicationServiceContext): Promise<ApplicationServices> {
@@ -1548,6 +1557,8 @@ export async function createApplicationServices({
   // Outside every workspace. Each saved key is masked in the logs before the first agent starts.
   const agentApiKeys = new AgentApiKeys(join(app.getPath("userData"), "agent-api-keys"));
   await Effect.runPromise(agentApiKeys.registerSaved());
+  // The schedule triggers of workflows share the routine timer; built after the workflows below.
+  let workflowTriggers: WorkflowTriggers | null = null;
   const service: AgentService = new AgentService({
     store,
     mailbox,
@@ -1654,11 +1665,25 @@ export async function createApplicationServices({
     busyMessageMode: () => busyMessageMode.get().mode,
     agentMemoryLimit: () => agentMemoryLimit.get().limit,
     timezone: () => serverTimezone.effective(),
+    // `workflowTriggers` is built later, after the workflows.
+    extraRoutineSources: () => (workflowTriggers ? [workflowTriggers] : []),
     // `host` is built later, after the agent service; a channel tool reads it when it runs.
     channelPersonAgentLevel: (personId, agentId) => host.channelPersonAgentLevel(personId, agentId),
     channelRemotePerson: (personId) => host.channelPersonIsRemote(personId),
+    // The delete also clears the agent from workflow nodes, so the editors of those workflows load
+    // the new graph. `workflowStore` is built later, after the agent service.
     deleteWithRevokedApproval: (agentId, remove) =>
-      approvalAutomation.deleteAgent(agentId, remove).pipe(toAgentRemovalFailed),
+      Effect.suspend(() => {
+        const workflowIds = workflowStore.workflowsOfAgent(agentId);
+        return approvalAutomation.deleteAgent(agentId, remove).pipe(
+          toAgentRemovalFailed,
+          Effect.tap(() =>
+            Effect.sync(() => {
+              for (const workflowId of workflowIds) service.notifyWorkflowsChanged(workflowId);
+            }),
+          ),
+        );
+      }),
     tables,
   });
   teardown.push(TEARDOWN_ORDER.service, "the agent service", () => runCauseEffect(service.stop()));
@@ -1708,6 +1733,53 @@ export async function createApplicationServices({
     }),
   );
   teardown.push(TEARDOWN_ORDER.routineFlows, "the routine flows", () => Effect.runPromise(routineFlowRuntime.close()));
+  // Graphs of steps drawn on a canvas; see `workflows.ts`.
+  const workflowStore = new WorkflowStore({
+    database: store.database,
+    nextDueAt: workflowScheduleDueAt(() => serverTimezone.effective()),
+  });
+  const workflowRuntime = await Effect.runPromise(
+    createWorkflows({
+      store: workflowStore,
+      runs: new WorkflowRunStore({ database: store.database }),
+      delivery: (deliveryId) => {
+        const found = mailbox.getDelivery(deliveryId)?.delivery;
+        return found ? { status: found.status, turnId: found.turnId, error: found.error } : null;
+      },
+      turnAnswer,
+      // A workflow step is a routine handoff whose routine is the workflow.
+      sendHandoff: (input) => service.enqueueRoutineHandoff(input),
+      stopDelivery: (agentId, deliveryId) => {
+        const found = mailbox.getDelivery(deliveryId)?.delivery;
+        if (!found) return Effect.void;
+        return found.status === "running" && found.turnId
+          ? service.interrupt(agentId, found.turnId)
+          : service.cancelQueuedMessage(agentId, deliveryId);
+      },
+      generateText: (request) =>
+        service.generateWorkflowText(request).pipe(
+          Effect.mapError((failure) => ({
+            message: failure.cause instanceof Error ? failure.cause.message : sourceText("error.workflow.modelFailed"),
+          })),
+        ),
+      notify: forwardWorkflowNotice,
+      connectionOn: (connectionId) => service.messaging.store.connection(connectionId)?.enabled === true,
+      post: (connectionId, placeId, markdown) => service.messaging.deliver(connectionId, placeId, markdown),
+      // An agent event, so this window, joined clients and the web app hear it the same way.
+      changed: (workflowId) => service.notifyWorkflowsChanged(workflowId),
+      rearm: () => service.armRoutines(),
+      timezone: () => serverTimezone.effective(),
+      runEnded: (end) => service.notifyWorkflowRunEnded(end),
+    }),
+  );
+  workflowTriggers = new WorkflowTriggers({
+    store: workflowStore,
+    timezone: () => serverTimezone.effective(),
+    start: (start) => workflowRuntime.startScheduled(start),
+    changed: (workflowId) => service.notifyWorkflowsChanged(workflowId),
+  });
+  service.armRoutines();
+  teardown.push(TEARDOWN_ORDER.workflows, "the workflows", () => Effect.runPromise(workflowRuntime.close()));
   // An agent routine's answer sent on to a messaging place; see `routine-results.ts`.
   const routineResultRuntime = await Effect.runPromise(
     createRoutineResults({
@@ -1731,6 +1803,7 @@ export async function createApplicationServices({
   service.on("event", (event) => {
     Effect.runFork(routineFlowRuntime.notice(event));
     Effect.runFork(routineResultRuntime.notice(event));
+    Effect.runFork(workflowRuntime.notice(event));
   });
   teardown.push(TEARDOWN_ORDER.routineResults, "the routine results", () =>
     Effect.runPromise(routineResultRuntime.close()),
@@ -1914,6 +1987,10 @@ export async function createApplicationServices({
   });
   const events = new HostEventsService({
     routines: service.routineRecords,
+    workflows: {
+      receive: (delivery) => workflowRuntime.receiveWebhook(delivery),
+      changed: (workflowId) => service.notifyWorkflowsChanged(workflowId),
+    },
     cipher: secretCipher,
     relay: webhookRelay,
     accountPrincipal: () => {
@@ -2150,6 +2227,8 @@ export async function createApplicationServices({
     instanceTransfer,
     // Present, so the host advertises `routine-flows-v1`. Any member who can see the agents.
     routineFlows: routineFlowRuntime,
+    // Present, so the host advertises `workflows-v1`. Any member who can see and talk to the agents.
+    workflows: { ...workflowRuntime, rotateWorkflowSecret: (input) => events.rotateWorkflowSecret(input) },
     // Present, so the host advertises `agent-hidden-v1`. Any member can hide or restore an agent that they can see.
     hiddenAgents: service,
     // Present, so the host advertises `agent-access-v1`. Only owners and admins change the roles.
@@ -2405,6 +2484,7 @@ export async function createApplicationServices({
       collectAnalyticsInventory({
         agents: () => service.listAgents(),
         routines: (agentId) => service.listRoutines(agentId),
+        workflowCount: () => workflowStore.list().length,
         // The local read: `listInstalled` asks the marketplace for each skill's latest version.
         skills: (agentId) => skills.listInstalledForChatTags(agentId),
         mcpServers: () => service.listMcpServers(),
@@ -2663,13 +2743,16 @@ export async function createApplicationServices({
       yield* automation.sync();
       // Picks up the flows a restart stopped between one agent's answer and the next agent's message.
       yield* routineFlowRuntime.sweep();
+      // Ends the workflow steps a restart cut off, and moves the runs on.
+      yield* workflowRuntime.sweep();
       // Marks the posts a restart cut off, and sends the answers that ended while OpenBot was closed.
       yield* routineResultRuntime.recover();
     }),
   );
   const describeRestartReadiness = (): RestartReadiness =>
     checkRestartReadiness({
-      agentWork: service.hasActiveWork(),
+      // A workflow model step lives in this process only; agent steps are queued deliveries.
+      agentWork: [...service.hasActiveWork(), ...(workflowRuntime.working() ? ["routine-run"] : [])],
       hostBlockers: host.describeRestartBlockers(),
       activeBrowserControls: browser.getControlState().sessions.length,
       activeFileTransfers: remoteServers.hasActiveTransfers(),
@@ -2829,6 +2912,7 @@ export async function createApplicationServices({
   return {
     service,
     routineFlows: routineFlowRuntime,
+    workflows: workflowRuntime,
     routineResults: routineResultRuntime,
     providerRuntimes,
     providerCredentials,

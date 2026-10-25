@@ -81,6 +81,7 @@ import { TEAM_SUBAGENTS_CAPABILITY } from "./subagents-v1";
 import { TEAM_UI_BLOCKS_CAPABILITY } from "./ui-blocks-v1";
 import { TEAM_OPEN_PROVIDERS_CAPABILITY, TEAM_PROTOCOL_V8_CAPABILITIES } from "./v8";
 import { WEBHOOK_TESTS_CAPABILITY } from "./webhook-tests-v1";
+import { WORKFLOWS_CAPABILITY } from "./workflows-v1";
 import { WORKSPACE_DIRECTORY_CAPABILITY } from "./workspace-directory-v1";
 
 export const TEAM_SEMANTIC_TAGS_CAPABILITY = "installed-skills";
@@ -193,6 +194,7 @@ export {
   TEAM_SUBAGENTS_CAPABILITY,
   TEAM_UI_BLOCKS_CAPABILITY,
   WEBHOOK_TESTS_CAPABILITY,
+  WORKFLOWS_CAPABILITY,
   WORKSPACE_DIRECTORY_CAPABILITY,
 };
 
@@ -294,6 +296,7 @@ export const TEAM_CURRENT_CAPABILITIES = [
   STORAGE_DISK_CAPABILITY,
   PROMPT_CACHE_TTL_CAPABILITY,
   CLAUDE_API_KEY_CAPABILITY,
+  WORKFLOWS_CAPABILITY,
 ] as const;
 
 export type TeamCurrentCapability = (typeof TEAM_CURRENT_CAPABILITIES)[number];
@@ -409,7 +412,8 @@ export const TEAM_BOOTSTRAP_CAPABILITIES = TEAM_CURRENT_CAPABILITIES.filter(
     capability !== PROVIDER_ACCOUNT_RELAY_CAPABILITY &&
     capability !== STORAGE_DISK_CAPABILITY &&
     capability !== PROMPT_CACHE_TTL_CAPABILITY &&
-    capability !== CLAUDE_API_KEY_CAPABILITY,
+    capability !== CLAUDE_API_KEY_CAPABILITY &&
+    capability !== WORKFLOWS_CAPABILITY,
 );
 // A v7 host does not know the v8 markers, so a client sends them only after it negotiates protocol 8.
 const TEAM_PROTOCOL_V7_CURRENT_CAPABILITIES = TEAM_CURRENT_CAPABILITIES.filter(
@@ -468,6 +472,7 @@ export function legacyTeamCapabilities(capabilities: readonly string[]): string[
       capability !== PROVIDER_ACCOUNT_RELAY_CAPABILITY &&
       capability !== STORAGE_DISK_CAPABILITY &&
       capability !== PROMPT_CACHE_TTL_CAPABILITY &&
-      capability !== CLAUDE_API_KEY_CAPABILITY,
+      capability !== CLAUDE_API_KEY_CAPABILITY &&
+      capability !== WORKFLOWS_CAPABILITY,
   );
 }

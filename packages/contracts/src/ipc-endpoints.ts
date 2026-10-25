@@ -483,6 +483,27 @@ import type {
   VoiceTranscriptionInput,
   VoiceTranscriptionResult,
 } from "./ipc-voice";
+import type {
+  CreateWorkflowInput,
+  DecideWorkflowStepInput,
+  RenameWorkflowInput,
+  RetryWorkflowStepInput,
+  RunWorkflowStepInput,
+  SaveWorkflowGraphInput,
+  StartWorkflowRunInput,
+  WorkflowDetail,
+  WorkflowGraph,
+  WorkflowRunDetail,
+  WorkflowRunPage,
+  WorkflowRunsInput,
+  WorkflowSaveResult,
+  WorkflowStep,
+  WorkflowSummary,
+  WorkflowTriggerInput,
+  WorkflowVersion,
+  WorkflowVersionInput,
+  WorkflowWebhookSecret,
+} from "./ipc-workflows";
 import type { LicenseCheckoutRequest, LicenseRenewalRequest, LicenseState, LicenseUsersRequest } from "./license";
 import type { AccountSession, MobileConnectedDevice, MobileConnectLink, MobileConnectTicket } from "./mobile-connect";
 
@@ -1352,6 +1373,34 @@ export const IPC_ENDPOINTS = {
     updateLink: scopedRequest<UpdateRoutineFlowLinkInput, RoutineFlowLink>()("routine-flows:update-link"),
   },
   /**
+   * Workflows: graphs of steps drawn on a canvas, their versions and their runs. The agent event
+   * `workflows-changed` says which workflow changed. A joined server answers through `workflows-v1`
+   * when it supports it.
+   */
+  workflows: {
+    list: scopedQuery<WorkflowSummary[]>()("workflows:list"),
+    get: scopedRequest<string, WorkflowDetail>()("workflows:get"),
+    create: scopedRequest<CreateWorkflowInput, WorkflowDetail>()("workflows:create"),
+    rename: scopedRequest<RenameWorkflowInput, WorkflowSummary>()("workflows:rename"),
+    delete: scopedRequest<string, void>()("workflows:delete"),
+    saveGraph: scopedRequest<SaveWorkflowGraphInput, WorkflowSaveResult>()("workflows:save-graph"),
+    versions: scopedRequest<string, WorkflowVersion[]>()("workflows:versions"),
+    versionGraph: scopedRequest<WorkflowVersionInput, WorkflowGraph>()("workflows:version-graph"),
+    restoreVersion: scopedRequest<WorkflowVersionInput, WorkflowDetail>()("workflows:restore-version"),
+    startRun: scopedRequest<StartWorkflowRunInput, WorkflowRunDetail>()("workflows:start-run"),
+    runStep: scopedRequest<RunWorkflowStepInput, WorkflowStep>()("workflows:run-step"),
+    stopStep: scopedRequest<string, void>()("workflows:stop-step"),
+    stopRun: scopedRequest<string, void>()("workflows:stop-run"),
+    retryStep: scopedRequest<RetryWorkflowStepInput, WorkflowStep>()("workflows:retry-step"),
+    decide: scopedRequest<DecideWorkflowStepInput, void>()("workflows:decide"),
+    runs: scopedRequest<WorkflowRunsInput, WorkflowRunPage>()("workflows:runs"),
+    run: scopedRequest<string, WorkflowRunDetail>()("workflows:run"),
+    /** Makes a new signing secret for a webhook trigger; the first one also makes its address. */
+    rotateWebhookSecret: scopedRequest<WorkflowTriggerInput, WorkflowWebhookSecret>()(
+      "workflows:rotate-webhook-secret",
+    ),
+  },
+  /**
    * Routine results: an agent routine's answer sent on to a messaging place. Only this computer's host
    * keeps a destination, so the group has no remote route. The agent event `routines-changed` says
    * when a destination or a delivery changed.
@@ -1685,6 +1734,7 @@ export const IPC_GROUP_PATHS = {
   hostedSites: "hostedSites",
   routineFeed: "routineFeed",
   routineFlows: "routineFlows",
+  workflows: "workflows",
   routineResults: "routineResults",
   billing: "billing",
   license: "license",
