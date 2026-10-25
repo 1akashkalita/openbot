@@ -1543,6 +1543,8 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
             hidden={false}
             logo={{ variant: "production", href: "/" }}
             current={railPage()}
+            pinned={layout.railPinned()}
+            onPinChange={layout.setRailPinned}
             usageRows={usageRows()}
             onAgents={() => showSidebarView("agents")}
             onRoutines={routinesSupported() ? () => showSidebarView("routines") : undefined}
