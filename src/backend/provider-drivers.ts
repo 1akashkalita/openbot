@@ -372,7 +372,7 @@ export interface ProviderClientContext {
   readonly customAgents?: CustomAgentSource;
   /**
    * How long this server asks Claude to keep the prompt cache, read at each spawn. Optional for the
-   * same reason as `reportMcpDrops`: without it the cache time is one hour.
+   * same reason as `reportMcpDrops`: without it the CLI uses its own cache time.
    */
   readonly promptCacheTtl?: () => PromptCacheTtl;
 }
@@ -387,12 +387,10 @@ function withAccountEnvironment(
 }
 
 /**
- * Claude's agent environment with the prompt cache time of this server. With an API key the CLI
- * caches the prompt for 5 minutes, and agent turns are often further apart, so each turn paid for
- * the full context again. The CLI reads `ENABLE_PROMPT_CACHING_1H` last: a `promptCacheTtl` in the
- * Claude settings or `CLAUDE_CODE_PROMPT_CACHE_TTL` still wins. The CLI reads the flag before its
- * subscription rules, so subagents and a subscription on extra usage also get 1 hour. `5m` leaves the
- * CLI's own choice.
+ * Claude's agent environment with the prompt cache time of this server. `5m`, the default, leaves the
+ * CLI's own choice. `1h` sets `ENABLE_PROMPT_CACHING_1H`, which the CLI reads last: a `promptCacheTtl`
+ * in the Claude settings or `CLAUDE_CODE_PROMPT_CACHE_TTL` still wins. The CLI reads the flag before
+ * its subscription rules, so subagents, an API key and a subscription on extra usage also get 1 hour.
  */
 function claudeAgentEnvironment(
   context: ProviderClientContext,
