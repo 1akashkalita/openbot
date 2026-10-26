@@ -1,5 +1,22 @@
 [
   {
+    "version": "0.51.1",
+    "date": "2026-10-26",
+    "notices": [],
+    "groups": [
+      {
+        "type": "fixed",
+        "items": [
+          "DeepSeek, Inception and OpenRouter now download the Pi CLI when you save their API key.",
+          "On Linux, closing the OpenBot AppImage no longer shows a crash report.",
+          "On a Docker server with LXCFS, Gemini starts again.",
+          "On a server, programs that Claude agents start now use the server's CPU limit.",
+          "Agents on a shared server no longer tell you to open the chat on another device."
+        ]
+      }
+    ]
+  },
+  {
     "version": "0.51.0",
     "date": "2026-10-26",
     "notices": [],

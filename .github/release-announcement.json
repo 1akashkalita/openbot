@@ -1,10 +1,9 @@
 {
-  "version": "0.51.0",
+  "version": "0.51.1",
   "highlights": [
-    "Add OpenRouter or DeepSeek as a provider with an API key, and choose their models for your agents.",
-    "Agents use the skills in your ~/.agents/skills folder with every provider. Type $ in the message box to tag one.",
-    "On a Mac, connect Apple apps from the Apps catalog, so agents can use Mail, Calendar, Notes, Messages and more.",
-    "Paste an image into the message box at the cursor, and zoom into images in a chat.",
-    "Codex, Claude on Windows and the Linux AppImage on Arch Linux start and keep working again."
+    "DeepSeek, Inception and OpenRouter now download the Pi CLI when you save their API key.",
+    "Closing the Linux AppImage no longer shows a crash report.",
+    "Gemini works again on Docker servers with LXCFS, and Claude agents on a server now respect its CPU limit.",
+    "Agents on a shared server no longer tell you to open the chat on another device."
   ]
 }
