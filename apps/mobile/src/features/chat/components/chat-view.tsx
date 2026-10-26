@@ -813,6 +813,8 @@ export function ChatView({
   }, [outboxMessages, serverOnline, outbox]);
 
   const replyToMessage = useCallback((message: ChatBubbleMessage) => {
+    // A reply replaces a quote from Describe edits: the composer shows one of them, and sends that one.
+    setSelection(null);
     setReplyTarget(message);
     setReplyFocusVersion((version) => version + 1);
   }, []);
