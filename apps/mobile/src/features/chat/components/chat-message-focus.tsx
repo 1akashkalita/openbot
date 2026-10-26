@@ -517,7 +517,7 @@ export function ChatMessageFocus({
           ) : null}
           <Animated.View
             style={[
-              { ...bubbleInset, alignSelf: edge, maxWidth: bubbleMaxWidth, opacity: layout ? 1 : 0 },
+              { opacity: layout ? 1 : 0 },
               { transformOrigin: align === "end" ? "100% 50%" : "0% 50%" },
               bubbleStyle,
             ]}
@@ -528,9 +528,19 @@ export function ChatMessageFocus({
               alwaysBounceVertical={false}
               overScrollMode="never"
             >
-              {/* The bubble colours are see-through over the chat. The copy lies over the dimmed chat, so
-                  it gets the chat background under its colour and looks as it does in the list. */}
-              <View className="rounded-[30px] bg-background" style={{ borderCurve: "circular", overflow: "hidden" }}>
+              {/* The scroll view takes the width of the stack, so it measures its height from its content;
+                  the bubble inside keeps the side and the width of the message. The bubble colours are
+                  see-through, so the copy gets the chat background under its colour, as in the list. */}
+              <View
+                className="rounded-[30px] bg-background"
+                style={{
+                  ...bubbleInset,
+                  alignSelf: edge,
+                  maxWidth: bubbleMaxWidth,
+                  borderCurve: "circular",
+                  overflow: "hidden",
+                }}
+              >
                 <View
                   className={`rounded-[30px] px-4 py-3 ${target.bubbleColor ? "" : "bg-control/60"}`}
                   style={[
