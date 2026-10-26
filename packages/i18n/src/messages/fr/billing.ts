@@ -85,13 +85,12 @@ export const messages = {
   "billing.license.contactSales": "Écrivez à licenses@openbot.run pour en savoir plus.",
   "billing.license.saving": "Enregistrement…",
   "billing.license.personal.title": "Usage personnel",
-  "billing.license.personal.description":
-    "Gratuit pour un usage personnel et non commercial. Le travail en entreprise nécessite une licence.",
+  "billing.license.personal.description": "Gratuit pour un usage non commercial.",
   "billing.license.status.ended": "Terminée",
   "billing.license.current": "Actuel",
   "billing.license.ended": "La licence a pris fin le {date}.",
   "billing.license.buy": "Acheter une licence",
-  "billing.license.offer.title": "Licence professionnelle",
+  "billing.license.offer.title": "Licence commerciale",
   "billing.license.offer.description": "Starter pour 1 utilisateur, ou Team pour {count} utilisateurs ou plus.",
   "billing.license.buy.description":
     "Combien de personnes utilisent OpenBot au travail ? Les agents IA ne sont pas des utilisateurs.",

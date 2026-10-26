@@ -81,13 +81,12 @@ export const messages = {
   "billing.license.contactSales": "Подробнее — по адресу licenses@openbot.run.",
   "billing.license.saving": "Сохранение…",
   "billing.license.personal.title": "Личное использование",
-  "billing.license.personal.description":
-    "Бесплатно для личного и некоммерческого использования. Для работы в компании нужна лицензия.",
+  "billing.license.personal.description": "Бесплатно для некоммерческого использования.",
   "billing.license.status.ended": "Истекла",
   "billing.license.current": "Сейчас",
   "billing.license.ended": "Лицензия истекла {date}.",
   "billing.license.buy": "Купить лицензию",
-  "billing.license.offer.title": "Рабочая лицензия",
+  "billing.license.offer.title": "Коммерческая лицензия",
   "billing.license.offer.description": "Starter для 1 пользователя или Team для {count} и более пользователей.",
   "billing.license.buy.description":
     "Сколько человек используют OpenBot в работе? ИИ-агенты не считаются пользователями.",
