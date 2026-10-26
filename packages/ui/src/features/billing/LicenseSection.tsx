@@ -444,9 +444,9 @@ function LicenseOffer(props: {
 }): JSX.Element {
   const { t, format } = useText();
   const [buying, setBuying] = createSignal(untrack(() => props.startBuying));
-  const ended = () => {
+  const endedLicense = () => {
     const license = props.state.license;
-    return license?.currentPeriodEnd ? license.currentPeriodEnd : null;
+    return license?.currentPeriodEnd ? { license, end: license.currentPeriodEnd } : null;
   };
   const owners = () => props.state.coveredBy.map((coverage) => coverage.ownerName ?? coverage.ownerEmail);
   if (untrack(() => props.startBuying)) props.store.track("buy_opened");
@@ -466,22 +466,26 @@ function LicenseOffer(props: {
               </ItemDescription>
             </ItemContent>
           </Match>
+          <Match when={endedLicense()}>
+            {(ended) => (
+              <ItemContent>
+                <div class="billing-server-title">
+                  <ItemTitle>{t(TIER_TITLE[licensePlanOf(ended().license).tier])}</ItemTitle>
+                  <Badge variant="secondary">{t("billing.license.status.ended")}</Badge>
+                </div>
+                <ItemDescription>
+                  {t("billing.license.ended", { date: format.date(ended().end, { dateStyle: "long" }) })}
+                </ItemDescription>
+              </ItemContent>
+            )}
+          </Match>
           <Match when>
             <ItemContent>
               <div class="billing-server-title">
                 <ItemTitle>{t("billing.license.personal.title")}</ItemTitle>
-                <Show when={ended()} fallback={<Badge variant="outline">{t("billing.license.current")}</Badge>}>
-                  <Badge variant="secondary">{t("billing.license.status.ended")}</Badge>
-                </Show>
+                <Badge variant="outline">{t("billing.license.current")}</Badge>
               </div>
               <ItemDescription>{t("billing.license.personal.description")}</ItemDescription>
-              <Show when={ended()}>
-                {(end) => (
-                  <ItemDescription>
-                    {t("billing.license.ended", { date: format.date(end(), { dateStyle: "long" }) })}
-                  </ItemDescription>
-                )}
-              </Show>
             </ItemContent>
           </Match>
         </Switch>
