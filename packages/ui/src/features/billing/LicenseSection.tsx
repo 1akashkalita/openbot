@@ -814,7 +814,8 @@ function ChangeUsersDialog(props: {
 }
 
 /**
- * Moves a Starter license to Team, or a monthly Team license to yearly. The account server bills the
+ * Moves a Starter license to Team, or a monthly Team license to yearly. A yearly Starter license stays
+ * yearly. The account server bills the
  * difference now. It sells no other change: to go down, the owner cancels and buys again.
  */
 function ChangePlanDialog(props: {
@@ -825,7 +826,9 @@ function ChangePlanDialog(props: {
 }): JSX.Element {
   const { t, format } = useText();
   const toTeam = () => isOneUser(props.license);
-  const [interval, setInterval] = createSignal<BillingInterval>(untrack(() => (toTeam() ? "month" : "year")));
+  const [interval, setInterval] = createSignal<BillingInterval>(
+    untrack(() => (toTeam() ? licensePlanOf(props.license).interval : "year")),
+  );
   const [users, setUsers] = createSignal(untrack(() => Math.max(props.license.users, props.minimum)));
   const plan = (): LicensePlan => ({ tier: "team", interval: interval(), bundle: licensePlanOf(props.license).bundle });
   return (
@@ -852,7 +855,7 @@ function ChangePlanDialog(props: {
       }}
     >
       <div class="billing-license-change">
-        <Show when={toTeam()}>
+        <Show when={toTeam() && licensePlanOf(props.license).interval === "month"}>
           <HostedBillingSwitch
             billing={interval() === "year" ? "yearly" : "monthly"}
             discountPercent={LICENSE_YEAR_DISCOUNT_PERCENT}

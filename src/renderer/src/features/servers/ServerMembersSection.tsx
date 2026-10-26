@@ -984,7 +984,7 @@ export function createServerMembersSection(
 
   /**
    * Asks the owner to add a user to the full license, then sends the invite. A Starter license is for
-   * 1 user, so the dialog changes it to Team monthly. A license at the maximum cannot grow, so the
+   * 1 user, so the dialog changes it to Team with the same billing period. A license at the maximum cannot grow, so the
    * dialog offers the contact page and sends no invite.
    */
   function LicenseUserDialog() {
@@ -1001,7 +1001,7 @@ export function createServerMembersSection(
             users() > LICENSE_MAX_USERS
               ? null
               : licenseMonthlyAmount(
-                  toTeam() ? { tier: "team", interval: "month", bundle: plan().bundle } : plan(),
+                  toTeam() ? { ...plan(), tier: "team" } : plan(),
                   users(),
                   step().license.currency,
                 ) - step().license.amount;
@@ -1047,7 +1047,7 @@ export function createServerMembersSection(
                 if (calls) {
                   const action = toTeam() ? "plan_change_requested" : "users_change_requested";
                   try {
-                    if (toTeam()) await calls.changePlan({ interval: "month", users: users() });
+                    if (toTeam()) await calls.changePlan({ interval: plan().interval, users: users() });
                     else await calls.setUsers({ users: users() });
                     desktopAnalytics.track("license_action", { action, result: "succeeded", direction: "up" });
                   } catch (error) {

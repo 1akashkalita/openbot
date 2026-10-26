@@ -1081,7 +1081,8 @@ function licenseMetadata(plan: LicensePlan): Record<string, string> {
 /** The changes that the app sells: a 1-user license to Team, and a monthly Team license to yearly. */
 function isUpgrade(from: LicensePlan, to: LicensePlan): boolean {
   if (to.tier !== "team") return false;
-  if (from.tier !== "team") return true;
+  // A yearly license does not go back to monthly: Stripe would credit the rest of the year.
+  if (from.tier !== "team") return from.interval === "month" || to.interval === "year";
   return from.interval === "month" && to.interval === "year";
 }
 
