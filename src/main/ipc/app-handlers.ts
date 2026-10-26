@@ -8,20 +8,25 @@ import {
   type AppInfo,
   type AppSetupState,
   type AppVariant,
+  type ChatWindowTarget,
   type ExternalDestination,
+  type ExternalLinkBrowser,
+  externalLinkAppName,
   GROK_BOT_EXPORT_URL,
 } from "@openbot/contracts/ipc";
-import { app, type BrowserWindow, shell } from "electron";
+import { app, type BrowserWindow, dialog, type OpenDialogOptions } from "electron";
 import { version as developmentVersion } from "../../../package.json";
 import type { AgentService } from "../../backend/agent-service";
 import type { BrowserHost } from "../../backend/browser-host";
 import type { MailboxStore } from "../../backend/mailbox-store";
+import type { AgentDefaultsPreferenceStore } from "../agent-defaults-preference-store";
 import type { AgentMemoryLimitSetting } from "../agent-memory-limit-preference-store";
 import { readAnalyticsPreference, writeAnalyticsPreference } from "../analytics-preference-store";
 import type { AppBehaviorService } from "../app-behavior-service";
 import type { AppearanceService } from "../appearance-service";
 import type { ApprovalAutomation } from "../approval-automation-store";
 import type { BusyMessageModePreferenceStore } from "../busy-message-mode-preference-store";
+import type { ExternalLinkOpener, ExternalLinkPreferenceStore } from "../external-link-opener";
 import type { InterfaceSizeService } from "../interface-size-service";
 import type { LanguageService } from "../language-service";
 import type { LogoColorService } from "../logo-color-service";
@@ -34,6 +39,7 @@ import type { RemoteSessionReusePreferenceStore } from "../remote-session-reuse-
 import { readSetupState, writeSetupState } from "../setup-store";
 import type { UpdateService } from "../update-service";
 import {
+  parseAgentDefaults,
   parseAnalyticsPreference,
   parseAppAppearancePreference,
   parseAppBehaviorPreferenceChange,
@@ -41,7 +47,9 @@ import {
   parseAppLanguagePreference,
   parseAppLogoColorPreference,
   parseBusyMessageModePreference,
+  parseChatWindowTarget,
   parseExternalDestination,
+  parseExternalLinkPreference,
   parseRemoteNetworkRoutePreference,
   parseRemoteSessionReusePreference,
   parseSetup,
@@ -91,12 +99,17 @@ export interface AppIpcDependencies {
   analyticsPreferenceFile: string;
   approvalAutomation: ApprovalAutomation;
   busyMessageMode: BusyMessageModePreferenceStore;
+  agentDefaults: AgentDefaultsPreferenceStore;
   agentMemoryLimit: AgentMemoryLimitSetting;
   remoteSessionReuse: RemoteSessionReusePreferenceStore;
   remoteNetworkRoute: RemoteNetworkRoutePreferenceStore;
   /** Applies a changed network route to the devices that are connected to this computer now. */
   applyRemoteNetworkRoute: () => Promise<void>;
   remoteSessionCache: RemoteSessionCache;
+  externalLinkPreference: ExternalLinkPreferenceStore;
+  externalLinks: ExternalLinkOpener;
+  /** Opens a web page in the program that the user chose in Settings. */
+  openLink: (url: string) => Promise<void>;
   appBehavior: AppBehaviorService;
   language: LanguageService;
   logoColor: LogoColorService;
@@ -106,6 +119,8 @@ export interface AppIpcDependencies {
   appVariant: AppVariant;
   analyticsCaptureUrl: string | null;
   getMainWindow: () => BrowserWindow | null;
+  openChatWindow: (target: ChatWindowTarget) => void;
+  chatWindowTargets: () => ChatWindowTarget[];
   setAnalyticsTrackingEnabled: (enabled: boolean) => void;
   trace: TraceFile;
   resources: ResourceMonitor;
@@ -120,11 +135,15 @@ export function appIpcHandlers({
   analyticsPreferenceFile,
   approvalAutomation,
   busyMessageMode,
+  agentDefaults,
   agentMemoryLimit,
   remoteSessionReuse,
   remoteNetworkRoute,
   applyRemoteNetworkRoute,
   remoteSessionCache,
+  externalLinkPreference,
+  externalLinks,
+  openLink,
   appBehavior,
   language,
   logoColor,
@@ -134,6 +153,8 @@ export function appIpcHandlers({
   appVariant,
   analyticsCaptureUrl,
   getMainWindow,
+  openChatWindow,
+  chatWindowTargets,
   setAnalyticsTrackingEnabled,
   trace,
   resources,
@@ -174,6 +195,14 @@ export function appIpcHandlers({
       setBusyMessageModePreference: payloadHandler(parseBusyMessageModePreference, (parsed) =>
         runCauseEffect(busyMessageMode.set(parsed)),
       ),
+      getAgentDefaults: handler(() => agentDefaults.get()),
+      // The agents that follow a changed default get it at once: see `AgentService.agentDefaultsChanged`.
+      setAgentDefaults: payloadHandler(parseAgentDefaults, async (parsed) => {
+        const previous = agentDefaults.get();
+        const saved = await runCauseEffect(agentDefaults.set(parsed));
+        service.agentDefaultsChanged(previous);
+        return saved;
+      }),
       getAgentMemoryLimitPreference: handler(() => agentMemoryLimit.get()),
       getRemoteSessionReusePreference: handler(() => remoteSessionReuse.get()),
       // Off removes the kept sessions at once. The sessions of this run then end when the app quits.
@@ -223,12 +252,34 @@ export function appIpcHandlers({
         await initializeAgent();
         return state;
       }),
-      openExternal: payloadHandler(parseExternalDestination, (parsed) => {
-        return shell.openExternal(EXTERNAL_DESTINATIONS[parsed]);
-      }),
-      openUrl: payloadHandler(stringPayload("URL", INPUT_LIMITS.browserUrl), (url) =>
-        openHttpLink(url, (address) => shell.openExternal(address)),
+      openExternal: payloadHandler(parseExternalDestination, (parsed) => openLink(EXTERNAL_DESTINATIONS[parsed])),
+      openUrl: payloadHandler(stringPayload("URL", INPUT_LIMITS.browserUrl), (url) => openHttpLink(url, openLink)),
+      getExternalLinkPreference: handler(() => externalLinkPreference.get()),
+      setExternalLinkPreference: payloadHandler(parseExternalLinkPreference, (parsed) =>
+        runCauseEffect(externalLinkPreference.set(parsed)),
       ),
+      listExternalLinkBrowsers: handler(() => runCauseEffect(externalLinks.listBrowsers())),
+      chooseExternalLinkApp: handler(async (): Promise<ExternalLinkBrowser | null> => {
+        const mainWindow = getMainWindow();
+        // macOS shows an application bundle as one file, so the dialog can offer only applications.
+        const options: OpenDialogOptions = {
+          title: language.translate("dialog.chooseExternalLinkApp"),
+          properties: ["openFile"],
+          ...(process.platform === "darwin"
+            ? {
+                defaultPath: "/Applications",
+                filters: [{ name: language.translate("dialog.filter.applications"), extensions: ["app"] }],
+              }
+            : {}),
+        };
+        const result = mainWindow
+          ? await dialog.showOpenDialog(mainWindow, options)
+          : await dialog.showOpenDialog(options);
+        const path = result.canceled ? undefined : result.filePaths[0];
+        return path ? { name: externalLinkAppName(path), path } : null;
+      }),
+      openChatWindow: payloadHandler(parseChatWindowTarget, openChatWindow),
+      getChatWindows: handler(chatWindowTargets),
     },
     maintenance: {
       exportData: handler(() =>

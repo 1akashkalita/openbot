@@ -62,9 +62,10 @@ export const messages = {
   "provider.aria.codeFallback": "Entrar em {name} com um código",
   "provider.aria.moreActions": "Mais ações para {name}",
   "provider.aria.use": "Usar {name} no OpenBot",
+  "provider.use.inUseOne": "{agent} usa {name}. Mude o modelo deste agente e depois desligue {name}.",
   "provider.use.inUse": {
-    one: "{agents} usa {name}. Mude o modelo deste agente e depois desligue {name}.",
-    other: "{agents} usam {name}. Mude o modelo destes agentes e depois desligue {name}.",
+    one: "{count} agente usa {name}. Mude o modelo deste agente e depois desligue {name}.",
+    other: "{count} agentes usam {name}. Mude o modelo destes agentes e depois desligue {name}.",
   },
   "provider.codeLogin.title": "Entrar em {name} com um código",
   "provider.codeLogin.description": "Conclua no celular ou em outro navegador. O OpenBot aguarda aqui.",
@@ -134,10 +135,18 @@ export const messages = {
   "provider.geminiKey.description":
     "Salve uma chave de API do Gemini neste computador. Uma chave salva é usada no lugar da sua conta Google. Para entrar com o Google, remova a chave e selecione Conectar na linha do Gemini.",
   "provider.geminiKey.label": "Chave de API do Gemini",
+  "provider.claudeKey.title": "Chave de API da Anthropic",
+  "provider.claudeKey.description":
+    'Salve uma chave de API da Anthropic no host. A Anthropic cobra cada solicitação na chave. Para usá-la em um agente, selecione a conta "Chave de API" no menu de modelos do agente. Quando o Claude não está conectado, todos os agentes usam a chave.',
+  "provider.claudeKey.label": "Chave de API da Anthropic",
   "provider.inceptionKey.title": "Chave de API da Inception",
   "provider.inceptionKey.description":
     "Salve uma chave de API da Inception neste computador para usar os modelos Mercury. O OpenBot os executa na CLI do Pi que ele baixa.",
   "provider.inceptionKey.label": "Chave de API da Inception",
+  "provider.deepseekKey.title": "Chave de API da DeepSeek",
+  "provider.deepseekKey.description":
+    "Salve uma chave de API da DeepSeek neste computador para usar os modelos da DeepSeek. O OpenBot os executa na CLI do Pi que ele baixa.",
+  "provider.deepseekKey.label": "Chave de API da DeepSeek",
   "provider.openCodeKey.title": "Entrar no OpenCode Go",
   "provider.openCodeKey.description":
     "Os modelos gratuitos não exigem uma conta. Uma chave libera os modelos pagos do Go.",
@@ -155,6 +164,7 @@ export const messages = {
   "provider.account.addLabel": "Adicionar outra conta de {name}",
   "provider.account.count": { one: "{count} conta", other: "{count} contas" },
   "provider.account.numbered": "Conta {number}",
+  "provider.account.apiKey": "Chave de API",
   "provider.account.listLabel": "Contas de {name}",
   "provider.account.usedBy": "Usada por {agents}",
   "provider.account.failed": "Falha ao entrar",
@@ -178,4 +188,11 @@ export const messages = {
   "provider.account.resetUsageNoCredit": "{name} não tem mais créditos de redefinição de uso.",
   "provider.account.resetUsageAlreadyRedeemed": "Este crédito de redefinição de {name} já foi usado.",
   "provider.account.resetUsageFailed": "Não foi possível redefinir o uso de {name}.",
+  "provider.settings.cache": "Cache",
+  "provider.settings.promptCache": "Cache de prompts",
+  "provider.settings.promptCacheDescription":
+    "Por quanto tempo o Claude mantém o contexto de um agente no cache entre os turnos.",
+  "provider.settings.promptCacheHour": "1 hora",
+  "provider.settings.promptCacheDefault": "Padrão do Claude Code",
+  "provider.settings.promptCacheLoadFailed": "Não foi possível carregar a duração do cache de prompts deste servidor.",
 } as const satisfies PartialTranslation<typeof source>;

@@ -247,13 +247,18 @@ The published runtime uses a new recipe/input digest; no existing release assets
 The Linux GUI capability advisory GHSA-fp6g-27w5-489j does not apply: the Linux runtime is built
 with the tray off, and OpenBot gives Sunshine no file capabilities.
 
-### Linux runtime (recipe 14)
+### Linux runtime (recipe 16)
 
 The `linux-x64` target builds on Ubuntu 24.04 with GCC 14, X11 capture and software encoding only
 (CUDA, DRM, KWin, VAAPI, Vulkan, Wayland, portal and tray are off). The OpenBot patch adds an XTest
 input backend, because Xvfb does not read uinput devices. It also links libcap when DRM is off and
 adds a `vaMapBuffer2` shim, because the prebuilt FFmpeg needs libva 2.21 and Ubuntu 24.04 has 2.20.
-The runtime uses the system libraries of Ubuntu 24.04; the hosted server template installs them.
+The runtime uses the system libraries of Ubuntu 24.04 that Ubuntu 26.04 also has; the hosted server
+template installs them (the remote desktop part of `scripts/hosting/packages.txt`). Since recipe 16,
+Boost.Locale has no ICU backend, and the runtime carries `lib/libminiupnpc.so.17` with its Debian
+licence, because Ubuntu 26.04 has only `libminiupnpc21`. Sunshine finds it through its RUNPATH
+`$ORIGIN/lib`. The build job checks with `ldd` that each executable finds all its libraries on
+Ubuntu 26.04.
 Linux arm64 builds only for local development and has no release artifact.
 
 ## Pin the Gemini server
@@ -457,17 +462,26 @@ required upgrade step first. Use the rules of the post-update notes: do not copy
 developer setup, internal paths, credentials, or unpublished plans. Replace the highlights of the
 previous release; the file holds only one version.
 
-`scripts/discord-release-announcement.ts` builds the message: `@everyone`, the title
-`OpenBot vx.y.z is out`, the highlights, and a link to the version on `/changelog`. Run
+`scripts/discord-release-announcement.ts` builds the message: a mention of the `Release Pings`
+role, the title `OpenBot vx.y.z is out`, the highlights, and a link to the version on `/changelog`.
+It notifies only that role, not `@everyone` or `@here`. Run
 `bun scripts/discord-release-announcement.ts check x.y.z` to see it. The tag workflow and
 `bun run release:preflight` stop when the file is not for the release version, has fewer than 3 or
 more than 5 highlights, has a highlight that is empty or has a placeholder, a line break or a
-mention, or makes a message longer than 2000 characters. After the GitHub Release, the Docker image
-and the boat snapshot are published, the `discord-announce` job posts the message as OpenBot
-through the channel webhook in the `DISCORD_RELEASE_WEBHOOK_URL` secret of the `release`
-environment. To make the webhook, open the channel settings in Discord, then
-Integrations > Webhooks, and name it `OpenBot` with the OpenBot icon. A failed post does not undo
-the release: re-run the job. A re-run after a successful post posts the message again.
+mention, or makes a message longer than 2000 characters. They also stop when the
+`DISCORD_RELEASE_ROLE_ID` repository variable is not set or is not a Discord role ID. After the GitHub Release, the Docker image and the
+boat snapshot are published, the `discord-announce` job posts the message as OpenBot through the
+channel webhook in the `DISCORD_RELEASE_WEBHOOK_URL` secret of the `release` environment. The job
+fails, and posts nothing, when `DISCORD_RELEASE_ROLE_ID` is not set. A failed post does not undo the
+release: re-run the job. A re-run after a successful post posts the message again.
+
+One-time setup:
+
+1. In Discord, open the settings of the announcement channel, then Integrations > Webhooks. Make a
+   webhook named `OpenBot` with the OpenBot icon. Add its URL as the secret
+   `DISCORD_RELEASE_WEBHOOK_URL` of the `release` environment.
+2. In Discord, turn on Developer Mode, open Server Settings > Roles, right-click `Release Pings` and
+   select Copy Role ID. Add the ID as the repository variable `DISCORD_RELEASE_ROLE_ID`.
 
 The mobile app has its own post, file, webhook and workflow. It waits until both stores have the
 version. See [the mobile Discord announcement](../apps/mobile/README.md#discord-announcement).
@@ -526,7 +540,8 @@ The workflow:
    these runner errors are not caused by the app;
 5. builds a signed Windows x64 NSIS installer on a GitHub Windows runner (unsigned in a dry run);
 6. builds unsigned Linux x64 and arm64 AppImages on GitHub Ubuntu 24.04 runners of each architecture,
-   with the launch check under `xvfb-run`;
+   with the launch check under `xvfb-run`. A further check mounts each AppImage with only `fusermount3`,
+   because its static runtime must start on systems with no libfuse2, such as Arch Linux and Omarchy;
 7. verifies all three unpacked applications, update metadata, included runtimes, provider control
    artifacts, licenses, checksums, platform signing contracts, launch behavior, and update artifact
    size limits;

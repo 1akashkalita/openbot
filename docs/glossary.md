@@ -12,6 +12,11 @@ table, IPC channel or product string, or when a term in the code disagrees with 
   (`ipc-agent-templates.ts`, `agent-templates:*`, D1 `agent_templates`, `openbot.run/agents/<id>`).
   It holds no workspace files and no memories. It is not a marketplace agent: it has no review and
   no listing.
+- **browser profile**: a named, persistent browser session on the computer that runs the agents
+  (`browser_profiles`, `BrowserProfileSummary`, `AgentBrowserProfile`, `agent:admin:*-browser-profile*`,
+  `persist:openbot-browser-profile-<id>`). The built-in choices "Shared" and "Only this agent" (shown
+  only to an agent that already uses it) are also profiles in the UI, but they have no row. It is not an **agent profile** (`AgentProfile`, the
+  display data of an agent) or the account profile (`v1/me/profile`).
 - **bot**: do not use for new product code. Keep released names: Team API v1-v3
   `bot`/`botId`/`bots-changed` (`current-agent-keys.ts` translates), `bots.json`, `mailbox.json`,
   `legacy-import:bots:v1`, and readable `~/OpenBot/Bots` path prefixes. Accept `bot-<uuid>` IDs from
@@ -53,6 +58,14 @@ table, IPC channel or product string, or when a term in the code disagrees with 
 - **webhook route**: the opaque route ID of one webhook routine, and the public Signal URL that
   contains it (`WebhookRouteStore`, D1 `webhook_routes`). A **receipt** records one received
   delivery ID for deduplication.
+- **workflow**: a graph of steps on the Workflows page that can name several agents, models,
+  conditions, approvals and outputs (`WorkflowStore`, `Workflows`, `workflows`, `workflows-v1`). It
+  is not a **routine flow**, which hands the answer of one agent's routine on to other agents
+  (`routine-flows-v1`). A **workflow run** is one pass through a copy of the graph
+  (`workflow_runs`); a **workflow step** is one try of one node, in a run or alone
+  (`workflow_steps`). A **workflow version** is a saved copy of the graph that the user can restore
+  (`workflow_versions`). A **workflow webhook trigger** is a trigger node with a webhook route of
+  the `workflow` owner kind (`workflow_trigger_webhooks`).
 - **shared table**: a table an agent created in the one file every agent shares
   (`~/OpenBot/Shared/Data/agent-data.db`, `SharedTable`, `AgentTables`). `openbot.db` is the
   application's database and holds none of these. **owner**: the agent whose id

@@ -32,6 +32,15 @@ renderer hides those controls from a member. The wire carries no absolute paths,
 download files travel only as category totals. A host without the capability reads as null, and the
 surface asks for an update; a change is refused before any request.
 
+The optional `storage-disk-v1` capability adds `POST /v1/storage/disk` (`team-protocol/storage-disk-v1.ts`).
+It answers the free and total bytes of the disk that holds the host data, from one `statfs` call
+with no scan, so it is a passive route. Every member can read it. The sidebar storage card
+(`features/sidebar/storage-card.ts`) reads it for an owner or admin of the selected server, at
+start, every five minutes, and when Server settings closes. Under 10% free (at most 5 GB) the card
+says "Storage almost full" and can be closed until the next level; under 2% free (at most 1 GB) it
+is red and cannot be closed. "Free up space" opens Server settings › Storage. A host without the
+capability shows no card.
+
 ### Hosted sites per server
 
 A hosted site belongs to the server that published it (`hosted_sites.server_id`, D1 `0024`). The user
@@ -154,6 +163,45 @@ optional event `routine-flows-changed { agentId }` names the canvas that changed
 only to a connection with the capability and never for a hidden agent. Webhook config, secret
 rotation and webhook test runs stay on `events-v1`. A client without the capability shows a notice
 in the Routines view; the web client shows the view switch only when the host serves it.
+
+### Workflows
+
+`workflows-v1` serves the workflow canvas (see [Workflows](agents.md#workflows)) to a joined desktop
+and to the web client. Its routes are `POST /v1/workflows/<name>` with the input in the body:
+`list`, `get`, `create`, `rename`, `delete`, `save-graph`, `versions`, `version-graph`,
+`restore-version`, `start-run`, `run-step`, `stop-step`, `stop-run`, `retry-step`, `decide`, `runs`,
+`run` and `rotate-webhook-secret`. `version-graph` gives the graph of one version for the preview,
+with the same filter as `get`. The contract header in `team-protocol/workflows-v1.ts` records the grant:
+
+- A member sees a workflow only when every agent of its agent steps is visible and no model step
+  names a provider that the member's protocol hides (a local-only provider hides it from every
+  peer, the owner on a remote client too). An owner or admin also sees a workflow that names a
+  deleted agent, so they can fix or delete it. The host answers any other workflow, and its runs,
+  steps and versions, with 404.
+- A run, a single step, a stop, a retry or a decision needs the chat level for each named agent. A
+  retry, a stop and a decision check the agents of the current graph and of the run's graph.
+- A change, a rename, a delete, a restore or a new webhook secret needs the manage level for each
+  named agent, before and after the change (403). A restore checks the graph of the version. The
+  desktop shows the canvas read-only when the member does not manage each agent of the graph.
+- A workflow that names no agent, such as one with only model and condition steps, needs no agent
+  level. Each member who sees it can change and run it on the host's providers. This is a product
+  decision: model and condition steps are open to each member who can see the workflow.
+- Only an owner or admin can add an output that posts to a messaging place, or change its place
+  (403 `adminRequired`); a member can keep and run one that is there.
+- A step of an agent that is hidden now does not cross: the generic hidden-agent filter of the
+  answer drops it.
+- A webhook trigger's URL goes only to an owner or admin; a member reads it as null. Only an owner
+  or admin can make a new secret.
+- Step output and error cross with at most 32,000 characters each, and a run sends its newest
+  2,000 steps. When a page of runs would not fit one WebRTC frame, the host empties the step texts
+  of the oldest runs first, then answers 413 `tooLargeToSend`.
+
+Node kinds, port types, statuses, run sources, trigger types and version kinds cross as open names,
+so a newer host can add one. A client shows a workflow with a node kind or a port type that it does
+not know as read-only (`needsNewerApp`), and keeps the node when it saves.
+
+The optional event `workflows-changed { workflowId }` names the workflow that changed, so the
+client reads it again. A client without the capability shows `serverTooOld` on the Workflows page.
 
 ### History extent
 
@@ -305,7 +353,8 @@ does not count it. See [hosted servers](../hosted-servers.md) step 5.
 
 An owner or admin of a joined server manages its host through optional `POST /v1/admin/...` routes.
 Each capability has a frozen codec in `team-protocol/<name>-v1.ts`, registered in
-`team-protocol/optional-routes.ts`, and both transports use it. Every route calls `requireAdmin`. The
+`team-protocol/optional-routes.ts`, and both transports use it. Every route calls `requireAdmin`,
+except two that also answer a member: `/v1/browser/tab-profiles` and `storage-disk-v1`. The
 host advertises a capability only when its `TeamApiAdmin` member exists.
 
 | Capability | Grants | IPC group |
@@ -314,6 +363,7 @@ host advertises a capability only when its `TeamApiAdmin` member exists.
 | `agent-host-settings-v1` | Agent Computer Use, local scripts, and messages while it works; reads the host default | `agentAdmin` |
 | `agent-backup-models-v1` | Agent backup models: the order and whether to switch without asking. Unknown providers are refused | `agentAdmin` |
 | `agent-task-limit-v1` | Agent task limit: how many tasks run at the same time, 1 to 4, or the host default | `agentAdmin` |
+| `browser-profiles-v1` | Named browser profiles of the host: list, create, rename, recolor, clear, delete, and the profile of each agent. One route, `/v1/browser/tab-profiles`, also answers a member: the profile label of each tab that the member can see. Cookies and site data stay on the host. Advertised when the host has `browserProfiles` | `agentAdmin` |
 | `skills-admin-v1` | List, install, remove, enable skills by marketplace id | `agentAdmin` |
 | `shared-tables-v1` | List and delete shared tables | `sharedTables` |
 | `agent-install-v1` | Add an agent from a listing or a shared template, by id | `agentAdmin` |
@@ -322,11 +372,13 @@ host advertises a capability only when its `TeamApiAdmin` member exists.
 | `instance-transfer-v1` | Export and import the server's agents and server settings as a transfer file | `instanceTransfer` |
 | `providers-v3` | Code sign-in for Codex, Claude and Grok; send the code a Claude sign-in page shows | `providerAdmin` |
 | `providers-v4` | Code or link sign-in and managed runtimes, Cursor and Cline included | `providerAdmin` |
+| `claude-api-key-v1` | No routes. The host saves an Anthropic API key for Claude through the `providers-v1` key routes | `providerAdmin` |
 | `provider-usage-reset-v1` | Read the usage reset credits of each provider account on the host, and spend one. Only Codex gives credits | `providerAdmin` |
 | `host-admin-v1` | Server name and logo | `hostAdmin` |
 | `host-update-v1` | Check for, download and restart into an app update; cancel a restart that waits | `hostAdmin` |
 | `host-timezone-v1` | Read and set the server timezone | `hostAdmin` |
 | `agent-memory-limit-v1` | Read and set how many memories each agent keeps | `hostAdmin` |
+| `prompt-cache-ttl-v1` | Read and set how long Claude keeps the prompt cache of the host's agents | `hostAdmin` |
 | `agent-access-v1` | Read and set the roles that give members access to agents (see [Roles](#roles)) | `hostAdmin` |
 | `discord-access-v1` | Read and set which Discord roles can use OpenBot in a Discord server; list its roles | `messaging` |
 | `events-v1` | Manage webhook routines, their secrets, and activity | `events` |
@@ -382,6 +434,29 @@ agent's memories (`app:agent-memory-limit`). A lower limit deletes no memories. 
 change the 8,192-byte budget of essential memories. Server settings → General → Agents is the only
 place that sets the limit, for this computer (`hostAdmin.setAgentMemoryLimit`, local handler) and for a
 joined server. App Settings does not show it, so that one name does not have two values.
+
+`prompt-cache-ttl-v1` reads and sets how long Claude keeps the prompt cache of the host's agents
+(`openbot-prompt-cache-ttl-v1.json`; `5m` or `1h`, default `5m`). With `1h` the host starts each
+Claude process with `ENABLE_PROMPT_CACHING_1H=1`. Claude Code reads this flag before its subscription
+rules, so subagents and a subscription that uses extra usage also get 1 hour. With `5m`, the default, it
+sets nothing, so Claude Code uses its own choice: 5 minutes with an API key, 1 hour for the main thread of a
+subscription within its limits. A `promptCacheTtl`
+in the Claude settings or `CLAUDE_CODE_PROMPT_CACHE_TTL` on the host still wins. A change applies to
+the next Claude process, not to a running one; an idle thread starts a new process when it resumes.
+The Cache section of the Claude page in Server settings → Providers sets it for this computer and
+for a joined server.
+
+`claude-api-key-v1` has no routes. It tells a client that the host reads the key that the released
+`providers-v1` key routes save for `claude`. The host keeps the key as a Claude account with the
+fixed id `CLAUDE_API_KEY_ACCOUNT_ID`, which `provider-accounts-v1` lists as any other account, so an
+older client can select it too. The agents on it start with `ANTHROPIC_API_KEY` and their own
+`CLAUDE_CONFIG_DIR`, and Anthropic bills each request to the key. The provider's own sign-in first
+checks its claude.ai login without the key. Only when it has no login does it use the key; it then
+reports the account type `claude-api-key`, and the host hides the key account row, because each
+agent already uses the key. A removed key removes its account and moves its agents to the own sign-in.
+A removed account with a saved key comes back at the next account check. An added account never gets
+the key. An older host saved the key but did not use it, so a client shows the Claude key only when
+the host advertises the capability.
 
 `host-update-v1` runs the same update as the host's own Settings. `src/main/requested-update.ts`
 keeps the schedule in memory: who asked, and whether the restart waits until
@@ -564,7 +639,7 @@ the tiers used the same lookup key. The license terms allow 3 devices for each u
   Team monthly to yearly. It bills the difference now (`always_invoice`,
   `payment_behavior=error_if_incomplete`). Any other change is 409 `license_plan_change`: to go down,
   the owner cancels at the period end and buys again.
-- The `licenses` table stores `tier`, `billing_interval` and `bundle` (migration `0040`). NULL is Team
+- The `licenses` table stores `tier`, `billing_interval` and `bundle` (migration `0041`). NULL is Team
   monthly.
 - Users are people, not servers or computers: the owner, plus each distinct account that is an
   active member (`remote_memberships`) of a server that the owner owns. AI agents and chat-app

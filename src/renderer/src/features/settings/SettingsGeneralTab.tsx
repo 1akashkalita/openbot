@@ -1,5 +1,4 @@
 import { APP_INTERFACE_SIZES, type AppInterfaceSize, type AppVariant } from "@openbot/contracts/ipc";
-import type { AppTextKey } from "@openbot/i18n";
 import {
   Item,
   ItemActions,
@@ -26,18 +25,9 @@ import { useAppearanceChoice } from "../../appearance-choice";
 import { useI18n } from "../../i18n-context";
 import { useInterfaceSizeChoice } from "../../interface-size";
 import { useLogoColorChoice } from "../../logo-color";
+import { ExternalLinkSelect } from "./ExternalLinkSelect";
 
 const interfaceSizeOptions = [...APP_INTERFACE_SIZES];
-const linkTargetOptions: GeneralSettingsValue["externalLinkTarget"][] = ["Default browser", "OpenBot"];
-
-/**
- * The saved value is the English name, because it is what `app-settings.ts` persists and what the
- * main process compares against. Only the label a reader sees is translated.
- */
-const LINK_TARGET_KEYS = {
-  "Default browser": "settings.externalLinks.defaultBrowser",
-  OpenBot: "settings.externalLinks.openbot",
-} as const satisfies Record<GeneralSettingsValue["externalLinkTarget"], AppTextKey>;
 
 interface SettingsGeneralTabProps {
   value: GeneralSettingsValue;
@@ -53,8 +43,6 @@ interface SettingsGeneralTabProps {
 
 export function SettingsGeneralTab(props: SettingsGeneralTabProps) {
   const i18n = useI18n();
-  const linkTargetLabel = (value: GeneralSettingsValue["externalLinkTarget"] | undefined) =>
-    value === undefined ? "" : i18n.t(LINK_TARGET_KEYS[value]);
   const appearance = useAppearanceChoice();
   const logoColor = useLogoColorChoice();
   const interfaceSize = useInterfaceSizeChoice();
@@ -78,6 +66,15 @@ export function SettingsGeneralTab(props: SettingsGeneralTabProps) {
               />
             </ItemActions>
           </Item>
+          <Show when={props.platform === "darwin"}>
+            <SwitchField
+              data-settings-row="settings.appearance.transparentWindow.title"
+              checked={appearance.transparentWindow()}
+              onChange={appearance.changeTransparentWindow}
+              label={i18n.t("settings.appearance.transparentWindow.title")}
+              description={i18n.t("settings.appearance.transparentWindow.description")}
+            />
+          </Show>
           <Item data-settings-row="settings.language.title" class="settings-modal-row">
             <ItemContent>
               <ItemTitle>{i18n.t("settings.language.title")}</ItemTitle>
@@ -146,36 +143,18 @@ export function SettingsGeneralTab(props: SettingsGeneralTabProps) {
             label={i18n.t("settings.showAgentSteps.title")}
             description={i18n.t("settings.showAgentSteps.description")}
           />
-          <SwitchField
-            data-settings-row="settings.busyMessage.title"
-            checked={props.value.busyMessageMode === "steer"}
-            onChange={(checked) => props.onUpdateSetting("busyMessageMode", checked ? "steer" : "queue")}
-            label={i18n.t("settings.busyMessage.title")}
-            description={i18n.t("settings.busyMessage.description")}
-          />
           <Item data-settings-row="settings.externalLinks.title" class="settings-modal-row">
             <ItemContent>
               <ItemTitle>{i18n.t("settings.externalLinks.title")}</ItemTitle>
               <ItemDescription>{i18n.t("settings.externalLinks.description")}</ItemDescription>
             </ItemContent>
             <ItemActions>
-              <Select<GeneralSettingsValue["externalLinkTarget"]>
-                class="settings-modal-select"
-                options={linkTargetOptions}
-                value={props.value.externalLinkTarget}
-                onChange={(value) => value && props.onUpdateSetting("externalLinkTarget", value)}
-                placement="bottom-end"
-                itemComponent={(selectProps) => (
-                  <SelectItem item={selectProps.item}>{linkTargetLabel(selectProps.item.rawValue)}</SelectItem>
-                )}
-              >
-                <SelectTrigger size="sm" aria-label={i18n.t("settings.externalLinks.title")}>
-                  <SelectValue<GeneralSettingsValue["externalLinkTarget"]>>
-                    {(state) => linkTargetLabel(state.selectedOption())}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent mount={props.selectMount} />
-              </Select>
+              <ExternalLinkSelect
+                target={props.value.externalLinkTarget}
+                platform={props.platform}
+                mount={props.selectMount}
+                onChange={(target) => props.onUpdateSetting("externalLinkTarget", target)}
+              />
             </ItemActions>
           </Item>
         </ItemGroup>
@@ -206,6 +185,23 @@ export function SettingsGeneralTab(props: SettingsGeneralTabProps) {
               onChange={(checked) => props.onUpdateSetting("keepRunningInBackground", checked)}
               label={i18n.t("settings.keepRunning.title")}
               description={i18n.t("settings.keepRunning.description")}
+            />
+          </Show>
+          <Show when={props.value.keepAwake !== null}>
+            <SwitchField
+              data-settings-row="settings.keepAwake.title"
+              checked={props.value.keepAwake === true}
+              onChange={(checked) => props.onUpdateSetting("keepAwake", checked)}
+              label={i18n.t("settings.keepAwake.title")}
+              description={i18n.t("settings.keepAwake.description")}
+            />
+            <SwitchField
+              data-settings-row="settings.keepAwakeOnBattery.title"
+              checked={props.value.keepAwakeOnBattery === true}
+              disabled={props.value.keepAwake !== true}
+              onChange={(checked) => props.onUpdateSetting("keepAwakeOnBattery", checked)}
+              label={i18n.t("settings.keepAwakeOnBattery.title")}
+              description={i18n.t("settings.keepAwakeOnBattery.description")}
             />
           </Show>
           <SwitchField

@@ -485,6 +485,14 @@
   animation: image-generation-shine 2.25s cubic-bezier(0.25, 0.1, 0.25, 1) infinite;
 }
 
+/* A wait for the provider is not work, so its label does not shine. */
+.agent-activity-entry[data-waiting="true"] .agent-activity-label {
+  animation: none;
+  background: none;
+  color: var(--openbot-text-secondary);
+  -webkit-text-fill-color: currentColor;
+}
+
 .agent-activity-elapsed {
   flex: 0 0 auto;
   color: var(--openbot-text-muted);
@@ -861,6 +869,13 @@ button.chat-action-target:active,
 .chat-action-marker-agent-message .chat-action-agent-menu-trigger:active {
   background: color-mix(in srgb, var(--chat-action-agent-color) 34%, transparent);
   color: var(--openbot-text-primary);
+}
+
+/* The open text of an agent message reads as a chat message under its centred marker. */
+.chat-action-message-text {
+  align-self: stretch;
+  margin-block: var(--openbot-space-2);
+  text-align: start;
 }
 
 .chat-action-target-status-in-progress .ui-marker-icon {

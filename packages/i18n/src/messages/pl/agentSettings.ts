@@ -77,7 +77,6 @@ export const messages = {
   "agentSettings.avatar.saveFailed": "Nie udało się zapisać awatara agenta.",
   "agentSettings.avatar.processFailed": "Nie udało się przetworzyć awatara agenta.",
   "agentSettings.runtime.model": "Model agenta",
-  "agentSettings.runtime.providerBusy": "Poczekaj na zakończenie bieżącej pracy, zanim zmienisz dostawcę lub konto.",
   "agentSettings.runtime.modelUnavailable": "Modele będą dostępne po połączeniu CLI agenta.",
   "agentSettings.runtime.reasoning": "Rozumowanie",
   "agentSettings.runtime.reasoningLabel": "Poziom rozumowania agenta",
@@ -174,9 +173,15 @@ export const messages = {
   "agentSettings.quickAcknowledgement.title": "Pokaż plan przed długimi zadaniami",
   "agentSettings.quickAcknowledgement.description":
     "Przed długim zadaniem agent pokazuje swój plan. Zaczyna po 10 s lub po naciśnięciu Start.",
-  "agentSettings.ownBrowserSession.title": "Własna sesja przeglądarki",
-  "agentSettings.ownBrowserSession.description":
-    "Karty agenta mają własne logowania i pliki cookie. Zmiana zamyka otwarte karty agenta.",
+  "agentSettings.browserProfile.label": "Profil przeglądarki",
+  "agentSettings.browserProfile.shared": "Wspólny",
+  "agentSettings.browserProfile.agent": "Tylko ten agent",
+  "agentSettings.browserProfile.missing": "Usunięty profil",
+  "agentSettings.browserProfile.new": "Nowy profil",
+  "agentSettings.browserProfile.manageTitle": "Profile przeglądarki",
+  "agentSettings.browserProfile.manageDescription":
+    "Każdy profil ma własne logowania i pliki cookie. Zmiana zamyka otwarte karty agenta.",
+  "agentSettings.browserProfile.manage": "Zarządzaj",
   "agentSettings.runtime.workspaceEnforcedProcess":
     "Cały proces {provider} działa w piaskownicy, więc zapis poza tymi folderami się nie powiedzie. Dostępne tylko w macOS.",
 } as const satisfies PartialTranslation<typeof source>;

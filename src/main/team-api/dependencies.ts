@@ -7,10 +7,13 @@ import type { AgentHostSettingsService } from "../agent-host-settings";
 import type { AgentMarketplaceService } from "../agent-marketplace-service";
 import type { AgentMemoryLimitSetting } from "../agent-memory-limit-preference-store";
 import type { AgentTemplateService } from "../agent-template-service";
+import type { BrowserProfileService } from "../browser-profile-service";
 import type { PeerCustomProviderChanges } from "../custom-provider-changes";
 import type { HostEventsApi } from "../host-events-api";
+import type { HostEventsService } from "../host-events-service";
 import type { HostReleaseService } from "../host-release-service";
 import type { HostService } from "../host-service";
+import type { PromptCacheTtlPreferenceStore } from "../prompt-cache-ttl-preference-store";
 import type { ProviderCredentialStore } from "../provider-credential-store";
 import type { ProviderRuntimeManager } from "../provider-runtime-manager";
 import type { RemoteWorkflowError } from "../remote-service-effects";
@@ -47,6 +50,7 @@ import type { RoutineFlowsHandle } from "../../backend/routine-flows/routine-flo
 import type { SidebarLayoutStore } from "../../backend/sidebar-layout-store";
 import type { StorageUsageService } from "../../backend/storage-usage";
 import type { TeamChatStore } from "../../backend/team-chat-store";
+import type { WorkflowsHandle } from "../../backend/workflows/workflows";
 import type { AgentImportService } from "../agent-import-service";
 import type { BitwardenConnectorService } from "../bitwarden-connector-service";
 import type { BrowserViewGateway } from "../browser-view-gateway";
@@ -188,10 +192,13 @@ export interface TeamApiConnectors {
   >;
 }
 
-/** Its presence, beside `mcpServers`, is what `#protocolSupport` advertises `sign-in-relay-v1` on. */
+/**
+ * Its presence, beside `mcpServers`, is what `#protocolSupport` advertises `sign-in-relay-v1` on, and
+ * beside `providerAccounts` too, `provider-account-relay-v1`.
+ */
 export type TeamApiSignInRelay = Pick<
   SignInRelayHost,
-  "startMcp" | "startProvider" | "startLink" | "status" | "complete" | "cancel"
+  "startMcp" | "startProvider" | "startProviderAccount" | "startLink" | "status" | "complete" | "cancel"
 >;
 
 /**
@@ -209,8 +216,8 @@ export type TeamApiProviderAccounts = Pick<
 /** Its presence is what `#protocolSupport` advertises `provider-usage-reset-v1` on. The routes are admin-only. */
 export type TeamApiProviderUsageResets = Pick<AgentService, "providerUsageResets" | "resetProviderUsage">;
 
-/** Its presence is what `#protocolSupport` advertises `storage-v1` on. */
-export type TeamApiStorage = Pick<StorageUsageService, "usage" | "deleteFile" | "clear">;
+/** Its presence is what `#protocolSupport` advertises `storage-v1` and `storage-disk-v1` on. */
+export type TeamApiStorage = Pick<StorageUsageService, "usage" | "deleteFile" | "clear" | "disk">;
 /** `hosted-sites-v1`: the openbot.site sites of this server. Members list; only admins delete. */
 export type TeamApiHostedSites = Pick<HostedSiteDesktopService, "listServerSites" | "deleteServerSite">;
 
@@ -225,6 +232,12 @@ export type TeamApiAgentTasks = Pick<
   AgentService,
   "listAgents" | "listTasks" | "readTask" | "startTask" | "sendMessage" | "stopTask" | "closeTask" | "reopenTask"
 >;
+
+/**
+ * Its presence is what `#protocolSupport` advertises `browser-profiles-v1` on. Only admins change
+ * profiles; any member reads the profile labels of the tabs they can see.
+ */
+export type TeamApiBrowserProfiles = BrowserProfileService;
 
 /** Its presence is what `#protocolSupport` advertises `agent-import-v1` on. Any member can use it. */
 export type TeamApiAgentImport = Pick<AgentImportService, "stageUpload" | "apply" | "discard">;
@@ -243,6 +256,34 @@ export type TeamApiRoutineFlows = Pick<
   RoutineFlowsHandle,
   "canvas" | "savePosition" | "removePosition" | "connect" | "disconnect" | "updateLink" | "agentsOf"
 >;
+
+/**
+ * Its presence is what `#protocolSupport` advertises `workflows-v1` on. Any member who can see every
+ * agent of a workflow can use it; see `workflows-v1.ts` for the grant.
+ */
+export type TeamApiWorkflows = Pick<
+  WorkflowsHandle,
+  | "list"
+  | "listWithGraphs"
+  | "get"
+  | "create"
+  | "rename"
+  | "remove"
+  | "saveGraph"
+  | "versions"
+  | "restoreVersion"
+  | "versionGraph"
+  | "startRun"
+  | "runStep"
+  | "stopStep"
+  | "stopRun"
+  | "retryStep"
+  | "decide"
+  | "runs"
+  | "run"
+  | "workflowOf"
+> &
+  Pick<HostEventsService, "rotateWorkflowSecret">;
 
 /**
  * The admin routes, one member per optional capability. A member's presence is what
@@ -289,6 +330,8 @@ export interface TeamApiAdmin {
   timezone?: Pick<ServerTimezonePreferenceStore, "get" | "set">;
   /** `agent-memory-limit-v1`: how many memories each agent of this computer can keep. */
   memoryLimit?: AgentMemoryLimitSetting;
+  /** `prompt-cache-ttl-v1`: how long the provider keeps the prompt cache of this computer's agents. */
+  promptCacheTtl?: Pick<PromptCacheTtlPreferenceStore, "get" | "set">;
   /** `routine-results-v1`: the place where an agent routine sends its answers. */
   routineResults?: TeamApiRoutineResults;
 }
@@ -311,7 +354,11 @@ interface TeamApiHostIdentity {
 interface TeamApiProviders {
   service: Pick<
     AgentService,
-    "startProviderCodeLogin" | "submitProviderCodeLogin" | "cancelProviderCodeLogin" | "changeProviderCredential"
+    | "startProviderCodeLogin"
+    | "submitProviderCodeLogin"
+    | "cancelProviderCodeLogin"
+    | "changeProviderCredential"
+    | "clearProviderCredential"
   >;
   credentials: Pick<ProviderCredentialStore, "status" | "set" | "clear">;
   runtimes: Pick<ProviderRuntimeManager, "getStatus" | "download" | "cancel" | "checkForUpdates">;
@@ -410,10 +457,12 @@ export interface TeamApiOptions {
   agentImport?: TeamApiAgentImport;
   instanceTransfer?: TeamApiInstanceTransfer;
   routineFlows?: TeamApiRoutineFlows;
+  workflows?: TeamApiWorkflows;
   hiddenAgents?: TeamApiHiddenAgents;
   /** `agent-access-v1`: the roles that limit what a member can do with each agent. */
   agentAccess?: TeamApiAgentAccess;
   agentTasks?: TeamApiAgentTasks;
+  browserProfiles?: TeamApiBrowserProfiles;
   admin?: TeamApiAdmin;
   appVersion?: string;
   store: TeamStore;

@@ -198,6 +198,8 @@ export const messages = {
     "OpenCode のモデルプロバイダーが無効なアップロードリクエストを報告しました。別のモデルを選択して続行してください。ルーティンをもう一度作成する前に、保存済みのルーティンを確認してください。\n{detail}",
   "error.provider.opencodeUnreadableContent":
     "このモデルは、このチャット内のファイルまたは画像を読み取れません。ファイルを読み取れるモデルを選択してから、メッセージをもう一度送信してください。",
+  "error.provider.opencodeFreeLimit":
+    "OpenCode の無料モデルが使用量の上限に達しました。この上限はすべての無料モデルで共有されます。続けるには、OpenCode の設定に OpenCode Go のキーを貼り付けるか、別のプロバイダーのモデルを選択してください。",
   "error.provider.opencodeProviderFailed":
     "モデルプロバイダー側で障害が発生しました。お使いの接続は原因ではありません。後でもう一度試すか、別のモデルを選んでください。\n{detail}",
   "error.provider.opencodeNetwork":
@@ -270,12 +272,17 @@ export const messages = {
   "error.provider.httpsSignInLinkOnly": "ブラウザーで開けるのは HTTPS のサインインリンクだけです。",
   "error.provider.geminiKeyRefused":
     "Gemini は保存された API キーを拒否しました。設定でキーを置き換えるか削除してから、もう一度接続してください。",
+  "error.provider.keyProviderRefused":
+    "{provider} は保存された API キーを拒否しました。設定でキーを置き換えるか削除してから、もう一度お試しください。",
+  "error.provider.keyProviderNoBalance":
+    "保存された API キーの {provider} アカウントに残高がありません。アカウントにクレジットを追加してから、もう一度お試しください。",
   "error.provider.messageTooLarge":
     "{limit} MB を超えるメッセージを送信したため、OpenBot は {provider} を停止しました。",
   "error.provider.customAgentIdInvalid":
     "エージェント ID には英小文字、数字、`-` のみを使用してください。組み込みプロバイダーの ID は使用できません。",
   "error.provider.customAgentEnvInvalid":
     "変数名には英字、数字、`_` のみを使用し、数字で始めないでください。各名前は 1 回だけ、最大 16 個まで使用できます。",
+  "error.provider.customAgentUsagePromptInvalid": "使用量コマンドは 256 文字以内の 1 行にしてください。",
   "error.provider.customAgentCommandInvalid":
     "コマンドは完全なパス、~/ で始まるパス、またはスペースを含まないコマンド名にしてください。",
   "error.provider.customAgentArgsInvalid": "引数に改行は使用できません。引数は最大 32 個までです。",
@@ -318,6 +325,8 @@ export const messages = {
     "この {provider} アカウントはこのコンピューターにありません。更新してからもう一度お試しください。",
   "error.provider.accountAlreadyAdded": "この {provider} アカウントはすでに接続されています。",
   "error.provider.accountDefault": "最初の {provider} アカウントは削除できません。",
+  "error.provider.accountUsesKey":
+    "この {provider} アカウントは保存された API キーを使うため、サインインはありません。キーはサーバーの設定 → プロバイダーで変更してください。",
   "error.provider.accountInUse":
     "このアカウントを使うエージェントが作業中です。エージェントが停止してからもう一度お試しください。",
   "error.provider.accountsReadOnly":
@@ -376,6 +385,7 @@ export const messages = {
     "Muse の認証が確認されていません。ホストコンピューターで接続するか、Meta API キーを設定してください。",
   "error.provider.museSignIn": "続行するには、ホストコンピューターで Muse にサインインしてください。",
   "error.provider.inceptionSignIn": "続行するには、Inception API キーを追加してください。",
+  "error.provider.deepseekSignIn": "続けるには DeepSeek API キーを追加してください。",
   "error.provider.terminalLoginFailed":
     "サインイン用のターミナルを開けませんでした。このホストでプロバイダーの CLI を開いてサインインしてから、プロバイダーを更新してください。",
   "error.provider.nativeArchiveInvalid": "プロバイダーのダウンロードに有効なインストールが含まれていません。",

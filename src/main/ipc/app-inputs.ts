@@ -1,5 +1,6 @@
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import type {
+  AgentDefaults,
   AgentMemoryLimitPreference,
   AgentProviderId,
   AppBehaviorPreferenceChange,
@@ -7,11 +8,13 @@ import type {
   BrowserDockFrame,
   BrowserDockPresentation,
   BusyMessageModePreference,
+  ChatWindowTarget,
   DeleteHostedSiteInput,
   DynamicIslandAction,
   DynamicIslandPreference,
   DynamicIslandPresentation,
   ExternalDestination,
+  ExternalLinkPreference,
   HostUpdateSettingsChange,
   IdleRestartTarget,
   InstallMarketplaceAgentInput,
@@ -39,7 +42,9 @@ import type {
   VerifyEmailCodeInput,
 } from "@openbot/contracts/ipc";
 import {
+  decodeExternalLinkTarget,
   IDLE_RESTART_TARGETS,
+  isAgentDefaults,
   isAgentMemoryLimit,
   isAgentModel,
   isAgentProvider,
@@ -96,9 +101,29 @@ export function parseBusyMessageModePreference(input: unknown): BusyMessageModeP
   return { mode: input.mode };
 }
 
+export function parseAgentDefaults(input: unknown): AgentDefaults {
+  if (!isAgentDefaults(input)) throw new Error("Agent defaults are required.");
+  return {
+    allowAutomation: input.allowAutomation,
+    allowNewChat: input.allowNewChat,
+    quickAcknowledgement: input.quickAcknowledgement,
+  };
+}
+
 export function parseAgentMemoryLimitPreference(input: unknown): AgentMemoryLimitPreference {
   if (!isDynamicRecord(input) || !isAgentMemoryLimit(input.limit)) throw new Error("Agent memory limit is required.");
   return { limit: input.limit };
+}
+
+export function parseChatWindowTarget(input: unknown): ChatWindowTarget {
+  if (!isDynamicRecord(input)) throw new Error("A chat is required.");
+  return { serverId: requireString(input.serverId, "Server"), agentId: requireString(input.agentId, "Agent") };
+}
+
+export function parseExternalLinkPreference(input: unknown): ExternalLinkPreference {
+  const target = isDynamicRecord(input) ? decodeExternalLinkTarget(input.target) : null;
+  if (!target) throw new Error("The external link setting is required.");
+  return { target };
 }
 
 export function parseRemoteSessionReusePreference(input: unknown): RemoteSessionReusePreference {
@@ -123,8 +148,16 @@ export function parseAppLogoColorPreference(input: unknown): SetAppLogoColorPref
 }
 
 export function parseAppAppearancePreference(input: unknown): SetAppAppearancePreferenceInput {
-  if (!isDynamicRecord(input) || !isAppAppearance(input.appearance)) throw new Error("Appearance is required.");
-  return { appearance: input.appearance };
+  if (!isDynamicRecord(input)) throw new Error("Appearance is required.");
+  const { appearance, transparentWindow } = input;
+  if (appearance !== undefined && !isAppAppearance(appearance)) throw new Error("Appearance is invalid.");
+  if (transparentWindow !== undefined && typeof transparentWindow !== "boolean")
+    throw new Error("Transparent window must be true or false.");
+  if (appearance === undefined && transparentWindow === undefined) throw new Error("Appearance is required.");
+  return {
+    ...(appearance === undefined ? {} : { appearance }),
+    ...(transparentWindow === undefined ? {} : { transparentWindow }),
+  };
 }
 
 export function parseAppInterfaceSizePreference(input: unknown): SetAppInterfaceSizePreferenceInput {
@@ -138,7 +171,11 @@ export function parseIdleRestartTarget(input: unknown): IdleRestartTarget {
 }
 
 export function parseAppBehaviorPreferenceChange(input: unknown): AppBehaviorPreferenceChange {
-  return parseSwitches(input, ["launchAtLogin", "keepRunningInBackground"], "The app behavior setting is required.");
+  return parseSwitches(
+    input,
+    ["launchAtLogin", "keepRunningInBackground", "keepAwake", "keepAwakeOnBattery"],
+    "The app behavior setting is required.",
+  );
 }
 
 export function parseUpdatePreference(input: unknown): UpdatePreferenceChange {

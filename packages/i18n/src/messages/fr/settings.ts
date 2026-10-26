@@ -14,6 +14,9 @@ export const messages = {
   "settings.appearance.theme.system": "Système",
   "settings.appearance.theme.light": "Clair",
   "settings.appearance.theme.dark": "Sombre",
+  "settings.appearance.transparentWindow.title": "Fenêtre transparente",
+  "settings.appearance.transparentWindow.description":
+    "Affiche le bureau flouté derrière la fenêtre. Les sites et les menus suivent alors le thème de l’app.",
   "settings.interfaceSize.title": "Taille de l’interface",
   "settings.interfaceSize.description": "La taille du texte et des commandes dans OpenBot.",
   "settings.logoColor.title": "Couleur du logo",
@@ -37,13 +40,28 @@ export const messages = {
   "settings.launchAtLogin.description": "Ouvrir l’application lorsque vous vous connectez à cet ordinateur.",
   "settings.keepRunning.title": "Garder OpenBot actif en arrière-plan",
   "settings.keepRunning.description": "Poursuivre les tâches en cours après la fermeture de la fenêtre.",
+  "settings.keepAwake.title": "Empêcher la mise en veille",
+  "settings.keepAwake.description":
+    "Les routines s’exécutent à l’heure tant que l’ordinateur est branché. L’écran peut quand même s’éteindre.",
+  "settings.keepAwakeOnBattery.title": "Aussi sur batterie",
+  "settings.keepAwakeOnBattery.description":
+    "Garder l’ordinateur éveillé aussi sur batterie. La batterie se décharge plus vite.",
   "settings.restoreWorkspace.title": "Restaurer le dernier espace de travail au lancement",
   "settings.restoreWorkspace.description": "Rouvrir l’espace de travail et les tâches de votre session précédente.",
   "settings.externalLinks.title": "Ouvrir les liens externes dans",
-  "settings.externalLinks.description": "Choisir où s’ouvrent les liens provenant des conversations.",
+  "settings.externalLinks.description":
+    "Les liens des discussions, des pages de connexion et de facturation s’ouvrent ici.",
   // The two link targets. The saved value stays in English; only the label is translated.
   "settings.externalLinks.defaultBrowser": "Navigateur par défaut",
   "settings.externalLinks.openbot": "OpenBot",
+  "settings.externalLinks.defaultBrowserNamed": "Navigateur par défaut ({name})",
+  "settings.externalLinks.otherApp": "Autre app…",
+  "settings.externalLinks.command": "Commande…",
+  "settings.externalLinks.commandLabel": "Commande du navigateur",
+  "settings.externalLinks.commandPlaceholder": "Chemin du programme ou commande",
+  "settings.externalLinks.useCommand": "Utiliser",
+  "settings.externalLinks.fallback.title": "Impossible d’ouvrir {name}",
+  "settings.externalLinks.fallback.description": "Le lien s’est ouvert dans le navigateur par défaut.",
   "settings.sendShortcut.title": "Raccourci d’envoi",
   "settings.sendShortcut.description":
     "Choisissez les touches qui envoient un message sur cet appareil et dans ce navigateur.",

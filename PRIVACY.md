@@ -32,7 +32,8 @@ desktop app opens the site in a window on their computer, with a session in memo
 window finds a completed sign-in, or when the member selects Done, it sends the cookies of that site,
 and of no other site, to the host through the same encrypted host connection, not through the account
 Worker. The host sets them in the browser session of the tab: the shared session, which every agent
-and member of the server can use, or the session of an agent that has a browser session of its own.
+and member of the server can use, the session of an agent that has a browser session of its own, or
+a named browser profile, which every agent assigned to that profile can use.
 When the server tab still shows a sign-in step, the app also sends the address of the window's page,
 and the server tab opens it.
 Neither computer logs the cookie values. The desktop app then removes the window's session.
@@ -122,7 +123,8 @@ agent deletion removes it. A duplicate agent starts with no usage history.
 
 Authenticated members of a host team can also see that host's storage through the Team API: how
 much disk space each location, agent and chat uses, and the name, size, type, date and chat title of
-each sent or generated file. The response contains no file paths, and workspace and download files
+each sent or generated file. They can also read the free and total size of the disk that holds the
+host's OpenBot data. The response contains no file paths, and workspace and download files
 are counted only as totals. Only owners and admins can delete a file or clear caches and logs. A
 deleted file is removed from the host's disk; the message that sent it stays and shows that the file
 is not available.
@@ -139,7 +141,7 @@ It also records the topic and result of a contact form send, and whether a retur
 completed or was cancelled, for a plan, a license or the billing portal. The contact form message,
 name and email are not sent to analytics.
 The production desktop app records application, sign-in, onboarding, agent, message, turn, prompt,
-approval, queue, routine, team, browser, search, Remote Desktop, update, marketplace, memory,
+approval, queue, routine, workflow, team, browser, search, Remote Desktop, update, marketplace, memory,
 provider, voice transcription, Voice pane, spoken reply, voice model download, spoken reply setting,
 reaction, Hosted Site, hosted server offer, hosted server plans, plan and member limits, license,
 contact sales, provider usage limit, agent template, phone connection, connector, Computer Use
@@ -245,9 +247,12 @@ The local host also records how the agents are used:
 - **Routine runs.** The host sends the outcome of a routine run, whether it was scheduled or manual,
   and its schedule type (for example daily or weekly). The routine name and instruction are not
   sent.
-- **Setup.** At most once a day, the host sends counts of agents, enabled routines, custom MCP
-  servers, local skills and community skills; the slugs of enabled catalog plugins and of curated
-  skills and agents; the providers in use; and whether Computer Use is enabled.
+- **Workflow runs.** When a workflow run ends, the host sends its outcome, how it started (for
+  example manual, schedule or webhook), its duration, and the count of steps that ran, by kind
+  (agent, model, approval, output). The workflow name, the step text and the IDs are not sent.
+- **Setup.** At most once a day, the host sends counts of agents, enabled routines, workflows,
+  custom MCP servers, local skills and community skills; the slugs of enabled catalog plugins and of
+  curated skills and agents; the providers in use; and whether Computer Use is enabled.
 - **Resource use.** At most once a day, the host sends a summary of the previous day: the memory and
   CPU use of OpenBot's process groups (main, windows, browser tabs, GPU, the database and voice
   processes) and of each provider's CLI and its child processes, by provider id; the main process
@@ -264,6 +269,10 @@ The local host also records how the agents are used:
 - **Agent source.** Turn events say whether the agent came from a curated listing, a community
   listing, or neither, and name only a curated listing. Marketplace events name only a curated
   skill, agent or catalog plugin.
+- **Payment type.** Turn events say how the turn is paid for: a provider plan, a saved API key, a
+  free model, an endpoint that the user added, or unknown. The host reads this from the sign-in type
+  that the provider's CLI reports and from whether a key is saved. It does not send the key, the
+  account, or the name of the plan.
 
 Hosted Site analytics records only the operation, entry point, result, and bounded failure code. It
 does not contain the site's URL, hostname, title, source path, site ID, or content. A one-time
@@ -300,11 +309,12 @@ The service stores:
 - the first website visit of an account, when a browser sends it: the source category, platform
   name, first website page, day, allowlisted campaign tags, whether it came from a sign-in or a
   checkout, and the save time. Deleting the account removes it.
-- webhook routes: for each webhook routine of a host, the opaque route ID, the host ID, the owner
-  account ID, the link time, and the revocation time. When the routine stops using a route, or the
-  host is deleted, the service sets the revocation time and the route stops working. The service
+- webhook routes: for each webhook routine and each workflow webhook trigger of a host, the opaque
+  route ID, the host ID, the owner account ID, the link time, and the revocation time. When the
+  routine or workflow stops using a route, or the host is deleted, the service sets the revocation
+  time and the route stops working. The service
   keeps the row with these fields permanently, so that the old public URL never belongs to another
-  host. It does not store the routine, the secret, or request bodies.
+  host. It does not store the routine, the workflow, the secret, or request bodies.
 - published agent templates: the agent name, title, instructions, avatar, routine names, schedules
   and instructions, marketplace skill references, the `SKILL.md` text of local skills, the local
   agent ID, a share card image made from these fields, and creation and update times. Anyone
@@ -526,8 +536,8 @@ is not included in analytics; provider output uses the application's secret reda
 - `~/OpenBot/Downloads` contains files downloaded by the embedded browser.
 - `~/Library/Application Support/OpenBot` contains the OpenBot SQLite database, agent metadata,
   conversations, message queues, direct messages, reactions, read state, attachment drafts and
-  indexes, team configuration, local team members and sessions, the shared browser profile, cookies,
-  application preferences, and the provider CLIs OpenBot downloads. The downloaded CLIs are kept in
+  indexes, team configuration, local team members and sessions, the browser profiles and their
+  cookies, application preferences, and the provider CLIs OpenBot downloads. The downloaded CLIs are kept in
   one store for the whole computer, which no other profile data shares.
 - The local team configuration contains team member profiles, password hashes and salts when local
   password sign-in is used, invite and session token hashes, and the team identity key pair.
@@ -580,6 +590,24 @@ is not included in analytics; provider output uses the application's secret reda
   service account token for that server in Server settings › Connectors. The token goes once, over the
   encrypted connection, to the server, which keeps it in the same file on its own disk. The
   computer that sent it does not keep it, and no answer from the server carries it.
+- The Vault (Server settings › Vault) is kept in
+  `~/Library/Application Support/OpenBot/openbot-vault-v1.json`, encrypted by the operating system's
+  secret storage. It holds the logins, payment cards (number, expiry, security code, name) and
+  contact info that the user saves. On a computer with no secret storage, such as Linux with no
+  keyring, the Vault saves nothing. The file never leaves this computer, and joined servers and team
+  members cannot read it. An agent gets the login sites and usernames, the card names with their last
+  four digits and expiry, and the contact info; it never gets a password, a card number, a security
+  code or login notes. An agent can add and change contact info, change the username of a login (not
+  its site) and the name, expiry and billing address of a card, and delete items, with no approval: the
+  chat shows each change, and an item that an agent adds keeps the agent's name. A password that the
+  user types into the secure sign-in card goes to the Vault only while Save to Vault is checked. The
+  first card fill on a site waits for the server owner's approval; team members and messaging
+  services cannot give it. The card then keeps that site and the origins of its card frames, and
+  later fills there need no approval; the user can remove a site in the card. The
+  browser types those values into the page, where the page's own scripts can read them, as they read
+  what a person types. Until that page navigates, the agent cannot take a screenshot, evaluate
+  script or record in that tab, and its snapshots hide the card fields. Passwords and card numbers
+  are redacted from logs, exports and diagnostics. A CSV import is read on this computer only.
 - `~/Library/Application Support/OpenBot/logs/trace.ndjson` is a local trace of IPC calls,
   provider turns, main-process failures, and the steps of each connection to a joined server. Each
   line holds a time, the IPC channel name, the turn origin, the failure origin (`uncaughtException`
@@ -611,7 +639,13 @@ is not included in analytics; provider output uses the application's secret reda
   [Android notifications](#android-notifications).
 
 Attachments copied into OpenBot remain in managed storage after their original file is moved or
-deleted. All agents share the embedded browser profile, including cookies and website sessions.
+deleted. By default, all agents share one embedded browser profile, including cookies and website
+sessions. An agent can instead use a profile of its own, or a named profile that only the agents
+assigned to it share. Profile names stay in the local database of the computer that runs the agents.
+On a joined server, an owner or admin reads the names, colors and agents of the host's profiles through
+the encrypted host connection, and each member reads the name and color of the profile of a browser tab
+that they can see. Cookies and site data of a profile do not leave the host. Clear data and Delete
+remove the cookies and site data of a profile.
 Websites receive the browser's Chromium user agent. HTTPS sites and local loopback HTTP sites also
 receive basic client hints with the Chromium major version, operating-system name, and desktop flag.
 Google account requests retain the Electron version token for sign-in compatibility.
@@ -767,6 +801,39 @@ routine's model provider, as other routine input does.
 
 Change a routine to a schedule, or delete it, to stop its URL. Deleting a routine deletes its
 receipts.
+
+## Workflows
+
+A workflow is a graph of steps that the user draws on a canvas. The host stores each workflow, its
+graph, up to 50 earlier versions of the graph, its runs, and the input and output text of each step
+in its local SQLite database. A run also keeps a copy of the graph and, for a webhook run, the
+request body. Runs stay until the workflow is deleted. Nothing about a workflow goes to the account
+service, except the webhook route metadata above.
+
+When analytics is on, product analytics gets the kind of each workflow action (for example create,
+run, approve or restore), the kind of the step, the result, the duration and a coarse failure code,
+and the outcome, duration and step counts of each run. It never gets a workflow name, step text,
+graph, or ID.
+
+- **Agent steps** send their input to the agent as a routine message. The agent's model provider
+  gets it, as with other routine input.
+- **Model and condition steps** send their input to the provider and model that the step names,
+  without tools.
+- **Outputs to a messaging place** post the workflow name and the text through that messaging
+  connection.
+- **Notifications** show the workflow name and at most 200 characters of text, with secrets
+  removed, only when notification previews are on.
+- **Webhook triggers** work like webhook routines: the same route metadata, Signal path, encrypted
+  signing secret, and 7-day receipts without the request body. The host refuses a body of more than
+  64,000 characters. The body, marked as data, is the trigger's output and goes to the next steps.
+  Remove the trigger, or delete the workflow, to stop its URL.
+
+Members of a joined server can read, change, and run a workflow when they can see and use each
+agent in it (`workflows-v1`). The graph and the step text then go to their computer. Only owners
+and administrators see a webhook URL or make a new signing secret.
+
+Deleting an agent keeps the workflows and their step history without the agent. Deleting a
+workflow deletes its versions, runs, steps, and receipts.
 
 ## Slack connections
 
@@ -1026,8 +1093,9 @@ starts the server as a local process. Prompts, attachments, and tool results go 
 and the server sends them to Google. Connect opens Google's sign-in page in your browser. On this
 computer, Sign in saves a Gemini API key instead: OpenBot encrypts it in its existing provider
 credential store, gives it to the server as `GEMINI_API_KEY`, and redacts it from logs. The server
-sends the key to Google. The server keeps its login and session files in `~/.gemini`, or in `$GEMINI_HOME`. OpenBot does not
-read, copy, or upload these files. Google's terms apply: <https://antigravity.google/terms>.
+sends the key to Google. The server keeps its login and session files in `~/.gemini`, or in `$GEMINI_HOME`. Each Gemini
+account that you add after the first keeps them in a folder of its own in OpenBot's data folder, and gets no saved API key;
+Remove deletes that folder. OpenBot does not read, copy, or upload these files. Google's terms apply: <https://antigravity.google/terms>.
 Gemini agents stay on this computer: OpenBot does not show them to team members.
 
 To show the remaining Gemini quota in Usage, OpenBot sends the server's `/usage` command in a
@@ -1081,6 +1149,19 @@ them with the key to `api.inceptionlabs.ai`. When OpenBot reads the Mercury mode
 contact Inception. Pi keeps its session files in its own folder, as for Pi agents. OpenBot does not
 copy or upload these files. Inception's terms apply: <https://www.inceptionlabs.ai/docs/terms-of-use>.
 Inception agents stay on this computer: OpenBot does not show them to team members.
+
+### DeepSeek
+
+DeepSeek agents run in the Pi CLI that OpenBot downloads for Pi. On this computer, Connect on the
+DeepSeek row saves a DeepSeek API key. OpenBot encrypts it in its existing provider credential
+store, gives it to the local Pi process in its environment, and redacts it from logs. Pi does not
+write the key to a file. Prompts, attachments, and tool results go to that process, and Pi sends
+them with this key to `api.deepseek.com`, also when Pi has its own DeepSeek key. When OpenBot reads
+the DeepSeek model list, Pi reads its built-in list and does not contact DeepSeek. Pi keeps its
+session files in its own folder, as for Pi agents. OpenBot does not copy or upload these files.
+DeepSeek's terms apply:
+<https://cdn.deepseek.com/policies/en-US/deepseek-open-platform-terms-of-service.html>.
+DeepSeek agents stay on this computer: OpenBot does not show them to team members.
 
 ### Local model servers
 

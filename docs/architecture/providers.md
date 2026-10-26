@@ -365,6 +365,12 @@ The server has no `--version`, so staging writes `antigravity-package.json` and
 `verifyInstalledRuntime` reads the version from that file (`versionFile`). OpenBot never searches
 `PATH`, because the Antigravity editor installs an `antigravity` command that is not this server.
 
+The server offers its Claude and GPT models only to a client whose `initialize` `clientInfo.name` is
+`zed`, `xcode`, `jetbrains.*` or `android studio*` (`supports_third_party_models` in 1.4.3). Other
+clients get only the Gemini models. So `ANTIGRAVITY_ACP_FLAVOR.clientInfo` sends the name `zed` and
+the title `OpenBot`. The server also sends the name and version to Google in its User-Agent
+(`_surface`), so Google sees OpenBot's requests as `zed/0.1.0`.
+
 Sign in is an ACP `authenticate` call with `oauth-personal`, in a separate process
 (`src/backend/acp-sign-in.ts`). On Linux, OpenBot reads the Google sign-in link from the
 server and opens it with the desktop browser. The server browser launch is disabled for this
@@ -432,17 +438,43 @@ does not create that manifest. An invalid override remains an error: OpenBot doe
 it with the managed runtime. Managed updates do not change the explicit override.
 
 The server runs confined; `antigravityStatePaths` gives it `~/.gemini/antigravity-acp` and
-`~/.gemini/artifacts` and protects its settings files. Migration 22 adds `antigravity` to
+`~/.gemini/artifacts` and protects its settings files. On macOS, runtime 1.4.0 and later keep the
+Google sign-in in the login Keychain only when a test item can be written there at start, and a
+confined process cannot write the Keychain (#2988). So every Antigravity process, the sign-in
+included, gets `AGY_ACP_FORCE_FILE_STORAGE=1` and keeps the token in
+`~/.gemini/antigravity-acp/acp_token.json`, as on Linux and Windows. A token that an earlier
+version saved in the Keychain is not read, so the user signs in again once. Migration 22 adds `antigravity` to
 `projection_provider_sessions`.
+
+From 1.4.0 the server keeps the token, `settings.json` (which names the sign-in method) and its
+conversations in `$GEMINI_HOME/antigravity-acp`, with `~/.gemini` when the variable is not set. So
+Gemini can hold more than one account: each account after the first gets `GEMINI_HOME` set to its
+own folder (`antigravityReadsGeminiHome` gates the rows, the sign-in, the checks, the usage reads and
+the agent start), and `antigravityStatePaths` confines its process to that folder. Each new session
+leaves a conversation database in that folder, so a usage read of an account with no agent process
+starts no process: the account shows its reading from the sign-in check. The sandbox cannot create folders in a new account's home, so OpenBot makes them.
+The account sign-in is the same ACP `authenticate` call as the first account's; a Reconnect calls
+`logout` first. So a Reconnect refuses while an agent on the account runs a turn, and it stops the
+account's idle agent processes, which keep the old token. A saved Gemini API key belongs to the
+first account: an account process never gets `GEMINI_API_KEY`. The server reports no email and the token file holds none, so OpenBot cannot see
+that two accounts are the same Google account. A joined server signs the account in through the
+live view, because `provider-account-relay-v1` names Codex and Claude only.
 
 From 1.4.1 the server answers a prompt that starts with `/usage` itself, without a model turn: it
 reads the Google account's quota summary and sends one Markdown answer. The driver's
 `readRateLimits` sends it in a session that no thread owns (`privatePrompt` in
 `src/backend/acp-client.ts`). Each process keeps that one session for every read, because each new
 Antigravity session leaves a conversation database in `~/.gemini/antigravity-acp/conversations`,
-also after it closes. `src/backend/antigravity-usage.ts` reads the Gemini groups of the answer's
-"Quota Limits" section into the dock's windows. The Claude and GPT models that Antigravity also runs
-share another limit, so `accountUsageCoversModel` covers only Gemini models. An older runtime, an
+also after it closes. `src/backend/antigravity-usage.ts` reads one group of the answer's
+"Quota Limits" section into the windows. Google can give a model a group of its own, such as Gemini 4
+Argon, so a read for a model takes the group whose "Models within this group" list names it (#3055),
+and a model that no group names has no reading. The dock's read, with no model, takes the "Gemini
+Models" group. Each reading also carries every group by name and models (`AccountUsageLimit.groups`),
+so the usage popover shows one line per group and the composer notice uses the group of the agent's
+model (`usageGroupForModel`). The ring stays on the reading's own group. The Team API codecs do not
+send `groups`, so a remote client shows the one reading. The Claude and GPT models that Antigravity
+also runs share another limit, so `accountUsageCoversModel` keeps them out of the plan-limit hold. An
+older runtime, an
 API key sign-in ("Not applicable for current authentication method") and an answer that does not
 parse give no reading. A saved Gemini API key comes before the Google sign-in, so the provider
 status sets `apiKeyInUse`, and the API key section of the Gemini provider page says that the key,
@@ -463,6 +495,11 @@ the last model call, and `size` is the model's context window. The adapter turns
 `thread/tokenUsage/updated`, also after a turn that OpenBot already ended. 1.2.1, the pinned
 first-install version, sends none, so the ring stays hidden until the runtime updates. The update
 has no category breakdown.
+
+Antigravity 1.4.3 also returns `usage` from `session/prompt`: the tokens of that prompt only, measured
+from the session's total at the turn's start. A restored session starts from its saved total.
+`src/backend/agent/usage-collection.ts` books each prompt result as its own counter (`promptId`, because
+a delivery that runs again keeps its turn ID) and adds `thoughtTokens` to the output. 1.4.1 and earlier return no `usage`.
 
 Antigravity 1.3.0 keeps `session/prompt` open until its harness reports
 `STATE_FULLY_IDLE`. A background task can thus keep a turn open after answer text
@@ -512,7 +549,11 @@ then `~/.cursor/auth.json`; on Linux `$XDG_CONFIG_HOME/cursor/auth.json` or
 this API. `autoPercentUsed` (Cursor's own models) fills the primary window and `apiPercentUsed`
 (all other models) the secondary one, both for the billing cycle; the dock names them by slot for a
 `cursor` row, because both windows have the same length. A plan with only `totalPercentUsed` fills
-the primary window. No token, a 401 or 403, or no percentage gives no reading. The dock poll calls
+the primary window. The reader also sends `GetPlanInfo`: on a merged plan (`isMerged`), such as an X
+subscription, the included usage covers Grok and Composer only, so `totalPercentUsed` alone fills the
+primary window and the dock shows no other models window, as the Cursor app does. The Cursor app
+keeps the split for a merged Enterprise team plan; the reader cannot see the membership type, so it
+does not. A failed `GetPlanInfo` keeps the split. No token, a 401 or 403, or no percentage gives no reading. The dock poll calls
 `readCursorUsage` directly, as it does for OpenCode, so it does not start the CLI for a reading.
 `scripts/cursor-usage-e2e.ts` covers it.
 
@@ -577,9 +618,9 @@ provider added after v8 needs no new protocol version. The `providers-v8` routes
 
 The host hides a provider from a peer below v8 when that protocol's frozen list does not have it
 (`FROZEN_PROVIDERS` in `src/main/team-api/provider-visibility.ts`). So a new provider is hidden
-from old peers with no change there. Do not edit those lists. A local-only provider
-(`LOCAL_ONLY_PROVIDERS`, now only Inception) is hidden from peers on every protocol, v8 too, and the
-peer key routes refuse its key.
+from old peers with no change there. Do not edit those lists. A key-only provider
+(`KEY_ONLY_PROVIDERS`, now Inception and DeepSeek) is hidden from peers on every protocol, v8 too,
+and the peer key routes refuse its key.
 
 A v8 client keeps the agents of a provider that its build does not know (`ForeignProviderId`,
 `AgentProviderRef`). The agent stays in the list and chat works, because the host runs it. The
@@ -620,6 +661,21 @@ same `PATH`, so their Bash tool and hooks find the user's tools; an `env.PATH` i
 wins. The agents run confined with no state paths. Migration 23 adds `acp` to
 `projection_provider_sessions`. The host hides `acp` agents, models, status, and sign-in state from
 peers before protocol 5, and the `customAgents` IPC group is local only.
+
+A custom agent can have a usage prompt (`usagePrompt`, "Usage command" in the form), one line such
+as `/usage`. `customAgents.usage` asks each agent that has one: `ProviderRuntime.customAgentUsage`
+sends it through `readUsageText` on the agent's model list process, in the session that no thread
+owns (`privatePrompt`). The answer is redacted and kept to `CUSTOM_AGENT_LIMITS.usageAnswer`
+characters. OpenBot does not read a percent from it, so `acp` keeps `reportsUsage: false`: the rail
+shows the agent's logo with no ring, and its hover card shows the text. The renderer polls with the
+plan usage interval, only while the local server is active. One read runs at a time, and a read from
+the last minute answers the next request. While `acp` is released, the read returns the last answers
+and starts the router again only when an answer is older than an hour or its prompt changed. A read
+that times out cancels the prompt in the agent. A prompt that the agent does not answer itself is a
+model turn on each read. The registry install result of `acp-registry-v1` has no `usagePrompt`, so
+the summary check accepts a summary without it. An older build drops `usagePrompt` from `custom-agents.json`
+the next time it saves the file. An instance transfer does not carry it, because the import never
+saves a custom agent.
 
 ### Local detection and endpoint edit
 
@@ -732,12 +788,27 @@ Inception is a provider of its own that runs on Pi's managed CLI. Its driver set
 so it resolves Pi's downloaded binary and has no runtime or download of its own. After a Pi update, a
 running Inception process restarts on the new binary when its turns end. Connect and Reconnect on the
 row open the key dialog, and the composer's sign-in opens the Providers settings, because a key is the
-only sign-in. The key is stored as the `inception` API key. `pi-inception.ts` writes a key-free extension that
+only sign-in. The key is stored as the `inception` API key. `pi-key-providers.ts` writes a key-free extension that
 calls `pi.registerProvider("inception", …)` with the Mercury models; the key is in the process
 environment and a `globalThis` slot, because Pi runs extensions again on `switch_session`. The
 Inception client lists only the `inception` models, with bare ids such as `mercury-3`. The Pi client
 does not load this extension, so it keeps only the user's own `inception` models. Without a key the provider has no models and asks for a key. Inception is local-only:
-no Team API protocol carries it, v8 included (`LOCAL_ONLY_PROVIDERS`).
+no Team API protocol carries it, v8 included (`KEY_ONLY_PROVIDERS`).
+
+## DeepSeek
+
+DeepSeek works as Inception does: a provider of its own on Pi's managed CLI (`cliProvider: "pi"`),
+with a key as its only sign-in (`KEY_ONLY_PROVIDERS` in contracts). The key is stored as the
+`deepseek` API key. Pi has a built-in `deepseek` provider, so the extension from
+`pi-key-providers.ts` calls `pi.registerProvider("deepseek", ...)` with the key and no models. A
+registration with only the key keeps Pi's DeepSeek models, endpoint and thinking levels (checked in
+Pi 1.4.0), so OpenBot keeps no DeepSeek model list. Pi prefers a `deepseek` key in its own
+`auth.json` to the registered `apiKey`, so the extension also sets the `Authorization` header,
+which replaces either key. A 401 or a 402 from a key provider shows a text about the saved key or
+the account balance (`#failureText` in `pi-client.ts`). The DeepSeek client lists only the `deepseek`
+models, with bare ids such as `deepseek-v4-pro`. The Pi client loads no key extension, so it keeps
+the user's own `deepseek` models, for example from `DEEPSEEK_API_KEY` in Pi's environment.
+DeepSeek is local-only, as Inception is.
 
 ## Muse
 

@@ -1,4 +1,4 @@
-import { agentProviderDescriptor } from "@openbot/contracts/agent-providers";
+import { agentProviderDescriptor, isKeyOnlyProvider } from "@openbot/contracts/agent-providers";
 import type {
   AgentProviderId,
   AgentProviderState,
@@ -9,6 +9,7 @@ import type { AppFormat, AppMessages, AppTextKey, AppTranslate } from "@openbot/
 import { createSignal } from "solid-js";
 import { providerUpdateAvailable, providerVersionLabel } from "../features/provider-updates/provider-update";
 import { useText } from "../text";
+import { toast } from "../toast";
 import { createCodeSignInFallback } from "./createCodeSignInFallback";
 import type { ProviderAlternativeSignIn, ProviderConnection, ProviderPickerOption } from "./ProviderPicker";
 import type { ProviderAccountActions } from "./provider-accounts";
@@ -94,9 +95,9 @@ export function createProviderRow(option: () => ProviderPickerOption, host: Prov
   /** A Connect that failed before the sign-in started. The status reports the rest. */
   const [connectError, setConnectError] = createSignal<string | null>(null);
   const connect = () => {
-    // Inception has no sign-in other than its key, so its Connect and Reconnect open the
-    // key dialog, where the key is also replaced or removed.
-    if (option().id === "inception" && host.onSignInProvider) {
+    // A key-only provider, such as Inception, has no sign-in other than its key, so its Connect and
+    // Reconnect open the key dialog, where the key is also replaced or removed.
+    if (isKeyOnlyProvider(option().id) && host.onSignInProvider) {
       void host.onSignInProvider(option().id);
       return;
     }
@@ -191,17 +192,21 @@ export function createProviderRow(option: () => ProviderPickerOption, host: Prov
     !connectOptional() &&
     (option().id === "opencode" || option().id === "muse"
       ? runtimeAction() === undefined || runtimeAction() === "connect" || runtimeAction() === "restart"
-      : option().id === "claude" && !runtimeStatus() && state() === "sign-in-required" && connectKind() === null);
+      : option().id === "claude" &&
+        !runtimeStatus() &&
+        state() === "sign-in-required" &&
+        connectKind() === null &&
+        !apiKeyOffered());
   /**
    * Gemini's Connect and Reconnect are the Google sign-in, and a saved key wins over it, so the key
    * stays reachable in every state, Connected included: a refused key must stay replaceable and
    * removable. A released host stores a Gemini key but never reads it, so only this computer offers it.
+   * Claude's key works the same way. Its row has a key status only where the host reads the key.
    */
   const apiKeyOffered = () =>
     Boolean(host.onSignInProvider) &&
-    browserConnect() &&
-    option().id === "antigravity" &&
-    runtimeStatus()?.phase === "ready";
+    ((option().id === "antigravity" && browserConnect() && runtimeStatus()?.phase === "ready") ||
+      (option().id === "claude" && option().keyStatus !== undefined && runtimeReady() && state() !== "not-installed"));
   /** OpenCode runs free models while no key is saved. */
   const freeKey = () =>
     option().id === "opencode" && (option().keyStatus === "missing" || option().keyStatus === "unreadable");
@@ -295,6 +300,20 @@ export function providerStatusLabel(
   if (runtimeStatus?.phase === "ready") return translate("provider.status.ready");
   if (state === "not-installed") return translate("provider.status.notInstalled");
   return translate("provider.status.checking");
+}
+
+/**
+ * Says why the provider's switch stays on. One agent is named; more are counted, because a list of
+ * names makes a long line. All providers share one id, so a new try replaces the old toast and the
+ * newest text is always in front.
+ */
+export function showProviderInUse(translate: AppTranslate, agents: readonly string[], name: string): void {
+  const [agent, ...others] = agents;
+  const text =
+    agent !== undefined && others.length === 0
+      ? translate("provider.use.inUseOne", { agent, name })
+      : translate("provider.use.inUse", { count: agents.length, name });
+  toast(text, { id: "provider-in-use" });
 }
 
 export function providerVisualState(

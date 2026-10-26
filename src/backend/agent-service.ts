@@ -1,7 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
-import { agentProviderDescriptor } from "@openbot/contracts/agent-providers";
+import { agentProviderDescriptor, customAgentIdOfModel } from "@openbot/contracts/agent-providers";
 import { sortConversationMessages } from "@openbot/contracts/conversation-order";
+import { developmentStartingModel } from "@openbot/contracts/development-defaults";
 import { INPUT_LIMITS } from "@openbot/contracts/input-limits";
 import type {
   AgentAccessLevel,
@@ -11,6 +12,8 @@ import type {
   AgentMemorySelectionState,
   AgentModelId,
   AgentModelOption,
+  AgentPendingRuntime,
+  AgentReasoningEffort,
   AgentRuntimeSnapshot,
   AgentSessionSettings,
   AgentStatus,
@@ -54,6 +57,7 @@ import type {
   HostAnalyticsInput,
   ListChannelRoutineRunsInput,
   ListRoutineRunsInput,
+  LocalBrowserSecretResponse,
   McpServerConfig,
   McpSignInAppInput,
   McpSignInAppState,
@@ -67,7 +71,6 @@ import type {
   ReorderQueueInput,
   ResetAgentSessionSettingInput,
   RespondToApprovalInput,
-  RespondToBrowserSecretInput,
   RespondToBrowserTakeoverInput,
   RespondToPromptInput,
   Routine,
@@ -100,10 +103,11 @@ import type {
   UpdateRoutineInput,
 } from "@openbot/contracts/ipc";
 import {
+  type AgentDefaults,
   type AgentModelChoice,
   agentAutomationAllowed,
+  agentBrowserProfile,
   agentNewChatAllowed,
-  agentOwnBrowserSessionEnabled,
   agentTaskLimit,
   type BusyMessageMode,
   CONTEXT_RESET_ITEM_TYPE,
@@ -113,9 +117,12 @@ import {
   MODEL_SWITCH_ITEM_TYPES,
   type ModelSwitchReason,
   type QueueSteerFallback,
+  sameAgentBrowserProfile,
   sameAgentModelChoice,
+  WORKFLOWS_USAGE_ID,
   workspaceAccessEnforced,
 } from "@openbot/contracts/ipc";
+import { CLAUDE_API_KEY_ACCOUNT_ID } from "@openbot/contracts/team-protocol/claude-api-key-v1";
 import { ContextResetBusyError } from "@openbot/contracts/team-protocol/context-reset-v1";
 import type { QueueEditRequest } from "@openbot/contracts/team-protocol/queue-edit-v1";
 import { sourceText } from "@openbot/i18n/source";
@@ -127,7 +134,12 @@ import { AgentRemoval, AgentRemovalFailed } from "./agent/agent-removal";
 import { AgentSettingsRefused } from "./agent/agent-settings-refused";
 import type { ApprovalAutomationPolicy } from "./agent/approval-automation";
 import { AttachmentGateway } from "./agent/attachment-gateway";
-import { AttentionRegistry, type LocalAttentionResponse, type PromptResponder } from "./agent/attention-registry";
+import {
+  type ApprovalResponder,
+  AttentionRegistry,
+  type LocalAttentionResponse,
+  type PromptResponder,
+} from "./agent/attention-registry";
 import { BootRecovery } from "./agent/boot-recovery";
 import { BrowserUploads } from "./agent/browser-uploads";
 import type { ChatVisualPreviewHost } from "./agent/chat-visual-preview";
@@ -149,6 +161,7 @@ import { mcpServersFromGateway } from "./agent/mcp-tools";
 import { MemoryHold } from "./agent/memory-hold";
 import {
   creationModel,
+  developmentDefaultsApply,
   type ModelChoice,
   modelUnavailableError,
   type ProviderPreference,
@@ -187,7 +200,9 @@ import {
 import { ThreadLifecycle } from "./agent/thread-lifecycle";
 import { toToolOperationFailed } from "./agent/tool-operation";
 import { type AgentBrowserHost, TurnLifecycle } from "./agent/turn-lifecycle";
+import { workflowUsageObserver } from "./agent/usage-collection";
 import { toUsageReadFailed, UsageLimitGate, type UsageLimitKey } from "./agent/usage-limit-gate";
+import { WarmGenerations } from "./agent/warm-generations";
 import type { WebhookRoutineWriter } from "./agent/webhook-routine-tool";
 import type { AgentApiKeys } from "./agent-api-keys";
 import type { AgentProvider } from "./agent-client";
@@ -219,8 +234,10 @@ import { recordAgentRestartActivity } from "./restart-activity";
 import type { RoutineFlowTools } from "./routine-flows/routine-flow-tools";
 import { RoutineRecords } from "./routine-records";
 import type { RoutineHoldWindow } from "./routine-store";
-import { RoutineTimer } from "./routine-timer";
+import { type RoutineDueSource, RoutineTimer } from "./routine-timer";
 import type { SidebarLayoutStore } from "./sidebar-layout-store";
+import type { VaultItems } from "./vault-items";
+import type { WorkflowRunEnd } from "./workflows/workflows";
 import {
   listWorkspaceDirectory,
   type ResolvedSharedFile,
@@ -246,6 +263,8 @@ interface AgentServiceEvents {
   event: [event: AgentEvent];
   /** Finished tool steps for the local host's product analytics. Never forwarded to a client. */
   toolUsage: [usage: ToolUsageSignal];
+  /** A workflow run ended, for the local host's product analytics. Never forwarded to a client. */
+  workflowRun: [end: WorkflowRunEnd];
 }
 
 export interface AgentServiceOptions {
@@ -308,6 +327,11 @@ export interface AgentServiceOptions {
    */
   timezone?: () => string;
   /**
+   * Other owners of scheduled work on the same routine timer, such as workflow triggers. They are
+   * read on each arm, because the main process builds them after this service.
+   */
+  extraRoutineSources?: () => Iterable<RoutineDueSource>;
+  /**
    * The access level of the person who asked a channel member to add or remove an agent, for that
    * agent, as the Team API gives it for their own save. Omitted, `manage`.
    */
@@ -343,6 +367,8 @@ export interface AgentServiceOptions {
   githubConnector?: GitHubConnectorSource | null;
   /** The 1Password vault the user shared with OpenBot, or `null`. The browser fills logins from it. */
   passwordVault?: PasswordVault | null;
+  /** The cards and contact info of the Vault, or `null`. The browser fills cards from it. */
+  vaultItems?: VaultItems | null;
   /** Where the API keys that users enter through `request_api_key` are saved, or `null`. */
   agentApiKeys?: AgentApiKeys | null;
   /**
@@ -357,11 +383,19 @@ const USER_SEND_RETRY_WINDOW_MS = 24 * 60 * 60 * 1000;
 /** The `send_message` recipient limit, so one message can reach every section-mate the prompt names. */
 const MAX_SECTION_TEAMMATES = 32;
 
+/** The user's update, and the browser profile choice that the profile operations set after their checks. */
+export type AgentUpdate = UpdateAgentInput & { ownBrowserSession?: boolean; browserProfileId?: string | null };
+
 export class AgentService extends EventEmitter<AgentServiceEvents> {
   readonly channels: ChannelService;
   readonly messaging: MessagingThreads;
   readonly #profileSave: ProfileSave;
   readonly #profileClients = new ProfileClients();
+  readonly #warmGenerations = new WarmGenerations({
+    ownerFor: (provider) => this.#providers.currentClient(provider),
+    createClient: (provider) => this.#providers.createProfileClient(provider),
+    profileClients: this.#profileClients,
+  });
   #scope = Scope.makeUnsafe();
   /** User sends still before their mailbox write, by idempotency key: a retry joins the first call. */
   readonly #pendingUserSends = new Map<string, Deferred.Deferred<QueuedMessageReceipt, AgentLifecycleFailed>>();
@@ -472,7 +506,8 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
           sender,
         ).pipe(toProfileSaveFailed),
       changed: (agent, previous) => {
-        if (standingProfileChanged(previous, agent)) this.#conversation.unloadAgentThreads(agent.id);
+        if (standingProfileChanged(previous, agent, this.#store.agentDefaults()))
+          this.#conversation.unloadAgentThreads(agent.id);
         this.#emit({ type: "agents-changed", agents: this.listAgents() });
         this.#drain.scheduleDrain(agent.id);
       },
@@ -513,10 +548,10 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       emitError: (code, error, agentId) => this.#emitError(code, error, agentId),
       ...(options.agentMemoryLimit ? { limit: options.agentMemoryLimit } : {}),
     });
-    // One timer for both routine owners. The sources are read lazily because `channels` and its
+    // One timer for every routine owner. The sources are read lazily because `channels` and its
     // scheduler are built further down, and because an owner's earliest routine changes constantly.
     this.#routineTimer = new RoutineTimer(
-      () => [this.#routines, this.#channelRoutines],
+      () => [this.#routines, this.#channelRoutines, ...(options.extraRoutineSources?.() ?? [])],
       () => this.#initialized && !this.#stopping,
       (code, error) => this.#emitError(code, error),
     );
@@ -633,6 +668,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
             this.#attention.clearBrowserTakeovers(client);
             this.#attention.clearApprovals(client);
             this.#compaction.clientEnded(client);
+            yield* this.#warmGenerations.ownerStopped(client);
             yield* this.#turn.interruptTurnsOf(client);
           }),
         onAgentClientLost: (agentId, client) =>
@@ -665,10 +701,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
           }),
         sharedRoot: () => this.#store.sharedRoot,
         isStopping: () => this.#stopping,
-        isProviderBusy: (provider) =>
-          this.#profileClients.usesProvider(provider) ||
-          this.#drain.hasStartingDeliveries(provider) ||
-          this.#store.list().some((agent) => providerForAgent(agent) === provider && this.#runsTurn(agent.id)),
+        isProviderBusy: (provider) => this.#isProviderBusy(provider),
         isAgentBusy: (agentId) => this.#runsTurn(agentId),
         isProviderAssigned: (provider) => this.#store.list().some((agent) => providerForAgent(agent) === provider),
         captureConfigRevision: () => this.#endpoints.committedRevision(),
@@ -730,7 +763,8 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
         // The model list reaches the renderer by pull, refreshed on a status event, and an exclusion
         // changes what that pull answers while no provider state moves.
         modelsChanged: () => this.#emit({ type: "status", status: this.getStatus() }),
-        stopProfileClients: () => this.#profileClients.stopOpenCode(),
+        stopProfileClients: () =>
+          this.#profileClients.stopOpenCode().pipe(Effect.andThen(this.#warmGenerations.stopIdle("opencode"))),
         emitError: (code, error, agentId) => this.#emitError(code, error, agentId),
         providerAvailable: (provider) => this.#providerAvailable(provider),
         preference: () => this.#preference(),
@@ -744,6 +778,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       emitError: (code, error, agentId) => this.#emitError(code, error, agentId),
       scheduleDrain: (agentId) => this.#drain.scheduleDrain(agentId),
       rotateSession: (agentId, client, threadId) => this.#threads.rotateProviderSession(agentId, client, threadId),
+      compacted: (threadId) => this.channels.contextCompacted(threadId),
     });
     this.#attention = new AttentionRegistry({
       conversation: this.#conversation,
@@ -760,6 +795,10 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       emitError: (code, error, agentId) => this.#emitError(code, error, agentId),
       emitRuntimeSnapshot: () => this.#emitRuntimeSnapshot(),
       ...(options.passwordVault === undefined ? {} : { passwordVault: options.passwordVault }),
+      ...(options.vaultItems === undefined ? {} : { vaultItems: options.vaultItems }),
+      agentName: (agentId) => store.list().find((candidate) => candidate.id === agentId)?.name,
+      // The router is made later; a note comes only from a tool call, after both exist.
+      noteVaultChange: (agentId, threadId, turnId, text) => this.#tools.postVaultNote(agentId, threadId, turnId, text),
       apiKeys: options.agentApiKeys ?? null,
     });
     this.#duplication = new DuplicationGate({
@@ -865,6 +904,11 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       mcpProxyFingerprint: (configs) => this.#mcp.proxyFingerprint(configs).pipe(toMcpOperationError),
       ...(credentials.agentEnvironment ? { agentEnvironment: credentials.agentEnvironment } : {}),
       passwordVaultConnected: () => options.passwordVault?.connected() ?? false,
+      vaultItems: () => ({
+        available: options.vaultItems?.ready() ?? false,
+        cards: options.vaultItems?.hasCards() ?? false,
+        contacts: options.vaultItems?.hasContacts() ?? false,
+      }),
       // Only a server has a memory reading.
       serverHost: hostMemory !== null,
       sectionTeammates: (agentId) => this.sectionTeammates(agentId),
@@ -941,6 +985,13 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
         const agent = this.#store.list().find((item) => item.id === agentId);
         const session = agent ? this.#store.database.activeProviderSession(threadId, agent.provider) : null;
         return session ? this.#compaction.contextInputCharacters(session.externalSessionId) : 120_000;
+      },
+      // Claude and the app-server providers report each compaction. An ACP agent or Pi can compact
+      // on its own with no report, so its next packet would leave out what the summary dropped.
+      reportsCompactions: (agentId) => {
+        const agent = this.#store.list().find((item) => item.id === agentId);
+        const mode = agent ? this.#providers.clientForAgent(agent)?.contextCompaction : undefined;
+        return mode === "native" || mode === "events";
       },
       forgetThread: (threadId) => this.#forgetExecutionThread(threadId).pipe(toChannelOperationError),
       loadedSnapshot: (threadId) => this.#conversation.loadedExecutionSnapshot(threadId),
@@ -1121,6 +1172,18 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
             logger.info(`Agent ${agentId} dropped its new chat request: a turn in its chat started first.`);
         },
         followUsageLimit: (agentId) => {
+          if (this.#pendingRuntimeDue(agentId)) {
+            Effect.runFork(
+              this.#followPendingRuntime(agentId).pipe(
+                // A change that is gone, applied or dropped, lets the next drain make a due usage-limit move.
+                Effect.andThen((moved) =>
+                  Effect.sync(() => this.#drain.scheduleDrain(agentId, moved || !this.#pendingRuntimeDue(agentId))),
+                ),
+                Effect.forkIn(this.#scope, { startImmediately: true }),
+              ),
+            );
+            return true;
+          }
           if (!this.#usageLimitMove(agentId)) return false;
           Effect.runFork(
             this.#followUsageLimit(agentId).pipe(
@@ -1325,6 +1388,10 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     return this.#providers.status();
   }
 
+  getProviderAccountKind(provider: AgentProvider): { type: string; planType: string | null } | null {
+    return this.#providers.accountKind(provider);
+  }
+
   getAnalytics(input: AgentAnalyticsInput) {
     if (!this.listAgents().some((agent) => agent.id === input.agentId))
       throw new Error(sourceText("error.team.agentNotFound"));
@@ -1332,7 +1399,11 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
   }
 
   getHostAnalytics(input: HostAnalyticsInput) {
-    if (input.agentId && !this.listAgents().some((agent) => agent.id === input.agentId))
+    if (
+      input.agentId &&
+      input.agentId !== WORKFLOWS_USAGE_ID &&
+      !this.listAgents().some((agent) => agent.id === input.agentId)
+    )
       throw new Error(sourceText("error.team.agentNotFound"));
     return this.#store.database.usage.readHost(input);
   }
@@ -1369,6 +1440,20 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
 
   listAgents(): AgentSummary[] {
     return this.#duplication.visibleAgents(this.#store.list());
+  }
+
+  /**
+   * After the account defaults changed from `previous`: each agent that follows a changed one loads
+   * its sessions again before its next turn, so its instructions say what it may do now, as after a
+   * change of its own setting. The listeners of `agents-changed`, such as the automation server, read
+   * the new defaults.
+   */
+  agentDefaultsChanged(previous: AgentDefaults): void {
+    const defaults = this.#store.agentDefaults();
+    for (const agent of this.#store.list()) {
+      if (standingProfileChanged(agent, agent, defaults, previous)) this.#conversation.unloadAgentThreads(agent.id);
+    }
+    this.#emit({ type: "agents-changed", agents: this.listAgents() });
   }
 
   /**
@@ -1542,6 +1627,11 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       .pipe(Effect.mapError((cause) => new AgentLifecycleFailed({ operation: "delete table", cause })));
   }).bind(this);
 
+  /** Plans the routine timer again, after an outside source changed its next due time. */
+  armRoutines(): void {
+    this.#routineTimer.arm();
+  }
+
   /** Holds routine firing while the system sleeps. See RoutineTimer.suspend. */
   suspendRoutines(): void {
     this.#routineTimer.suspend();
@@ -1642,7 +1732,8 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
 
   #requireAutomationAllowed(agentId: string): void {
     const agent = this.listAgents().find((candidate) => candidate.id === agentId);
-    if (!agent || !agentAutomationAllowed(agent)) throw new Error(sourceText("error.agent.automationOff"));
+    if (!agent || !agentAutomationAllowed(agent, this.#store.agentDefaults()))
+      throw new Error(sourceText("error.agent.automationOff"));
   }
 
   /** `withSkipped` adds the skipped-run records, which only the local history shows. */
@@ -1886,6 +1977,15 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     this.#emit({ type: "routine-flows-changed", agentId });
   }
 
+  /** A workflow changed, so every view showing it reads it again. */
+  notifyWorkflowsChanged(workflowId: string): void {
+    this.#emit({ type: "workflows-changed", workflowId });
+  }
+
+  notifyWorkflowRunEnded(end: WorkflowRunEnd): void {
+    this.emit("workflowRun", end);
+  }
+
   listModels(): AgentModelOption[] {
     return this.#endpoints.available();
   }
@@ -1977,6 +2077,60 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
     Effect.mapError((failure) => new AgentLifecycleFailed({ operation: "ask side question", cause: failure.cause })),
   ).bind(this);
 
+  /**
+   * Answers one model step of a workflow. Like a side question, the generation has no tools, no
+   * session and no thread. A missing provider or model falls back to the user's starting choice.
+   */
+  readonly generateWorkflowText = Effect.fn("AgentService.generateWorkflowText")(
+    function* (
+      this: AgentService,
+      input: {
+        provider: AgentProvider | null;
+        model: string | null;
+        effort: AgentReasoningEffort | null;
+        prompt: string;
+      },
+    ) {
+      const failed = (message: string) => new ProfileGenerationFailed({ cause: new Error(message) });
+      if (this.#stopping) return yield* failed(sourceText("error.backend.shuttingDown"));
+      if (this.#profileClients.busy()) return yield* failed(sourceText("error.workflow.modelBusy"));
+      const provider = input.provider ?? this.#startingChoice()?.provider ?? this.#providers.preferredProvider();
+      yield* this.#providers.ensureProvider(provider);
+      const models = this.#endpoints.available();
+      const model =
+        (input.model === null
+          ? undefined
+          : models.find((candidate) => candidate.provider === provider && candidate.id === input.model)) ??
+        startingModel(provider, models, this.#preference());
+      if (!model) return yield* failed(sourceText("error.provider.noModel"));
+      if (this.#stopping) return yield* failed(sourceText("error.backend.shuttingDown"));
+      if (this.#profileClients.busy()) return yield* failed(sourceText("error.workflow.modelBusy"));
+      return yield* this.#warmGenerations
+        .generate(
+          provider,
+          { ...model, defaultReasoningEffort: input.effort ?? model.defaultReasoningEffort },
+          input.prompt,
+          workflowUsageObserver(this.#store.database.usage, provider, model.id),
+        )
+        .pipe(
+          Effect.tapError((failure) =>
+            Effect.sync(() => logger.warn("Could not answer a workflow step.", { provider, error: failure.cause })),
+          ),
+          // The generation's own messages name a profile.
+          Effect.mapError((failure) =>
+            failed(
+              failure instanceof GenerationUsageLimitError
+                ? sourceText("error.provider.usageLimitReached")
+                : sourceText("error.workflow.modelFailed"),
+            ),
+          ),
+        );
+    },
+    Effect.mapError(
+      (failure) => new AgentLifecycleFailed({ operation: "generate workflow text", cause: failure.cause }),
+    ),
+  ).bind(this);
+
   saveProfile(
     input: SaveAgentProfileInput,
     sidebar: Pick<SidebarLayoutStore, "getSnapshot" | "withProfileAssignment">,
@@ -2063,6 +2217,13 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
           );
           if (requested) {
             yield* lifecycleStep("check provider switch", () => this.#providers.requireProviderOn(requested.provider));
+            // The new-agent form names the development default's model but no effort, so the effort
+            // comes from that default, as it does for an agent that names no model.
+            const development = developmentStartingModel({
+              enabled: developmentDefaultsApply(this.#preference(), this.#developmentDefaults),
+              models: [requested.model],
+              providerAvailable: () => true,
+            });
             return yield* this.#store.updateAgent({
               agentId: agent.id,
               provider: requested.provider,
@@ -2070,7 +2231,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
               reasoningEffort:
                 input.reasoningEffort && requested.model.supportedReasoningEfforts.includes(input.reasoningEffort)
                   ? input.reasoningEffort
-                  : requested.model.defaultReasoningEffort,
+                  : (development?.model ?? requested.model).defaultReasoningEffort,
             });
           }
           const starting = this.#startingChoice();
@@ -2307,22 +2468,34 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       );
   }
 
-  /** `initiatingAgentId` is set when an agent, not the user, asks for the change. */
-  updateAgent(input: UpdateAgentInput, initiatingAgentId?: string): Effect.Effect<AgentSummary, AgentLifecycleFailed> {
+  /**
+   * `initiatingAgentId` is set when an agent, not the user, asks for the change. `queueWhileBusy`
+   * is false for a Team API client: its released protocol has no `pendingRuntime`, so a provider
+   * change during work is refused for it as before.
+   */
+  updateAgent(
+    input: AgentUpdate,
+    initiatingAgentId?: string,
+    queueWhileBusy = true,
+  ): Effect.Effect<AgentSummary, AgentLifecycleFailed> {
     return this.#endpoints
-      .runExclusive(() => this.#applyAgentUpdate(input, initiatingAgentId))
+      .runExclusive(() => this.#applyAgentUpdate(input, initiatingAgentId, null, queueWhileBusy))
       .pipe(Effect.mapError((failure) => new AgentLifecycleFailed({ operation: "updateAgent", cause: failure.cause })));
   }
 
   /**
    * `move` is "return" for the move back to the model a usage limit or a provider error made the
-   * agent leave, and "provider-error" for the move away from a model that failed a turn.
+   * agent leave, "provider-error" for the move away from a model that failed a turn, and "next-turn"
+   * for a queued `pendingRuntime` that applies before the next turn. `queueWhileBusy` is set for a
+   * change that a user or an agent asks for: while work runs, a handover is stored as
+   * `pendingRuntime` instead of refused.
    */
   readonly #applyAgentUpdate = Effect.fn("AgentService.updateAgent")(function* (
     this: AgentService,
-    input: UpdateAgentInput,
+    input: AgentUpdate,
     initiatingAgentId?: string,
     move: ModelMove | null = null,
+    queueWhileBusy = false,
   ) {
     const returning = move === "return";
     const failingOver = move === "provider-error";
@@ -2332,24 +2505,28 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       ...this.channels.store.contextThreadsForAgent(previous.id),
     ];
     // A provider change waits until the agent has no work. It is checked again after the reads below.
-    const requireIdle = (previous: AgentSummary) => {
+    // The text of the refusal, or null when the agent is idle.
+    const idleRefusal = (previous: AgentSummary) => {
       // A spent plan holds the queue until it resets, and a switch to another provider is the way out
       // of that hold. So while the hold lasts, only started work blocks the switch; the queue then
       // runs on the new provider. The move back after the limit takes the queue with it too, and so
       // does the move away from a model that failed: the failed turn's messages wait in the queue.
+      // A queued change applies before the next queued message starts, so it takes the queue too.
       const hasPendingWork =
-        !returning && !failingOver && this.#usageLimits.mayDrain(input.agentId)
+        move === null && this.#usageLimits.mayDrain(input.agentId)
           ? this.#mailbox.hasUnfinishedDelivery(input.agentId)
           : this.#mailbox.hasStartedDelivery(input.agentId);
       const activeTurn =
         this.#conversation.anyWorkingSnapshot(input.agentId)?.activeTurnId ??
         (previous.threadId ? this.#store.database.readActiveTurnId(input.agentId, previous.threadId) : null);
-      if (this.#conversation.workingTaskSnapshots(input.agentId).length > 0) {
-        throw new AgentSettingsRefused(sourceText("error.agent.waitForTasksBeforeProviderChange"));
-      }
-      if (hasPendingWork || activeTurn) {
-        throw new AgentSettingsRefused(sourceText("error.agent.waitBeforeProviderChange"));
-      }
+      if (this.#conversation.workingTaskSnapshots(input.agentId).length > 0)
+        return sourceText("error.agent.waitForTasksBeforeProviderChange");
+      if (hasPendingWork || activeTurn) return sourceText("error.agent.waitBeforeProviderChange");
+      return null;
+    };
+    const requireIdle = (previous: AgentSummary) => {
+      const refusal = idleRefusal(previous);
+      if (refusal !== null) throw new AgentSettingsRefused(refusal);
     };
     const { previous, requestedModel, requestedProvider, previousAccount, requestedAccount } = yield* lifecycleStep(
       "validate agent update",
@@ -2381,7 +2558,8 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
           if (!input.model || !input.provider) {
             throw new Error("Changing provider requires an atomic provider and model selection.");
           }
-          requireIdle(previous);
+          // A change that a user or an agent asks for while work runs is queued below. Automatic moves wait.
+          if (!queueWhileBusy) requireIdle(previous);
         }
         // An account belongs to one provider, so a provider change without one returns the agent to
         // the new provider's own sign-in.
@@ -2405,15 +2583,88 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
             }),
           );
         // The sessions of one account are not in the folder of another, so an account change is
-        // handed over like a provider change.
-        if (previous && requestedAccount !== previousAccount) requireIdle(previous);
+        // handed over like a provider change. A requested change while work runs is queued below.
+        if (previous && requestedAccount !== previousAccount && !queueWhileBusy) requireIdle(previous);
         return { previous, requestedModel, requestedProvider, previousAccount, requestedAccount };
       },
     );
+    const accountChanged = previous !== undefined && requestedAccount !== previousAccount;
+    const nextModelId = requestedModel?.id ?? previous?.model;
+    const customAgentChanged = Boolean(
+      previous &&
+        requestedProvider === "acp" &&
+        providerForAgent(previous) === "acp" &&
+        nextModelId !== undefined &&
+        customAgentIdOfModel(nextModelId) !== customAgentIdOfModel(previous.model),
+    );
+    const handoverNeeded = Boolean(
+      previous &&
+        requestedProvider &&
+        (requestedProvider !== providerForAgent(previous) || accountChanged || customAgentChanged),
+    );
+    const runtimeFields =
+      input.provider !== undefined ||
+      input.model !== undefined ||
+      input.reasoningEffort !== undefined ||
+      input.providerAccountId !== undefined;
+    // Only an update of the runtime alone waits for the next turn. An update with other fields is
+    // refused while work runs, as before, and so is a move to a backup model: `pendingRuntime` does
+    // not keep the model to go back to.
+    const queueable =
+      queueWhileBusy &&
+      previous !== undefined &&
+      !input.leaveUsageLimit &&
+      Object.keys(input).every((key) => RUNTIME_UPDATE_KEYS.has(key));
+    const queue = (pendingRuntime: AgentPendingRuntime) =>
+      this.#store.updateAgent({ agentId: input.agentId, pendingRuntime }, initiatingAgentId).pipe(
+        Effect.tap(() =>
+          Effect.sync(() => {
+            this.#emit({ type: "agents-changed", agents: this.listAgents() });
+            this.#drain.scheduleDrain(input.agentId);
+          }),
+        ),
+      );
+    // An effort that the queued model does not support becomes the model's default.
+    const queuedEffort = (effort: AgentReasoningEffort, model = requestedModel) =>
+      model && !model.supportedReasoningEfforts.includes(effort) ? model.defaultReasoningEffort : effort;
+    if (queueable && previous && requestedProvider && runtimeFields && handoverNeeded && idleRefusal(previous)) {
+      yield* this.#providers.ensureProvider(requestedProvider);
+      if (input.provider || input.model)
+        yield* lifecycleStep("check provider switch", () => this.#providers.requireProviderOn(requestedProvider));
+      return yield* queue({
+        provider: requestedProvider,
+        model: requestedModel?.id ?? previous.model,
+        reasoningEffort: queuedEffort(
+          input.reasoningEffort ?? previous.pendingRuntime?.reasoningEffort ?? previous.reasoningEffort,
+        ),
+        ...(requestedAccount ? { providerAccountId: requestedAccount } : {}),
+      });
+    }
+    // An effort change while a queued change waits edits the queued change, also when a hold keeps
+    // the change from applying on an idle agent: the pickers show the queued runtime. So does a model
+    // change of the same provider when the queued change keeps the provider (an account or a custom
+    // agent). A model of another provider names the provider, and is queued or applied above or below.
+    const queued = previous?.pendingRuntime;
+    if (
+      queueable &&
+      queued &&
+      !handoverNeeded &&
+      input.provider === undefined &&
+      input.providerAccountId === undefined &&
+      (requestedModel ? requestedModel.provider === queued.provider : input.reasoningEffort !== undefined)
+    ) {
+      const queuedModel =
+        requestedModel ??
+        this.#endpoints.available().find((model) => model.provider === queued.provider && model.id === queued.model);
+      return yield* queue({
+        ...queued,
+        ...(requestedModel ? { model: requestedModel.id } : {}),
+        reasoningEffort: queuedEffort(input.reasoningEffort ?? queued.reasoningEffort, queuedModel),
+      });
+    }
     const wasHeld = !this.#usageLimits.mayDrain(input.agentId);
     const captures: Array<readonly [ProviderSession, string]> = [];
-    const accountChanged = previous !== undefined && requestedAccount !== previousAccount;
-    if (requestedProvider && previous && (requestedProvider !== providerForAgent(previous) || accountChanged)) {
+    if (handoverNeeded && requestedProvider && previous) {
       yield* this.#providers.ensureProvider(requestedProvider);
       // Before the sessions are retired below, while the previous provider still holds them. The
       // steps are saved only once the switch is stored: a switch that fails keeps the session.
@@ -2461,11 +2712,13 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
           ? { providerAccountId: requestedAccount }
           : {}),
         ...(usageLimitReturn !== undefined ? { usageLimitReturn } : {}),
+        // A Team API client cannot see the queued change, so only a handover from it ends the change.
+        ...(runtimeFields && (queueWhileBusy || handoverNeeded) ? { pendingRuntime: null } : {}),
       },
       initiatingAgentId,
     );
     // A tab keeps the session it opened in, so the agent's next tab opens in the session it chose now.
-    if (previous && agentOwnBrowserSessionEnabled(previous) !== agentOwnBrowserSessionEnabled(agent))
+    if (previous && !sameAgentBrowserProfile(agentBrowserProfile(previous), agentBrowserProfile(agent)))
       yield* this.#removal.closeBrowserTabs(agent);
     if (moved && (leaving || returning))
       this.#appendModelSwitchMarker(
@@ -2478,10 +2731,9 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
             ? "provider-error-ended"
             : "usage-limit-ended",
       );
-    const profileChanged = standingProfileChanged(previous, agent);
+    const profileChanged = standingProfileChanged(previous, agent, this.#store.agentDefaults());
     const activeSession = this.#store.activeProviderSession(agent.id);
-    const providerChanged =
-      (previous && requestedProvider && requestedProvider !== providerForAgent(previous)) || accountChanged;
+    const providerChanged = handoverNeeded;
     if (previous && providerChanged) {
       // Retire first, with no wait after the update: a turn that starts while a file is written
       // binds a session of the new provider, and a later retirement would close that one too.
@@ -2616,6 +2868,67 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       this.#endpoints.available().some((model) => model.provider === choice.provider && model.id === choice.model)
     );
   }
+
+  /**
+   * True while a provider handover would break a running turn, task, or started delivery. It sees a
+   * turn that the database still records too, as the idle check of `#applyAgentUpdate` does, so a
+   * queued change waits for that turn and is not dropped as a failure.
+   */
+  #runtimeHandoverBusy(agentId: string): boolean {
+    const threadId = this.#store.list().find((candidate) => candidate.id === agentId)?.threadId;
+    return (
+      this.#runsTurn(agentId) ||
+      this.#mailbox.hasStartedDelivery(agentId) ||
+      this.#conversation.workingTaskSnapshots(agentId).length > 0 ||
+      (threadId ? this.#store.database.readActiveTurnId(agentId, threadId) !== null : false)
+    );
+  }
+
+  /** A queued provider change is ready to apply: the agent is idle. */
+  #pendingRuntimeDue(agentId: string): boolean {
+    const agent = this.#store.list().find((candidate) => candidate.id === agentId);
+    return Boolean(agent?.pendingRuntime) && !this.#runtimeHandoverBusy(agentId);
+  }
+
+  /** Applies `pendingRuntime` once the agent is idle. True when the agent moved. */
+  readonly #followPendingRuntime = Effect.fn("AgentService.followPendingRuntime")(function* (
+    this: AgentService,
+    agentId: string,
+  ) {
+    return yield* this.#endpoints
+      .runExclusive(() =>
+        Effect.gen({ self: this }, function* () {
+          const agent = this.#store.list().find((candidate) => candidate.id === agentId);
+          const pending = agent?.pendingRuntime;
+          if (!pending || this.#runtimeHandoverBusy(agentId)) return false;
+          yield* this.#applyAgentUpdate(
+            {
+              agentId,
+              provider: pending.provider,
+              model: pending.model,
+              reasoningEffort: pending.reasoningEffort,
+              providerAccountId: pending.providerAccountId ?? null,
+            },
+            undefined,
+            "next-turn",
+          );
+          return true;
+        }),
+      )
+      .pipe(
+        Effect.catch((failure) =>
+          Effect.gen({ self: this }, function* () {
+            this.#emitError("pending_runtime_switch_failed", failure, agentId);
+            // A change that fails on an idle agent, such as a provider that is now off, would fail again
+            // before each turn. The agent stays on its provider, and the header stops showing the change.
+            if (this.#runtimeHandoverBusy(agentId)) return false;
+            const cleared = yield* Effect.exit(this.#store.updateAgent({ agentId, pendingRuntime: null }));
+            if (Exit.isSuccess(cleared)) this.#emit({ type: "agents-changed", agents: this.listAgents() });
+            return false;
+          }),
+        ),
+      );
+  });
 
   /** Makes the move of `#usageLimitMove`, if one is due. True when the agent moved. */
   readonly #followUsageLimit = Effect.fn("AgentService.followUsageLimit")(function* (
@@ -2781,7 +3094,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
   #startRequestedNewChat(agentId: string): Effect.Effect<void> {
     if (!this.#requestedNewChats.has(agentId)) return Effect.void;
     const agent = this.#store.list().find((candidate) => candidate.id === agentId);
-    if (!agent || !agentNewChatAllowed(agent)) {
+    if (!agent || !agentNewChatAllowed(agent, this.#store.agentDefaults())) {
       this.#requestedNewChats.delete(agentId);
       return Effect.void;
     }
@@ -3130,6 +3443,21 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
               throw new Error(sourceText("error.provider.accountInUse"));
           });
           for (const agent of agents) yield* this.#applyAgentUpdate({ agentId: agent.id, providerAccountId: null });
+          // A queued change to the account moves to the provider's own sign-in too, so it does not fail
+          // before the next turn. The running turn does not use the account, so it can continue.
+          const queued = this.#store
+            .list()
+            .filter(
+              (agent) =>
+                agent.pendingRuntime?.provider === provider && agentProviderAccount(agent.pendingRuntime) === accountId,
+            );
+          for (const agent of queued)
+            if (agent.pendingRuntime)
+              yield* this.#store.updateAgent({
+                agentId: agent.id,
+                pendingRuntime: { ...agent.pendingRuntime, providerAccountId: undefined },
+              });
+          if (queued.length > 0) this.#emit({ type: "agents-changed", agents: this.listAgents() });
           return yield* this.#providers.removeProviderAccount(provider, accountId);
         }),
       )
@@ -3188,18 +3516,72 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       );
   }
 
+  /**
+   * A stored key serves the provider's own sign-in, and Claude's key also its own account, so a new or
+   * removed key ends the limits that hold those agents: they were the old credential's. A limit of the
+   * new one holds them again at its first refused turn. Claude's own sign-in uses the key only when it
+   * has no claude.ai login, so the limits of that plan stay. A saved Claude key gets its account; a
+   * removed one takes its account away, and its agents go back to the provider's own sign-in.
+   */
   changeProviderCredential(
     provider: AgentProvider,
     change: () => Effect.Effect<void, AgentLifecycleFailed>,
   ): Effect.Effect<AgentStatus, AgentLifecycleFailed> {
+    let usedKey = provider !== "claude";
     return this.#providers
-      .changeProviderCredential(provider, () => change().pipe(toProviderOperationFailed))
+      .changeProviderCredential(provider, () =>
+        Effect.suspend(() => {
+          usedKey ||= this.#providers.ownSignInUsesKey(provider);
+          return change();
+        }).pipe(toProviderOperationFailed),
+      )
       .pipe(
+        Effect.tap(() =>
+          usedKey || this.#providers.ownSignInUsesKey(provider)
+            ? this.#usageLimits.accountReset(provider, null)
+            : Effect.void,
+        ),
         Effect.mapError(
           (failure) => new AgentLifecycleFailed({ operation: "changeProviderCredential", cause: failure.cause }),
         ),
+        Effect.flatMap((status) => (provider === "claude" ? this.#claudeKeyChanged() : Effect.succeed(status))),
       );
   }
+
+  /**
+   * `changeProviderCredential` for a removed key. Claude's key account goes first, with the idle check
+   * of any removed account, so that a refusal keeps the key: an agent left on the account without its
+   * key could not run a turn. The key change refuses while the provider is busy, so that is checked
+   * before the account goes too.
+   */
+  clearProviderCredential(
+    provider: AgentProvider,
+    clear: () => Effect.Effect<void, AgentLifecycleFailed>,
+  ): Effect.Effect<AgentStatus, AgentLifecycleFailed> {
+    return Effect.suspend(() => {
+      if (provider !== "claude" || !this.#providers.hasProviderAccount(provider, CLAUDE_API_KEY_ACCOUNT_ID))
+        return Effect.void;
+      if (this.#isProviderBusy(provider))
+        return Effect.fail(
+          new AgentLifecycleFailed({
+            operation: "changeProviderCredential",
+            cause: new Error(sourceText("error.provider.cliBusyRetry", { provider: providerLabel(provider) })),
+          }),
+        );
+      return this.removeProviderAccount(provider, CLAUDE_API_KEY_ACCOUNT_ID);
+    }).pipe(Effect.andThen(this.changeProviderCredential(provider, clear)));
+  }
+
+  readonly #claudeKeyChanged = Effect.fn("AgentService.claudeKeyChanged")(function* (this: AgentService) {
+    const status = this.#providers.hasProviderKey("claude")
+      ? yield* this.#providers.providerKeyChanged("claude")
+      : this.#providers.hasProviderAccount("claude", CLAUDE_API_KEY_ACCOUNT_ID)
+        ? yield* this.removeProviderAccount("claude", CLAUDE_API_KEY_ACCOUNT_ID)
+        : this.#providers.status();
+    // After the removal, so that the released work starts on the provider's own sign-in.
+    yield* this.#usageLimits.accountReset("claude", CLAUDE_API_KEY_ACCOUNT_ID);
+    return status;
+  });
 
   updateProviderCli(
     provider: AgentProvider,
@@ -3243,6 +3625,11 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
           (failure) => new AgentLifecycleFailed({ operation: "removeCustomAgentRuntime", cause: failure.cause }),
         ),
       );
+  }
+
+  /** See `ProviderRuntime.customAgentUsage`. */
+  customAgentUsage() {
+    return this.#providers.customAgentUsage();
   }
 
   /** See `CustomEndpoints.saveCustomAgent`. */
@@ -3320,6 +3707,14 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
    * belongs to the compaction, not to the agent, so `claimTurn` takes it away. Only its own guard
    * reports the turn the CLI is running.
    */
+  #isProviderBusy(provider: AgentProvider): boolean {
+    return (
+      this.#profileClients.usesProvider(provider) ||
+      this.#drain.hasStartingDeliveries(provider) ||
+      this.#store.list().some((agent) => providerForAgent(agent) === provider && this.#runsTurn(agent.id))
+    );
+  }
+
   #runsTurn(agentId: string): boolean {
     return this.#conversation.anyWorkingSnapshot(agentId) != null || !this.#compaction.mayDrain(agentId);
   }
@@ -3370,6 +3765,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       concurrency: "unbounded",
       discard: true,
     });
+    yield* this.#warmGenerations.dispose();
     yield* Fiber.join(channelStop);
     // After the clients: a provider that still runs would see its MCP servers fail.
     yield* this.#mcp.close();
@@ -4130,9 +4526,13 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       );
   }
 
-  respondToApproval(input: RespondToApprovalInput): Effect.Effect<void, AgentLifecycleFailed> {
+  /** `responder` is absent for the person at this computer; the Team API gives the member who answers. */
+  respondToApproval(
+    input: RespondToApprovalInput,
+    responder?: ApprovalResponder,
+  ): Effect.Effect<void, AgentLifecycleFailed> {
     return this.#attention
-      .respondToApproval(input)
+      .respondToApproval(input, responder)
       .pipe(
         Effect.mapError(
           (failure) => new AgentLifecycleFailed({ operation: "respondToApproval", cause: failure.cause }),
@@ -4140,7 +4540,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       );
   }
 
-  respondToBrowserSecret(input: RespondToBrowserSecretInput): Effect.Effect<void, AgentLifecycleFailed> {
+  respondToBrowserSecret(input: LocalBrowserSecretResponse): Effect.Effect<void, AgentLifecycleFailed> {
     return this.#attention
       .respondToBrowserSecret(input)
       .pipe(
@@ -4223,7 +4623,17 @@ export class AgentLifecycleFailed extends Schema.TaggedError<AgentLifecycleFaile
 }) {}
 
 /** Why `#usageLimitMove` changes an agent's model, when it is not the switch for a usage limit. */
-type ModelMove = "return" | "provider-error";
+type ModelMove = "return" | "provider-error" | "next-turn";
+
+/** The fields of an update that a queued `pendingRuntime` holds. */
+const RUNTIME_UPDATE_KEYS: ReadonlySet<string> = new Set([
+  "agentId",
+  "provider",
+  "model",
+  "reasoningEffort",
+  "providerAccountId",
+  "leaveUsageLimit",
+]);
 
 const MODEL_SWITCH_TEXT = {
   "usage-limit": "status.agent.modelSwitchedForLimit",

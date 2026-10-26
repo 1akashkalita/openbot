@@ -104,3 +104,12 @@ function memberLimit(plan: BillingPlanId, legacyStarterMembers: number | null): 
   if (plan === "starter" && legacyStarterMembers !== 0) return DEFAULT_TEAM_MEMBER_LIMIT;
   return memberLimitForPlan(plan);
 }
+
+/**
+ * The custom member limit of a server (one `?`: the server ID). As with `getServerEntitlement`, a row
+ * applies only while its account owns the remote host or the hosted server.
+ */
+export const SERVER_MEMBER_LIMIT_SQL = `SELECT l.member_limit FROM server_member_limits l
+  LEFT JOIN remote_hosts h ON h.host_id = l.server_id AND h.owner_user_id = l.owner_user_id
+  LEFT JOIN hosted_servers hs ON hs.server_id = l.server_id AND hs.owner_user_id = l.owner_user_id
+ WHERE l.server_id = ? AND (h.host_id IS NOT NULL OR hs.server_id IS NOT NULL)`;

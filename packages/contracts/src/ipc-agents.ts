@@ -22,6 +22,7 @@ import {
 } from "./ipc-agent-status";
 import { isAgentTaskLimit } from "./ipc-agent-tasks";
 import { isBoundedString, isIdentifier } from "./ipc-bounded-values";
+import { isBrowserProfileId } from "./ipc-browser-profiles";
 import { isHiddenAt } from "./ipc-hidden-agents";
 import { type BusyMessageMode, isBusyMessageMode } from "./ipc-queue";
 import type { SidebarLayoutSnapshot } from "./ipc-sidebar-layout";
@@ -44,20 +45,38 @@ export function agentComputerUseEnabled(agent: { computerUse?: boolean | undefin
   return agent.computerUse !== false;
 }
 
-export function agentAutomationAllowed(agent: { allowAutomation?: boolean | undefined }): boolean {
-  return agent.allowAutomation === true;
+/** The agent settings that have an account default. An agent with no value of its own follows it. */
+export const AGENT_DEFAULT_KEYS = ["allowAutomation", "allowNewChat", "quickAcknowledgement"] as const;
+export type AgentDefaultKey = (typeof AGENT_DEFAULT_KEYS)[number];
+export type AgentDefaults = Record<AgentDefaultKey, boolean>;
+
+/** Off, which is what every agent had before the defaults existed. */
+export const DEFAULT_AGENT_DEFAULTS: AgentDefaults = {
+  allowAutomation: false,
+  allowNewChat: false,
+  quickAcknowledgement: false,
+};
+
+export function isAgentDefaults(value: unknown): value is AgentDefaults {
+  return isDynamicRecord(value) && AGENT_DEFAULT_KEYS.every((key) => isBoolean(value[key]));
 }
 
-export function agentNewChatAllowed(agent: { allowNewChat?: boolean | undefined }): boolean {
-  return agent.allowNewChat === true;
+export function agentAutomationAllowed(
+  agent: { allowAutomation?: boolean | undefined },
+  defaults: AgentDefaults,
+): boolean {
+  return agent.allowAutomation ?? defaults.allowAutomation;
 }
 
-export function agentQuickAcknowledgementEnabled(agent: { quickAcknowledgement?: boolean | undefined }): boolean {
-  return agent.quickAcknowledgement === true;
+export function agentNewChatAllowed(agent: { allowNewChat?: boolean | undefined }, defaults: AgentDefaults): boolean {
+  return agent.allowNewChat ?? defaults.allowNewChat;
 }
 
-export function agentOwnBrowserSessionEnabled(agent: { ownBrowserSession?: boolean | undefined }): boolean {
-  return agent.ownBrowserSession === true;
+export function agentQuickAcknowledgementEnabled(
+  agent: { quickAcknowledgement?: boolean | undefined },
+  defaults: AgentDefaults,
+): boolean {
+  return agent.quickAcknowledgement ?? defaults.quickAcknowledgement;
 }
 
 /**
@@ -121,6 +140,29 @@ export function isAgentUsageLimitReturn(value: unknown): value is AgentUsageLimi
   );
 }
 
+/**
+ * Local-only. The provider, model, account and effort to use from the next turn, while this turn
+ * still runs.
+ */
+export interface AgentPendingRuntime extends AgentModelChoice {
+  reasoningEffort: AgentReasoningEffort;
+}
+
+export function isAgentPendingRuntime(value: unknown): value is AgentPendingRuntime {
+  return isDynamicRecord(value) && isAgentModelChoice(value) && isReasoningEffort(value.reasoningEffort);
+}
+
+/**
+ * The account of the next turn. A queued runtime without an account uses the provider's own
+ * sign-in, not the account of the running turn.
+ */
+export function agentNextProviderAccountId(agent: {
+  providerAccountId?: string | undefined;
+  pendingRuntime?: AgentPendingRuntime | undefined;
+}): string | undefined {
+  return agent.pendingRuntime ? agent.pendingRuntime.providerAccountId : agent.providerAccountId;
+}
+
 export function isAgentBackupModels(value: unknown): value is AgentBackupModels {
   return (
     isDynamicRecord(value) &&
@@ -182,25 +224,31 @@ export interface AgentSummary {
   computerUse?: boolean;
   /**
    * Whether a local script can run this agent's routines through the automation server. Local-only,
-   * like `access`. Absent means off; see `agentAutomationAllowed`.
+   * like `access`. Absent means the account default; see `agentAutomationAllowed`.
    */
   allowAutomation?: boolean;
   /**
    * Whether the agent can start a new chat with its `start_new_chat` tool. Local-only, like `access`.
-   * Absent means off; see `agentNewChatAllowed`.
+   * Absent means the account default; see `agentNewChatAllowed`.
    */
   allowNewChat?: boolean;
   /**
    * Whether the agent shows its plan with the `acknowledge_request` tool before a long task.
-   * Local-only, like `access`. Absent means off; see `agentQuickAcknowledgementEnabled`.
+   * Local-only, like `access`. Absent means the account default; see `agentQuickAcknowledgementEnabled`.
    */
   quickAcknowledgement?: boolean;
   /**
    * Whether the browser tabs of the agent use a session of their own, with their own cookies and
-   * sign-ins. Local-only, like `access`. Absent means off: the tabs use the shared session; see
-   * `agentOwnBrowserSessionEnabled`.
+   * sign-ins. Local-only, like `access`. Absent means off: the tabs use the shared session. When
+   * `browserProfileId` is also set, the named profile applies; see `agentBrowserProfile`.
    */
   ownBrowserSession?: boolean;
+  /**
+   * The named browser profile that the tabs of the agent use. Local-only, like `access`. It comes
+   * before `ownBrowserSession`; see `agentBrowserProfile`. The agent store also sets
+   * `ownBrowserSession` with it, so an older OpenBot opens the agent's own session, never the shared one.
+   */
+  browserProfileId?: string;
   /**
    * Whether the agent asks Codex for the fast service tier of its model. Local-only, like `access`.
    * Absent means that OpenBot leaves the tier to Codex.
@@ -229,6 +277,11 @@ export interface AgentSummary {
    * back to it when the limit ends.
    */
   usageLimitReturn?: AgentUsageLimitReturn;
+  /**
+   * Local-only. The provider, model, account and effort to use from the next turn, while this turn
+   * still runs. Absent means the next turn uses the provider, model, account and effort on this agent.
+   */
+  pendingRuntime?: AgentPendingRuntime;
   /**
    * ISO 8601 time when a user hid the agent. Local-only, like `access`: a remote client reads the
    * hidden agents through `agent-hidden-v1`. Absent means the agent is not hidden.
@@ -281,12 +334,14 @@ function hasAgentSummaryFields(value: DynamicRecord): boolean {
     (value.allowNewChat === undefined || isBoolean(value.allowNewChat)) &&
     (value.quickAcknowledgement === undefined || isBoolean(value.quickAcknowledgement)) &&
     (value.ownBrowserSession === undefined || isBoolean(value.ownBrowserSession)) &&
+    (value.browserProfileId === undefined || isBrowserProfileId(value.browserProfileId)) &&
     (value.fastMode === undefined || isBoolean(value.fastMode)) &&
     (value.busyMessageMode === undefined || isBusyMessageMode(value.busyMessageMode)) &&
     (value.taskLimit === undefined || isAgentTaskLimit(value.taskLimit)) &&
     (value.providerAccountId === undefined || isProviderAccountId(value.providerAccountId)) &&
     (value.backupModels === undefined || isAgentBackupModels(value.backupModels)) &&
     (value.usageLimitReturn === undefined || isAgentUsageLimitReturn(value.usageLimitReturn)) &&
+    (value.pendingRuntime === undefined || isAgentPendingRuntime(value.pendingRuntime)) &&
     (value.hiddenAt === undefined || isHiddenAt(value.hiddenAt)) &&
     (value.threadId === null || isIdentifier(value.threadId)) &&
     isBoundedString(value.workspacePath, INPUT_LIMITS.path) &&
@@ -327,10 +382,10 @@ export interface UpdateAgentInput {
   reasoningEffort?: AgentReasoningEffort;
   access?: AgentAccess;
   computerUse?: boolean;
-  allowAutomation?: boolean;
-  allowNewChat?: boolean;
-  quickAcknowledgement?: boolean;
-  ownBrowserSession?: boolean;
+  /** `null` returns the agent to the account default, as for `allowNewChat` and `quickAcknowledgement`. */
+  allowAutomation?: boolean | null;
+  allowNewChat?: boolean | null;
+  quickAcknowledgement?: boolean | null;
   fastMode?: boolean;
   /** `null` returns the agent to the app default. */
   busyMessageMode?: BusyMessageMode | null;

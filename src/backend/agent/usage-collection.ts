@@ -1,8 +1,12 @@
-import { type AgentSummary, isAgentModel, type UsageTokens } from "@openbot/contracts/ipc";
+import { randomUUID } from "node:crypto";
+import { type AgentSummary, isAgentModel, type UsageTokens, WORKFLOWS_USAGE_ID } from "@openbot/contracts/ipc";
 import { type DynamicRecord, isDynamicRecord } from "@openbot/contracts/runtime-values";
+import { createOpenBotLogger } from "@openbot/logging";
 import type { AgentUsage } from "../database/agent-usage";
 import type { ProviderSession } from "../database/provider-sessions";
 import { getRecord, getString } from "../protocol";
+
+const logger = createOpenBotLogger("usage-collection");
 
 function count(value: unknown): number | null {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : null;
@@ -60,6 +64,7 @@ export function collectProviderUsage(
     const turnModels = getRecord(params, "turnModelUsage");
     for (const [model, value] of Object.entries(models)) {
       if (!isDynamicRecord(value) || !isAgentModel(model)) continue;
+      const turnModel = turnModels && claudeTurnModel(turnModels, models, model);
       const tokens = {
         uncachedInput: count(value.inputTokens),
         cachedInput: count(value.cacheReadInputTokens),
@@ -76,7 +81,9 @@ export function collectProviderUsage(
         // `modelUsage` counts the whole session, and a resumed session starts from its saved
         // totals. The first report of a resumed process carries `turnModelUsage`: the totals
         // before this turn's requests are the baseline, so the turn books only its own requests.
-        previousTokens: turnModels && earlier(tokens, claudeTurnTokens(claudeTurnModel(turnModels, models, model))),
+        previousTokens: turnModels && earlier(tokens, claudeTurnTokens(turnModel ?? null)),
+        // Prices this turn from list rates when Claude gives no cost for it.
+        smallestRequestInputTokens: turnModel ? count(turnModel.smallestRequestInputTokens) : null,
         baseline: false,
         tokens,
         reportedCost: value.costBasis === "unknown" || value.costBasis === "managed" ? null : cost(value.costUSD),
@@ -84,34 +91,100 @@ export function collectProviderUsage(
     }
     return;
   }
+  const value = getRecord(params, "usage");
+  if (!value) return;
+  // A model chosen while the turn runs applies from the next turn, so the turn keeps its own.
+  const model = usage.turnModel(agent.id, session.id, turnId) ?? agent.model;
+  if (session.provider === "antigravity") {
+    // Antigravity 1.4.3 sends the tokens of this prompt only: `_extract_turn_usage` subtracts the
+    // session's total at the turn's start, and a restored session starts from its saved total. So
+    // each prompt is its own counter, also when a delivery that hit a limit runs again with the same
+    // turn ID. Gemini bills thinking as output, and Antigravity sends it apart.
+    const tokens = acpTokens(value);
+    const thought = count(value.thoughtTokens);
+    usage.record({
+      agentId: agent.id,
+      sessionId: session.id,
+      turnId,
+      provider: session.provider,
+      model,
+      counterId: `${session.id}:antigravity:${getString(params, "promptId") ?? turnId}`,
+      baseline: false,
+      tokens: { ...tokens, output: tokens.output === null ? null : tokens.output + (thought ?? 0) },
+    });
+    return;
+  }
+  if (session.provider === "opencode") {
+    // OpenCode 1.19 and 2.x send the tokens of this prompt only (`state.usage.turn` starts again for
+    // each prompt). `inputTokens` is the uncached input, and each cache and thinking field is left
+    // out when it is 0, so a missing one is 0. Reasoning is billed as output.
+    const output = count(value.outputTokens);
+    usage.record({
+      agentId: agent.id,
+      sessionId: session.id,
+      turnId,
+      provider: session.provider,
+      model,
+      counterId: `${session.id}:opencode:${getString(params, "promptId") ?? turnId}`,
+      baseline: false,
+      tokens: {
+        uncachedInput: count(value.inputTokens),
+        cachedInput: count(value.cachedReadTokens ?? 0),
+        cacheCreation: count(value.cachedWriteTokens ?? 0),
+        output: output === null ? null : output + (count(value.thoughtTokens ?? 0) ?? 0),
+      },
+    });
+    return;
+  }
   // ACP `Usage` is session-cumulative by contract: its fields are documented as "Sum of all token
   // types across session" and "Total input tokens across all turns". So one counter per session,
   // like Codex, and the first report of a session that predates collection is a baseline: it
   // carries tokens spent before analytics existed.
-  const value = getRecord(params, "usage");
-  if (!value) return;
-  const input = count(value.inputTokens);
-  const cached = count(value.cachedReadTokens);
-  const creation = count(value.cachedWriteTokens);
   usage.record({
     agentId: agent.id,
     sessionId: session.id,
     turnId,
     provider: session.provider,
-    // A model chosen while the turn runs applies from the next turn, so the turn keeps its own.
-    model: usage.turnModel(agent.id, session.id, turnId) ?? agent.model,
+    model,
     counterId: `${session.id}:grok`,
     baseline: session.createdAt < usage.collectionStartedAt(),
-    tokens: {
-      uncachedInput:
-        input !== null && cached !== null && creation !== null && input >= cached + creation
-          ? input - cached - creation
-          : null,
-      cachedInput: cached,
-      cacheCreation: creation,
-      output: count(value.outputTokens),
-    },
+    tokens: acpTokens(value),
   });
+}
+
+/**
+ * Collects the usage of one workflow model or condition step under the reserved Workflows row. The
+ * step is its own session, so its counters never meet those of another step on the same process.
+ */
+export function workflowUsageObserver(
+  usage: AgentUsage,
+  provider: ProviderSession["provider"],
+  model: AgentSummary["model"],
+): (notification: { method: string; params?: unknown }) => void {
+  const session = { id: `workflow:${randomUUID()}`, provider, createdAt: new Date().toISOString() };
+  return ({ method, params }) => {
+    try {
+      collectProviderUsage(usage, { id: WORKFLOWS_USAGE_ID, model }, session, method, params);
+    } catch (error) {
+      logger.warn("Could not save the usage of a workflow step.", { provider, error });
+    }
+  };
+}
+
+/** An ACP `Usage`, whose `inputTokens` include the cache reads and writes. */
+function acpTokens(value: DynamicRecord): UsageTokens {
+  const input = count(value.inputTokens);
+  const cached = count(value.cachedReadTokens);
+  const creation = count(value.cachedWriteTokens);
+  return {
+    uncachedInput:
+      input !== null && cached !== null && creation !== null && input >= cached + creation
+        ? input - cached - creation
+        : null,
+    cachedInput: cached,
+    cacheCreation: creation,
+    output: count(value.outputTokens),
+  };
 }
 
 /**

@@ -11,6 +11,7 @@ import {
   parseRoutineRunConversationEventItemType,
   type RoutineRunConversationEventStatus,
   type UsageTokens,
+  WORKFLOW_RUN_SOURCES,
 } from "@openbot/contracts/ipc";
 import { isBoolean, isDynamicRecord, isFunction, isNumber, isOneOf, isString } from "@openbot/contracts/runtime-values";
 import { normalizeEmailAddress } from "@openbot/contracts/validation";
@@ -28,7 +29,9 @@ import type { FailureSignal } from "../backend/agent/failure-signal";
 import type { ToolUsageSignal } from "../backend/agent/thread-items";
 import type { BrowserSiteVisit } from "../backend/browser-host";
 import type { TurnModelUsage } from "../backend/database/agent-usage";
+import type { WorkflowRunEnd } from "../backend/workflows/workflows";
 import { type AnalyticsOperationFailure, analyticsIO, analyticsSync } from "./analytics-effects";
+import { PROVIDER_AUTH_KINDS, type ProviderAuthKind } from "./analytics-provider-auth";
 import { localDay, RESOURCE_ENUMS, RESOURCE_PROPERTY_NAMES, type ResourceProperties } from "./resource-summary";
 
 const OPENPANEL_API_URL = "https://analytics.openbot.run/api";
@@ -60,6 +63,16 @@ const TOKEN_PROPERTIES = [
 ] as const satisfies readonly (readonly [keyof UsageTokens, string])[];
 const MAX_SITE_TABS = 1_000;
 const MAX_ROUTINE_RUNS = 10_000;
+// A run holds at most this many nodes that run; a larger count is not sent.
+const MAX_WORKFLOW_RUN_STEPS = 1_000;
+/** A run can wait days for an approval, so its duration has a longer limit than a turn's. */
+const MAX_WORKFLOW_RUN_MS = 30 * 24 * 60 * 60 * 1_000;
+const WORKFLOW_RUN_STEP_COUNTS = [
+  ["agent_step_count", ["agent"]],
+  ["model_step_count", ["llm", "condition"]],
+  ["approval_step_count", ["approval"]],
+  ["output_step_count", ["output"]],
+] as const satisfies readonly (readonly [string, readonly WorkflowRunEnd["stepKinds"][number][]])[];
 const MAX_INVENTORY_ITEMS = 32;
 const ANALYTICS_SCHEMA_VERSION = ANALYTICS_GENERATIONS.desktop_host;
 const CURATED_AGENT_PREFIX = "openbot-curated-agent-";
@@ -112,6 +125,7 @@ type HostEventName =
   | "system_token_usage"
   | "system_site_visited"
   | "system_routine_run"
+  | "system_workflow_run"
   | "system_inventory"
   | "system_resources"
   | "hosted_site_action";
@@ -134,6 +148,8 @@ export interface HostAnalyticsOptions {
   platform: "darwin" | "win32" | "linux";
   resolveOwner: () => AnalyticsIdentity | null;
   resolveAgent: (agentId: string) => AgentSummary | null;
+  /** How the agent's provider is paid for, read when a turn completes. */
+  resolveProviderAuth?: (agent: AgentSummary) => ProviderAuthKind;
   /**
    * The provider-reported token counts of a turn by provider and model, from the usage records that
    * the Usage report reads. An empty list means the provider reported none.
@@ -167,6 +183,7 @@ interface AnalyticsRoutineRun {
 interface AnalyticsInventory {
   agentCount: number;
   enabledRoutineCount: number;
+  workflowCount: number;
   customMcpServerCount: number;
   plugins: string[];
   curatedSkills: string[];
@@ -191,6 +208,7 @@ const HOST_ALLOWLIST = {
     ...AGENT_PROPERTY_NAMES,
     "origin",
     "status",
+    "provider_auth",
     "duration_ms",
     "token_usage",
     "uncached_input_tokens",
@@ -234,9 +252,17 @@ const HOST_ALLOWLIST = {
   ],
   system_site_visited: [...AGENT_PROPERTY_NAMES, "domain", "actor"],
   system_routine_run: [...AGENT_PROPERTY_NAMES, "status", "run_kind", "trigger_type"],
+  system_workflow_run: [
+    "status",
+    "source",
+    "duration_ms",
+    "step_count",
+    ...WORKFLOW_RUN_STEP_COUNTS.map(([property]) => property),
+  ],
   system_inventory: [
     "agent_count",
     "enabled_routine_count",
+    "workflow_count",
     "custom_mcp_server_count",
     "plugins",
     "curated_skills",
@@ -271,6 +297,7 @@ export class HostAnalytics {
   readonly #reports: ReportQueue | undefined;
   readonly #resolveOwner: HostAnalyticsOptions["resolveOwner"];
   readonly #resolveAgent: HostAnalyticsOptions["resolveAgent"];
+  readonly #resolveProviderAuth: HostAnalyticsOptions["resolveProviderAuth"];
   readonly #resolveTurnUsage: HostAnalyticsOptions["resolveTurnUsage"];
   readonly #resolveMcpServer: NonNullable<HostAnalyticsOptions["resolveMcpServer"]>;
   readonly #resolveRoutineRun: NonNullable<HostAnalyticsOptions["resolveRoutineRun"]>;
@@ -288,6 +315,9 @@ export class HostAnalytics {
   readonly #siteDomains = new Map<string, string>();
   readonly #routineRunOwners = new Map<string, AnalyticsIdentity | null>();
   readonly #routineRunReports = new Set<string>();
+  readonly #workflowRunReports = new Set<string>();
+  /** A workflow run that began before this process is a replay after a restart, and is not sent. */
+  readonly #createdAt = Date.now();
   #closed = false;
   readonly #scope = Scope.makeUnsafe();
   #inventoryDay: string | null = null;
@@ -299,6 +329,7 @@ export class HostAnalytics {
     this.#reports = options.reports;
     this.#resolveOwner = options.resolveOwner;
     this.#resolveAgent = options.resolveAgent;
+    this.#resolveProviderAuth = options.resolveProviderAuth;
     this.#resolveTurnUsage = options.resolveTurnUsage;
     this.#resolveMcpServer = options.resolveMcpServer ?? (() => null);
     this.#resolveRoutineRun = options.resolveRoutineRun ?? (() => null);
@@ -376,6 +407,7 @@ export class HostAnalytics {
             ...this.#agentProperties(event.agentId),
             origin,
             status: normalizedTurnStatus(event.status),
+            ...this.#providerAuth(event.agentId),
             ...(activeTurn === undefined
               ? {}
               : {
@@ -510,6 +542,36 @@ export class HostAnalytics {
     if (!existing) turn.tools.set(key, target);
   }
 
+  /**
+   * Reports a workflow run's end: its outcome, how it began and how many nodes of each kind ran.
+   * A retry can end the same run again; each outcome of a run is sent once.
+   */
+  handleWorkflowRun(end: WorkflowRunEnd): void {
+    if (!this.#client || !this.#trackingEnabled) return;
+    const startedAt = Date.parse(end.startedAt);
+    if (!(startedAt >= this.#createdAt)) return;
+    const reportKey = `${end.runId}:${end.status}`;
+    if (this.#workflowRunReports.has(reportKey)) return;
+    this.#workflowRunReports.add(reportKey);
+    while (this.#workflowRunReports.size > MAX_ROUTINE_RUNS) {
+      const oldest = this.#workflowRunReports.values().next();
+      if (oldest.done) break;
+      this.#workflowRunReports.delete(oldest.value);
+    }
+    this.#track("system_workflow_run", {
+      status: end.status,
+      source: end.source,
+      duration_ms: Math.max(0, Date.parse(end.endedAt) - startedAt),
+      step_count: end.stepKinds.length,
+      ...Object.fromEntries(
+        WORKFLOW_RUN_STEP_COUNTS.map(([property, kinds]) => [
+          property,
+          end.stepKinds.filter((kind) => kinds.some((item) => item === kind)).length,
+        ]),
+      ),
+    });
+  }
+
   /** Reports a tab that reached a new registrable domain. The hostname itself is never sent. */
   handleSiteVisit(visit: BrowserSiteVisit): void {
     if (!this.#client || !this.#trackingEnabled) return;
@@ -562,6 +624,7 @@ export class HostAnalytics {
       this.#activeTurns.clear();
       this.#siteDomains.clear();
       this.#routineRunOwners.clear();
+      this.#workflowRunReports.clear();
       this.clear();
       this.#operationQueue.operations = [];
       this.#enqueue("clear", () => this.#client?.clear());
@@ -721,6 +784,7 @@ export class HostAnalytics {
           {
             agent_count: inventory.agentCount,
             enabled_routine_count: inventory.enabledRoutineCount,
+            workflow_count: inventory.workflowCount,
             custom_mcp_server_count: inventory.customMcpServerCount,
             plugins: inventory.plugins,
             curated_skills: inventory.curatedSkills,
@@ -840,6 +904,16 @@ export class HostAnalytics {
       agent_source: listing ? "curated" : listingId ? "community" : "custom",
       ...(listing ? { agent_listing: listing } : {}),
     };
+  }
+
+  #providerAuth(agentId: string): HostProperties {
+    const agent = this.#resolveProviderAuth && this.#resolveAgent(agentId);
+    if (!agent || !this.#resolveProviderAuth) return {};
+    try {
+      return { provider_auth: this.#resolveProviderAuth(agent) };
+    } catch {
+      return { provider_auth: "unknown" };
+    }
   }
 
   /** The turn's usage rows, or `null` when they cannot be read and no token property is sent. */
@@ -988,6 +1062,16 @@ function sanitizeHostProperty(name: HostEventName, key: string, value: unknown):
     if (key === "run_kind") return isOneOf(["scheduled", "manual"] as const, value) ? value : undefined;
     if (key === "trigger_type") return isOneOf(ROUTINE_TRIGGER_TYPES, value) ? value : undefined;
   }
+  if (name === "system_workflow_run") {
+    if (key === "status") return isOneOf(["done", "failed", "stopped"] as const, value) ? value : undefined;
+    if (key === "source") return isOneOf(WORKFLOW_RUN_SOURCES, value) ? value : undefined;
+    if (key === "step_count" || WORKFLOW_RUN_STEP_COUNTS.some(([property]) => property === key))
+      return boundedCount(value, MAX_WORKFLOW_RUN_STEPS);
+    if (key === "duration_ms")
+      return isNumber(value) && Number.isFinite(value) && value >= 0 && value <= MAX_WORKFLOW_RUN_MS
+        ? value
+        : undefined;
+  }
   if (name === "system_tool_used") {
     if (key === "tool_kind") return isOneOf(TOOL_KINDS, value) ? value : undefined;
     if (key === "plugin") {
@@ -1010,6 +1094,7 @@ function sanitizeHostProperty(name: HostEventName, key: string, value: unknown):
     if (key === "computer_use_enabled") return isBoolean(value) ? value : undefined;
     return boundedCount(value, 10_000);
   }
+  if (key === "provider_auth") return isOneOf(PROVIDER_AUTH_KINDS, value) ? value : undefined;
   if (key === "agent_source") return isOneOf(["curated", "community", "custom"] as const, value) ? value : undefined;
   if (key === "agent_listing") return isString(value) && LISTING_SLUG_PATTERN.test(value) ? value : undefined;
   if (key === "status") return isString(value) ? normalizedTurnStatus(value) : undefined;

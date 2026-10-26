@@ -1,4 +1,4 @@
-import { type AgentProviderId, isKnownAgentProvider } from "@openbot/contracts/agent-providers";
+import { type AgentProviderId, isKeyOnlyProvider, isKnownAgentProvider } from "@openbot/contracts/agent-providers";
 import {
   type AgentModelChoice,
   agentPermissionLevel,
@@ -9,6 +9,7 @@ import {
   type UpdateAgentAdminSettingsInput,
   type UpdateAgentInput,
 } from "@openbot/contracts/ipc";
+import { BROWSER_PROFILES_CAPABILITY } from "@openbot/contracts/team-protocol/browser-profiles-v1";
 import { taskApproval } from "@openbot/team-client/agent-tasks";
 import { hasVisibleToasts } from "@openbot/ui";
 import {
@@ -18,6 +19,7 @@ import {
   usageLimitAskOptions,
 } from "@openbot/ui/features/conversation/BackupModels";
 import { unloadedHistory } from "@openbot/ui/features/conversation/ChatScrollRail";
+import { sidebarAgentWaits } from "@openbot/ui/features/sidebar/sidebar-agent-states";
 import { createEffect, createMemo } from "solid-js";
 import { desktopAnalytics } from "../../analytics";
 import { ProviderSignInDialogs } from "../../components/ProviderSignInDialogs";
@@ -29,6 +31,7 @@ import { useTurns } from "../../turns";
 import { turnsPort } from "../../turns-port";
 import { useAuth } from "../account/account-context";
 import { useAgentTasks } from "../agent-tasks/agent-tasks-context";
+import { agentThreadAttention } from "../agents/agent-thread-attention";
 import { useAgents } from "../agents/agents-context";
 import { agentsPort } from "../agents/agents-port";
 import { withHostAccountUsage } from "../agents/host-provider-accounts";
@@ -38,7 +41,7 @@ import { useConnectors } from "../connectors/connectors-context";
 import { useCustomAgents } from "../custom-agents/custom-agents-context";
 import { useCustomProviders } from "../custom-providers/custom-providers-context";
 import { useRemoteDesktop } from "../remote-desktop/remote-desktop-context";
-import { remoteMcpSignIn, serverSupportsCapability } from "../servers/server-capabilities";
+import { remoteMcpSignIn, serverCanAdminister, serverSupportsCapability } from "../servers/server-capabilities";
 import { useServerScope } from "../servers/server-scope";
 import { useServerSettings } from "../servers/server-settings";
 import { useServers } from "../servers/servers-context";
@@ -95,9 +98,10 @@ export function WorkspaceConversation(props: { account: () => CentralAuthUser })
    * this surface started it: Settings shows its own for the sign-ins it starts.
    */
   const connectFromComposer = async (provider: AgentProviderId) => {
-    // Inception signs in only with a key, which the server's Providers settings take.
+    // A key-only provider, such as Inception, signs in only with a key, which the server's Providers
+    // settings take.
     const server = activeServer();
-    if (provider === "inception" && server) openServerSettings(server.id, null, "providers");
+    if (isKeyOnlyProvider(provider) && server) openServerSettings(server.id, null, "providers");
     else await connection.connect(provider, "composer");
   };
   const signInWithCode = (provider: AgentProviderId) => connection.alternative(provider, "composer");
@@ -190,6 +194,15 @@ export function WorkspaceConversation(props: { account: () => CentralAuthUser })
       (message) => messagePromptRequestKey(message) === requestKey,
     )?.uiBlock;
   });
+
+  // The waits of the agents that this agent asked, by the same rules as the sidebar's "Needs you".
+  const agentWaits = createMemo(() =>
+    sidebarAgentWaits({
+      agentIds: agentList().map((agent) => agent.id),
+      ...agentThreadAttention({ agents: agentList(), pendingPrompts: pendingPrompts(), approvals: approvals() }),
+      usageLimits: usageLimits(),
+    }),
+  );
 
   const activeApproval = createMemo(() => {
     const agent = activeAgent();
@@ -323,6 +336,12 @@ export function WorkspaceConversation(props: { account: () => CentralAuthUser })
   const openProviderSettings = (trigger: HTMLElement) => {
     const server = activeServer();
     if (server) openServerSettings(server.id, trigger, "providers");
+  };
+  /** The named browser profiles live on the computer that runs the agents: this one, or a host an admin manages. */
+  const manageBrowserProfiles = createMemo(() => serverCanAdminister(activeServer(), BROWSER_PROFILES_CAPABILITY));
+  const openBrowserProfileSettings = (trigger: HTMLElement) => {
+    const server = activeServer();
+    if (server) openServerSettings(server.id, trigger, "browser-profiles");
   };
   /** The browser sign-in opens on this computer, so it stays local. */
   const localProviderDownloads = createMemo(
@@ -474,6 +493,7 @@ export function WorkspaceConversation(props: { account: () => CentralAuthUser })
         onSignInProvider={composerSignIn() ? connectFromComposer : undefined}
         onSignInWithCodeProvider={composerCodeSignIn() ? signInWithCode : undefined}
         onManageProviders={manageProviders() ? openProviderSettings : undefined}
+        onManageBrowserProfiles={manageBrowserProfiles() ? openBrowserProfileSettings : undefined}
         agent={conversationAgent()}
         agents={agentList()}
         mentionAgents={agentList().filter((agent) => !userHiddenAgentIds().has(agent.id))}
@@ -514,10 +534,16 @@ export function WorkspaceConversation(props: { account: () => CentralAuthUser })
             onOwnComputer: activeServer()?.kind === "local",
           });
         }}
-        browserEnabled={!platform.landingPreview && activeServerSupportsCapability("browser-control")}
+        // The browser and the remote desktop show in the main window only.
+        browserEnabled={
+          !platform.landingPreview && !platform.chatWindow && activeServerSupportsCapability("browser-control")
+        }
+        openLinksInBrowser={generalSettings().externalLinkTarget.kind === "openbot"}
         remoteDesktopSessionActive={Boolean(activeRemoteDesktopSession())}
         remoteDesktopVisible={remoteDesktopWorkspaceVisible()}
-        remoteDesktopEnabled={!platform.landingPreview && activeServerSupportsCapability("remote-desktop")}
+        remoteDesktopEnabled={
+          !platform.landingPreview && !platform.chatWindow && activeServerSupportsCapability("remote-desktop")
+        }
         prompt={activePrompt()}
         promptUiBlock={activePromptUiBlock()}
         approval={activeApproval()}
@@ -540,6 +566,7 @@ export function WorkspaceConversation(props: { account: () => CentralAuthUser })
         settingsRequest={settingsRequest()}
         messageFocusRequest={messageFocusRequest()}
         onSelectAgent={selectAgent}
+        agentWaits={agentWaits()}
         onUpdateAgent={updateConversationAgent}
         onSetAgentAvatar={setAgentAvatar}
         onSendMessage={sendMessage}
@@ -564,6 +591,7 @@ export function WorkspaceConversation(props: { account: () => CentralAuthUser })
         remoteTaskLimitLoaded={remoteAgentAdmin.taskLimit() !== undefined}
         onUpdateAgentPermissions={permissionsEditable() ? writeAgentPermissions : undefined}
         defaultBusyMessageMode={generalSettings().busyMessageMode}
+        agentDefaults={generalSettings().agentDefaults}
         agentMemoryLimit={generalSettings().agentMemoryLimit}
         onClearAgentContext={clearActiveAgentContext()}
         onCompactAgentContext={compactActiveAgentContext()}

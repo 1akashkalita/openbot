@@ -7,6 +7,11 @@ import type {
 } from "@openbot/contracts/ipc";
 import { decodeRegistryEntries, decodeRegistryInstallResult, decodeRegistryOperations } from "@openbot/contracts/ipc";
 import { ACP_REGISTRY_ROUTES } from "@openbot/contracts/team-protocol/acp-registry-v1";
+import { CLAUDE_API_KEY_CAPABILITY } from "@openbot/contracts/team-protocol/claude-api-key-v1";
+import {
+  PROVIDER_ACCOUNT_RELAY_CAPABILITY,
+  PROVIDER_ACCOUNT_RELAY_PROVIDERS,
+} from "@openbot/contracts/team-protocol/provider-account-relay-v1";
 import { PROVIDER_ACCOUNTS_CAPABILITY } from "@openbot/contracts/team-protocol/provider-accounts-v1";
 import { PROVIDER_USAGE_RESET_CAPABILITY } from "@openbot/contracts/team-protocol/provider-usage-reset-v1";
 import { PROVIDERS_ADMIN_ROUTES } from "@openbot/contracts/team-protocol/providers-v1";
@@ -274,9 +279,16 @@ export function createWebProviderSettings(options: WebProviderSettingsOptions) {
     void store.refreshCustomProviders().catch(() => undefined);
     return store;
   });
+  // A boolean, so that a server-list update that keeps the capability does not rebuild the keys.
+  const readsClaudeKey = createMemo(() => serverSupportsCapability(options.server(), CLAUDE_API_KEY_CAPABILITY));
   const providerKeys = createMemo(() => {
     const id = serverId();
-    return id ? hostProviderKeyApi(() => admin, id, openWebDestination) : undefined;
+    return id
+      ? {
+          ...hostProviderKeyApi(() => admin, id, openWebDestination),
+          readsClaudeKey: readsClaudeKey(),
+        }
+      : undefined;
   });
   // The released status and agent routes carry no account, so `provider-accounts-v1` adds them.
   const accountsServerId = createMemo(() => remoteAdminServer(options.server(), PROVIDER_ACCOUNTS_CAPABILITY)?.id);
@@ -306,6 +318,9 @@ export function createWebProviderSettings(options: WebProviderSettingsOptions) {
           cancel: (provider: AgentProviderId) => admin.cancelHostSignIn(provider, id ?? ""),
         },
         ...(accountsServerId() ? { accountSignIn: accountSignIn(accountsServerId() ?? "") } : {}),
+        ...(accountsServerId() && serverSupportsCapability(options.server(), PROVIDER_ACCOUNT_RELAY_CAPABILITY)
+          ? { accountRelay: accountRelay(accountsServerId() ?? "") }
+          : {}),
         relay: {
           hostName: options.server()?.name ?? "",
           start: (provider: AgentProviderId) => admin.startRelaySignIn(provider, id ?? ""),
@@ -339,6 +354,27 @@ export function createWebProviderSettings(options: WebProviderSettingsOptions) {
         await admin.cancelAccountSignIn(provider, id);
         await hostAccounts.refresh().catch(() => undefined);
         return status();
+      },
+    };
+  }
+  /** As on desktop: the other relay requests run an account's relayed sign-in by its provider. */
+  function accountRelay(id: string) {
+    return {
+      providers: PROVIDER_ACCOUNT_RELAY_PROVIDERS,
+      hostName: options.server()?.name ?? "",
+      start: (provider: AgentProviderId, accountId: string | null) =>
+        admin.startAccountRelaySignIn({ provider, accountId }, id),
+      status: async (provider: AgentProviderId) => {
+        const result = await admin.relaySignInStatus(provider, id);
+        if (result.result) await hostAccounts.refresh().catch(() => undefined);
+        return result;
+      },
+      open: (provider: AgentProviderId) => admin.openRelaySignIn(provider, id),
+      paste: (provider: AgentProviderId, address: string) => admin.pasteRelaySignIn({ provider, address }, id),
+      cancel: async (provider: AgentProviderId) => {
+        const result = await admin.cancelRelaySignIn(provider, id);
+        await hostAccounts.refresh().catch(() => undefined);
+        return result;
       },
     };
   }

@@ -239,6 +239,9 @@ export const messages = defineMessages("server", {
   "server.role.owner": "Owner",
   "server.settings.generalTitle": "General",
   "server.settings.generalDescription": "Manage this server’s name, logo, and preferences.",
+  "server.settings.vaultTitle": "Vault",
+  "server.settings.vaultDescription":
+    "Save logins, cards and contact info that every agent on this server can fill in.",
   "server.settings.membersTitle": "Members",
   "server.settings.membersDescription": "Publish this server, invite people, and manage access.",
   "server.settings.desktopTitle": "Remote desktop",
@@ -461,6 +464,9 @@ export const messages = defineMessages("server", {
   "server.invite.pendingTitle": "Pending invitations",
   "server.invite.pendingCount": "{total} pending",
   "server.invite.noPending": "No pending invitations.",
+  // The empty pending list. {word} is the one handwritten word of the title.
+  "server.invite.emptyTitle": "Send the first {word}.",
+  "server.invite.emptyWord": "one",
   "server.invite.neverExpires": { one: "Never expires · {count} join", other: "Never expires · {count} joins" },
   "server.invite.expires": "Expires {date}",
   "server.invite.revoke": "Revoke",

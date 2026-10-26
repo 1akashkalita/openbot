@@ -5,10 +5,14 @@ import {
   decodeAgentAccessSnapshot,
   decodeAgentAdminSettings,
   decodeAgentBackupModelSettings,
+  decodeAgentBrowserProfile,
   decodeAgentImportPreview,
   decodeAgentImportResult,
   decodeAgentProfileDraft,
   decodeAgentTaskLimitSettings,
+  decodeBrowserProfileList,
+  decodeBrowserProfileSummary,
+  decodeBrowserTabProfiles,
   decodeChannel,
   decodeChannelMemories,
   decodeChannelMemory,
@@ -34,7 +38,9 @@ import {
   decodeMcpSignInStates,
   decodeMcpTestResult,
   decodeOldRuntimeVersions,
+  decodeOptionalStorageDisk,
   decodeOptionalStorageUsage,
+  decodePromptCacheTtlSetting,
   decodeProviderHostSignInStatus,
   decodeProviderRelaySignInStatus,
   decodeRegistryEntries,
@@ -102,6 +108,7 @@ import {
 import { decodeScopedAgentEvent } from "./agent-event-decoding";
 import {
   decodeAccountSessions,
+  decodeAgentDefaults,
   decodeAgentImportSkill,
   decodeAgentMemoryLimitPreference,
   decodeAnalyticsPreference,
@@ -117,15 +124,21 @@ import {
   decodeBitwardenConnectorStatus,
   decodeBusyMessageModePreference,
   decodeCentralAuthState,
+  decodeChatWindowTargets,
   decodeCustomAgentCheckResult,
   decodeCustomAgentResult,
   decodeCustomAgents,
+  decodeCustomAgentUsage,
   decodeCustomProviderResult,
   decodeCustomProviders,
   decodeDetectedAcpAgents,
   decodeDetectedModelServers,
   decodeDiscoverModelsResult,
   decodeExportResult,
+  decodeExternalLinkBrowserOrNull,
+  decodeExternalLinkBrowsers,
+  decodeExternalLinkFallback,
+  decodeExternalLinkPreference,
   decodeGitHubConnectorRepositories,
   decodeGitHubConnectorStatus,
   decodeHostedServer,
@@ -265,9 +278,30 @@ import {
   decodeTeamPresenceSnapshot,
   decodeTeamSessions,
 } from "./team-decoding";
+import { decodeVaultImportResult, decodeVaultSecret, decodeVaultState } from "./vault-decoding";
+import {
+  decodeWorkflowDetail,
+  decodeWorkflowGraph,
+  decodeWorkflowRunDetail,
+  decodeWorkflowRunPage,
+  decodeWorkflowSaveResult,
+  decodeWorkflowStep,
+  decodeWorkflowSummaries,
+  decodeWorkflowSummary,
+  decodeWorkflowVersions,
+  decodeWorkflowWebhookSecret,
+} from "./workflow-decoding";
 
 const attachmentImportListeners = new Set<(event: AttachmentImportEvent) => void>();
-let selectedServerId: string = LOCAL_SERVER_ID;
+/**
+ * The server of a window that main opened for one chat (#2964), from its `?window=chat&server=<id>`
+ * URL. The window never selects a server, so it keeps this one while the main window selects others.
+ */
+const chatWindowServerId = (() => {
+  const query = new URLSearchParams(window.location.search);
+  return query.get("window") === "chat" ? query.get("server") : null;
+})();
+let selectedServerId: string = chatWindowServerId ?? LOCAL_SERVER_ID;
 
 function invokeAgentForServer<Input, Result>(
   serverId: string,
@@ -364,7 +398,13 @@ function scopedRequest(scope: ServerScope, args: readonly unknown[]): AgentIpcRe
   return { serverId: typeof server === "string" ? server : selectedServerId, payload };
 }
 
-function rememberActiveServer<T extends { id: string; active: boolean }[]>(servers: T): T {
+// A chat window shows its own server as the active one, so the renderer scopes everything to it.
+function rememberActiveServer(servers: ServerSummary[]): ServerSummary[] {
+  const pinned = chatWindowServerId;
+  if (pinned !== null && servers.some((server) => server.id === pinned)) {
+    selectedServerId = pinned;
+    return servers.map((server) => ({ ...server, active: server.id === pinned }));
+  }
   selectedServerId = servers.find((server) => server.active)?.id ?? LOCAL_SERVER_ID;
   return servers;
 }
@@ -558,6 +598,8 @@ const openbotApi: OpenBotDesktopApi = {
     approvalAutomation: decodeApprovalAutomationPreference,
     getBusyMessageModePreference: decodeBusyMessageModePreference,
     setBusyMessageModePreference: decodeBusyMessageModePreference,
+    getAgentDefaults: decodeAgentDefaults,
+    setAgentDefaults: decodeAgentDefaults,
     getAgentMemoryLimitPreference: decodeAgentMemoryLimitPreference,
     agentMemoryLimitPreference: decodeAgentMemoryLimitPreference,
     getAppBehaviorPreference: decodeAppBehaviorPreference,
@@ -581,6 +623,14 @@ const openbotApi: OpenBotDesktopApi = {
     openSettings: decodeVoid,
     openExternal: decodeVoid,
     openUrl: decodeVoid,
+    getExternalLinkPreference: decodeExternalLinkPreference,
+    setExternalLinkPreference: decodeExternalLinkPreference,
+    listExternalLinkBrowsers: decodeExternalLinkBrowsers,
+    chooseExternalLinkApp: decodeExternalLinkBrowserOrNull,
+    externalLinkFallback: decodeExternalLinkFallback,
+    openChatWindow: decodeVoid,
+    getChatWindows: decodeChatWindowTargets,
+    chatWindows: decodeChatWindowTargets,
   }),
   ...bridgeGroup(IPC_ENDPOINTS.providers, {
     connectProvider: decodeAgentStatusFromMain,
@@ -648,6 +698,26 @@ const openbotApi: OpenBotDesktopApi = {
     connect: decodeRoutineFlowLink,
     disconnect: decodeVoid,
     updateLink: decodeRoutineFlowLink,
+  }),
+  workflows: bridgeGroup(IPC_ENDPOINTS.workflows, {
+    list: decodeWorkflowSummaries,
+    get: decodeWorkflowDetail,
+    create: decodeWorkflowDetail,
+    rename: decodeWorkflowSummary,
+    delete: decodeVoid,
+    saveGraph: decodeWorkflowSaveResult,
+    versions: decodeWorkflowVersions,
+    versionGraph: decodeWorkflowGraph,
+    restoreVersion: decodeWorkflowDetail,
+    startRun: decodeWorkflowRunDetail,
+    runStep: decodeWorkflowStep,
+    stopStep: decodeVoid,
+    stopRun: decodeVoid,
+    retryStep: decodeWorkflowStep,
+    decide: decodeVoid,
+    runs: decodeWorkflowRunPage,
+    run: decodeWorkflowRunDetail,
+    rotateWebhookSecret: decodeWorkflowWebhookSecret,
   }),
   routineResults: bridgeGroup(IPC_ENDPOINTS.routineResults, {
     options: decodeRoutineResultOptions,
@@ -752,6 +822,16 @@ const openbotApi: OpenBotDesktopApi = {
     hostConnect: decodeBitwardenConnectorStatus,
     hostDisconnect: decodeBitwardenConnectorStatus,
   }),
+  vault: bridgeGroup(IPC_ENDPOINTS.vault, {
+    list: decodeVaultState,
+    save: decodeVaultState,
+    delete: decodeVaultState,
+    reveal: decodeVaultSecret,
+    copy: decodeVoid,
+    importCsv: decodeVaultImportResult,
+    reset: decodeVaultState,
+    changed: decodeVaultState,
+  }),
   onePasswordConnector: bridgeGroup(IPC_ENDPOINTS.onePasswordConnector, {
     status: decodeOnePasswordConnectorStatus,
     checkSetup: decodeOnePasswordConnectorStatus,
@@ -811,6 +891,7 @@ const openbotApi: OpenBotDesktopApi = {
     save: decodeCustomAgentResult,
     delete: decodeCustomAgentResult,
     check: decodeCustomAgentCheckResult,
+    usage: decodeCustomAgentUsage,
   }),
   providerDetection: bridgeGroup(IPC_ENDPOINTS.providerDetection, {
     scanModelServers: decodeDetectedModelServers,
@@ -836,6 +917,7 @@ const openbotApi: OpenBotDesktopApi = {
     usageResets: decodeProviderUsageResetsFromMain,
     resetUsage: decodeProviderUsageResetOutcomeFromMain,
     startRelaySignIn: decodeVoid,
+    startAccountRelaySignIn: decodeVoid,
     relaySignInStatus: decodeProviderRelaySignInStatus,
     openRelaySignIn: decodeVoid,
     pasteRelaySignIn: decodeVoid,
@@ -897,6 +979,8 @@ const openbotApi: OpenBotDesktopApi = {
     setTimezone: decodeHostTimezoneSettings,
     getAgentMemoryLimit: decodeHostAgentMemoryLimit,
     setAgentMemoryLimit: decodeHostAgentMemoryLimit,
+    getPromptCacheTtl: decodePromptCacheTtlSetting,
+    setPromptCacheTtl: decodePromptCacheTtlSetting,
     getAgentAccess: decodeAgentAccessSnapshot,
     setAgentAccess: decodeAgentAccessSnapshot,
   }),
@@ -1002,6 +1086,14 @@ const openbotApi: OpenBotDesktopApi = {
       updateAgentBackupModels: decodeAgentBackupModelSettings,
       getAgentTaskLimit: decodeAgentTaskLimitSettings,
       updateAgentTaskLimit: decodeAgentTaskLimitSettings,
+      listBrowserProfiles: decodeBrowserProfileList,
+      createBrowserProfile: decodeBrowserProfileSummary,
+      updateBrowserProfile: decodeBrowserProfileSummary,
+      clearBrowserData: decodeVoid,
+      deleteBrowserProfile: decodeVoid,
+      getAgentBrowserProfile: decodeAgentBrowserProfile,
+      updateAgentBrowserProfile: decodeAgentBrowserProfile,
+      listBrowserTabProfiles: decodeBrowserTabProfiles,
       updateAgentAdminSettings: decodeAgentAdminSettings,
       listAgentSkills: decodeInstalledSkillsFromMain,
       installAgentSkill: decodeInstalledSkill,
@@ -1149,6 +1241,7 @@ const openbotApi: OpenBotDesktopApi = {
   // decoded in main before it reached this point.
   storage: bridgeGroup(IPC_ENDPOINTS.storage, {
     getUsage: decodeOptionalStorageUsage,
+    getDisk: decodeOptionalStorageDisk,
     deleteFile: decodeVoid,
     clear: decodeVoid,
     openFile: decodeVoid,

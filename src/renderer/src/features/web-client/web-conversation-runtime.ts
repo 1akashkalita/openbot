@@ -23,7 +23,7 @@ import {
   uninstallAgentSkill,
   unpublishAgentTemplate,
 } from "@openbot/team-client/team-admin-requests";
-import { listInstalledSkills, type TeamApiRequest } from "@openbot/team-client/team-api-requests";
+import { listInstalledSkills, type TeamApiRequest, teamAgentRoutinesApi } from "@openbot/team-client/team-api-requests";
 import { currentText } from "@openbot/ui/text";
 import { Effect } from "effect";
 import { onCleanup } from "solid-js";
@@ -31,6 +31,7 @@ import type { ConversationRuntime } from "../conversation/conversation-runtime";
 import { webEventRoutinesApi } from "../conversation/routine-webhooks-api";
 import { createWebAttachmentMedia } from "./web-attachment-media";
 import { createWebAttachmentFiles, openWebLink } from "./web-attachments";
+import { webBrowserProfileCalls } from "./web-browser-profiles";
 import { webMessageLinks } from "./web-message-link-relay";
 import type { WebWorkspaceRuntime } from "./web-runtime";
 
@@ -120,6 +121,7 @@ export function createWebConversationRuntime(
   routineRecoveryEnabled?: () => boolean,
   sideQuestionEnabled?: () => boolean,
   webhookTestsEnabled?: () => boolean,
+  browserProfilesEnabled?: () => boolean,
 ): ConversationRuntime {
   const listeners = new Set<(event: AttachmentImportEvent) => void>();
   const files = createWebAttachmentFiles(remote, hostId);
@@ -146,6 +148,7 @@ export function createWebConversationRuntime(
   });
   // The host's relay routes are admin only, so only an admin relays a sign-in link.
   const messageLinks = adminRequest ? webMessageLinks(adminRequest, () => signInRelayEnabled?.() === true) : {};
+  const browserProfiles = adminRequest ? webBrowserProfileCalls(adminRequest) : undefined;
   return {
     agent: {
       ...messageLinks,
@@ -223,6 +226,10 @@ export function createWebConversationRuntime(
           earlier: input.earlier.map(({ question, answer }) => ({ question, answer })),
         });
     },
+    // Any member reads the tab labels; the panels offer the other calls to an owner or admin only.
+    get browserProfiles() {
+      return browserProfilesEnabled?.() === true ? browserProfiles : undefined;
+    },
     previewAttachment: files.preview,
     attachmentMedia,
     visualPage: files.visualPage,
@@ -266,6 +273,16 @@ export function createWebConversationRuntime(
       }
     },
     cancelImportFiles,
+    // `request()` names the connected host at call time, so a host switch reaches the new host.
+    routines: adminRequest
+      ? {
+          ...teamAgentRoutinesApi((...args) => adminRequest()(...args)),
+          onEvent: (listener) =>
+            onHostEvent?.((event) => {
+              if (event.type === "routines-changed") listener(event);
+            }) ?? (() => {}),
+        }
+      : undefined,
     admin: adminRequest
       ? webHostAdmin(
           adminRequest,

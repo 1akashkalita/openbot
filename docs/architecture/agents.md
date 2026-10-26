@@ -171,6 +171,60 @@ on a joined host.
   service, so the tool router reads it through a getter. The canvas chat panel sends the user's request
   to the open agent's own conversation and shows the answer of the turn that read it.
 
+## Workflows
+
+A workflow is a graph of steps that the user draws on the canvas of the Workflows page (the
+`Waypoints` button of the page rail). It is not part of one agent: a graph can name several agents,
+models, conditions, approvals and outputs. The host keeps the workflows. A joined desktop and the
+web client use them through the optional `workflows-v1` capability (see
+[Workflows](servers.md#workflows)). The agent event `workflows-changed` names the workflow that
+changed, on this computer and on a joined host.
+
+- `packages/ui/src/features/workflows/` is the canvas. It reads no application context: it takes
+  the document, catalogs, run state and callbacks as props. Edits stay local for fast drags and
+  undo, and the canvas gives the new document after each history step.
+  `src/renderer/src/features/workflows/` holds `WorkflowsPage.tsx`, `workflows-port.ts` (the port
+  over `window.openbot.workflows`) and `workflows-controller.ts`. The controller is the same for the
+  page and the stories. It saves the graph 400 ms after the last edit, one save at a time on its
+  base revision. A failed save keeps the edit for the next save. A change from another device, a
+  conflict or a restore loads the graph again, and undo on the canvas gets the edits back.
+- `src/backend/workflows/` owns the tables of migration 46: workflows, nodes, edges, versions,
+  triggers, webhook triggers and receipts, runs, steps and output posts. The rows are written
+  directly, not through `dispatch`, as for routine flows. `workflow-graph.ts` checks the graph rules
+  (branch edges only from a condition, port types, limits). A graph can have loops. A save with an old revision
+  answers the current graph as a conflict. The store keeps at most 50 versions: one when the newest
+  is older than 5 minutes, one on a restore, and one when a run starts on a graph revision that has
+  no version yet.
+- `Workflows` (`workflows.ts`) is an Effect service on its own managed runtime. A run copies the
+  graph. Each pass ends the steps that ended and starts each node whose inputs are in
+  (`workflow-walk.ts`). Passes run one at a time; a pass runs after a turn or queue event, after
+  each user action, and at startup. A node runs again when a node before it has a newer step, as
+  after a retry. A retry uses the node's current settings, so a fix made after the failure applies;
+  it uses the run's copy when the node is gone or is now another kind. An edge back to an earlier node (`workflowLoopEdges` in the contracts) is a loop:
+  when its source is done and newer, the earlier node runs again with that answer as one more
+  input. A loop has no pass limit. It ends when a condition takes the other branch, a step fails or
+  is rejected, or the user stops the run. The canvas marks a loop with no condition as endless.
+- An agent step is a routine handoff (`AgentService.enqueueRoutineHandoff`, with the workflow as the
+  routine) and ends when its delivery ends. Its tokens count under the agent. A model step and a
+  condition run in a process without tools; a condition must answer yes or no, and only the edges of
+  that branch stay active. That process (`warm-generations.ts`) stays for 5 idle minutes, so the
+  next step does not start the provider again. Each step still starts a new ephemeral thread, so no
+  step sees the text of another. The process stops when the provider's main client stops or
+  changes, after a failed step, and at shutdown. The tokens of these steps count under one reserved
+  usage row, `WORKFLOWS_USAGE_ID`, beside the agents. An
+  approval waits for the user; a rejection stops the run. An output shows a desktop notification or
+  posts to a messaging place.
+- `WorkflowTriggers` (`workflow-triggers.ts`) gives schedule triggers to the routine timer as an
+  extra due source. An occurrence is skipped while the workflow has an open run, and missed
+  occurrences become one run. A webhook trigger has a route of its own owner kind (`workflow`); see
+  [Route lifecycle](events.md#route-lifecycle).
+- A restart keeps approvals and agent steps, because their state is in the database and the
+  mailbox. The first pass fails a model step that was running, and ends a run that was stopping. An
+  agent step fails with `agentMissing` when its agent is deleted. A post that did not start is sent; a
+  post that was on its way fails as uncertain, and the user retries the step.
+- Image, asset, file output and message trigger nodes are kept in the graph but do not run yet; a
+  run that reaches one fails with `nodeUnsupported`.
+
 ## Hidden agents
 
 A user hides an agent from its sidebar menu in place of a delete. The agent keeps its thread, files,
@@ -190,6 +244,18 @@ A joined desktop, the web client and the mobile app use the optional `agent-hidd
 (`packages/contracts/src/team-protocol/agent-hidden-v1.ts`). Any member reads the list; only an
 owner or an admin hides or restores an agent on a host.
 `/v1/agents` and the released agent codecs do not carry `hiddenAt`.
+
+## Browser profile
+
+Agent settings > Advanced selects the browser profile of an agent: Shared or a named profile
+that other agents can also use. For a joined server, an owner or admin sees the select when the host
+serves `browser-profiles-v1`; the agent summary does not carry the profile, so the panel reads it
+from the host. "Only this agent" shows only for an agent that already uses it. A change closes the agent's open tabs. "Manage" opens
+the Browser profiles section of the settings of the agent's server (`ServerBrowserProfilesPanel`), which adds,
+renames, changes the color of, clears and deletes the named profiles. It lists Shared first, with
+its agent count and no actions. A joined server without the capability has no section. The select, the browser toolbar and the tabs show the color of a named profile. A delete moves
+the profile's agents to Shared. The agent has no tool to change its profile, and tool results do not
+name it. See [Browser sessions](browser.md#browser-sessions) for the storage and the partitions.
 
 ## Agent tasks
 
@@ -245,9 +311,17 @@ server that the provider starts, so OpenBot cannot queue its calls; `ThreadLifec
 session without it, and the instructions send desktop work to the agent's own chat. Tasks share the
 workspace, and OpenBot does not lock files; the `start_task` guidance warns the agent about this.
 
-A provider change is refused with `error.agent.waitForTasksBeforeProviderChange` while a task turn
-runs. After the change, `AgentService` retires the provider sessions of the chat and of each task
-thread, so each one gets a handoff on the new provider. The channel threads of the agent
+A provider, account or custom-agent change that a user or an agent asks for while a turn, a task or
+a queued message waits is stored on the agent as `pendingRuntime`. The running work keeps its
+sessions. When the drain is about to start the next message and no work has started,
+`AgentService` applies the queued runtime first (the `next-turn` move), then retires the provider
+sessions of the chat and of each task thread, so each one gets a handoff on the new provider. A
+queued change that fails on an idle agent, such as for a provider that is now off, is removed. An
+update that also changes other fields, a move to a backup model, a Team API request (its released
+protocol has no `pendingRuntime`), and the automatic usage-limit, provider-error and endpoint moves
+still wait for idle work (`error.agent.waitForTasksBeforeProviderChange` /
+`error.agent.waitBeforeProviderChange`). A Team API model or effort change keeps the queued
+change, because the remote client cannot see it. The channel threads of the agent
 (`ChannelStore.contextThreadsForAgent`) are retired too, and their work steps are saved. A channel
 turn also carries its own self-contained context packet. The instance transfer file keeps `taskLimit`.
 
@@ -419,7 +493,18 @@ the page on `openbot-visual:` (`openbot-remote-visual:` for a remote host) with
 `Content-Security-Policy: sandbox allow-scripts allow-forms` and the frame script, and the frame has
 the same sandbox without `allow-same-origin`. The page runs its scripts and can load files from the
 network, but it has an opaque origin, gets no permission, and talks to the app only with the checked
-MCP Apps messages for its height, its theme and a link that the user clicked. Mobile shows the
+messages of `parseChatVisualMessage`: its height, its theme, its display mode, a link, a message, its
+context, an image and an app shortcut. The frame script gives the page `window.openbotPage`
+(`sendMessage`, `setContext`, `requestFullscreen`, `exitFullscreen`, `displayMode`) over the MCP Apps
+methods `ui/message`, `ui/update-model-context` and `ui/request-display-mode`. A link, a message, the
+context, an image, full screen and a shortcut need the frame to have the focus and the user's
+activation, so a page acts only after a click or a key in it. A message goes at the end of the draft,
+and the user sends it. The context is a quote tag of the visual message
+at the start of the draft, so it shows as a quote chip and is saved and sent with the draft; the
+page's next context replaces it. Full screen puts the frame's
+box in the top layer with the Popover API, so the frame does not load again; it exits before the app
+opens a dialog for the page. Only the renderer's allowlist of shortcuts (`chat-visual-shortcuts.ts`)
+leaves the page, as a key event on the frame element. Mobile shows the
 page as its file and does not run it: in react-native-webview, a script in any frame can reach the
 bridge to the app. `html_preview` lets the agent look at a page before it publishes it: the main
 process draws it in a hidden window with its own in-memory session (`ChatVisualPreviewer`)

@@ -124,6 +124,7 @@ const PROVIDER_DESCRIPTION_KEYS: Readonly<Record<string, AppTextKey>> = {
   "Cursor plan or API key": "onboarding.provider.cursorPlan",
   "Free models with a Cline account": "onboarding.provider.clineAccount",
   "Mercury models with an Inception API key": "onboarding.provider.inceptionKey",
+  "DeepSeek models with a DeepSeek API key": "onboarding.provider.deepseekKey",
 };
 
 /**
@@ -472,9 +473,12 @@ export function createSetupProviders(
     }
   }
 
-  /** OpenCode, Muse and Gemini sign in with a pasted key, so their rows open the key dialog; the rest open a guide. */
+  /**
+   * OpenCode, Muse and Gemini sign in with a pasted key, so their rows open the key dialog; the rest
+   * open a guide. Claude's key is an option on its Providers page, so its Sign in stays the guide.
+   */
   function signInProvider(provider: AgentProviderId): void {
-    if (isKeyDialogProvider(provider) && props.providerKeys) {
+    if (isKeyDialogProvider(provider) && provider !== "claude" && props.providerKeys) {
       setKeyProvider(provider);
       return;
     }

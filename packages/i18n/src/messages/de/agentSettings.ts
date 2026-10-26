@@ -72,8 +72,6 @@ export const messages = {
   "agentSettings.avatar.saveFailed": "Der Agentenavatar konnte nicht gespeichert werden.",
   "agentSettings.avatar.processFailed": "Der Agentenavatar konnte nicht verarbeitet werden.",
   "agentSettings.runtime.model": "Agentenmodell",
-  "agentSettings.runtime.providerBusy":
-    "Warte, bis die aktuelle Arbeit abgeschlossen ist, bevor du Anbieter oder Konto wechselst.",
   "agentSettings.runtime.modelUnavailable": "Modelle sind verfügbar, sobald sich eine Agenten-CLI verbindet.",
   "agentSettings.runtime.reasoning": "Denkleistung",
   "agentSettings.runtime.reasoningLabel": "Denkleistungsstufe des Agenten",
@@ -161,9 +159,15 @@ export const messages = {
   "agentSettings.quickAcknowledgement.title": "Plan vor langen Aufgaben zeigen",
   "agentSettings.quickAcknowledgement.description":
     "Vor einer langen Aufgabe zeigt der Agent seinen Plan. Er beginnt nach 10 s oder wenn du auf Start drückst.",
-  "agentSettings.ownBrowserSession.title": "Eigene Browser-Sitzung",
-  "agentSettings.ownBrowserSession.description":
-    "Die Tabs des Agenten behalten eigene Anmeldungen und Cookies. Eine Änderung schließt die offenen Tabs des Agenten.",
+  "agentSettings.browserProfile.label": "Browser-Profil",
+  "agentSettings.browserProfile.shared": "Gemeinsam",
+  "agentSettings.browserProfile.agent": "Nur dieser Agent",
+  "agentSettings.browserProfile.missing": "Gelöschtes Profil",
+  "agentSettings.browserProfile.new": "Neues Profil",
+  "agentSettings.browserProfile.manageTitle": "Browser-Profile",
+  "agentSettings.browserProfile.manageDescription":
+    "Jedes Profil behält eigene Anmeldungen und Cookies. Eine Änderung schließt die offenen Tabs des Agenten.",
+  "agentSettings.browserProfile.manage": "Verwalten",
   "agentSettings.runtime.workspaceEnforcedProcess":
     "Der gesamte Prozess von {provider} läuft in einer Sandbox, daher schlagen Schreibzugriffe außerhalb fehl. Nur unter macOS verfügbar.",
 } as const satisfies PartialTranslation<typeof source>;

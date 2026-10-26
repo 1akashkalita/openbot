@@ -50,6 +50,13 @@ Do not start OpenBot with `--no-sandbox`. It is not a supported workaround. The 
 boundary between a web renderer and the rest of your computer, and OpenBot gives its agents full
 local access on the other side of it.
 
+## The Linux AppImage says that no fusermount binary was found
+
+The AppImage mounts itself with FUSE. It does not need libfuse2, but it needs the `fusermount3`
+program. Install the `fuse3` package (`sudo pacman -S fuse3` on Arch Linux and Omarchy,
+`sudo apt install fuse3` on Ubuntu and Debian), then start the AppImage again. With no FUSE, such
+as in a container, start it with `--appimage-extract-and-run`.
+
 ## Remote desktop is missing on Linux
 
 Remote desktop on Linux needs the x64 AppImage and an X11 session. Sunshine captures the X11 screen
@@ -178,6 +185,30 @@ On Windows, the same file is at `%APPDATA%\OpenBot\openbot.db`.
 
 Report the field the message names, together with the details below. The output holds your own file
 paths, so review it before you publish it.
+
+## Routines do not run while the computer sleeps
+
+A routine runs only while the computer is awake and OpenBot is open.
+
+- After a sleep, each overdue routine runs one time, when the network is back. OpenBot does not run
+  each occurrence that it missed.
+- After OpenBot was closed, the routine setting "If OpenBot was closed at the scheduled time"
+  decides: skip the run, or run it one time when OpenBot opens.
+
+On macOS and Windows, turn on Settings → General → **Keep this computer awake**. While the computer
+is connected to power, it then does not sleep when idle. The display can still turn off. A closed
+laptop lid, or a sleep that you select, still sleeps the computer, unless macOS uses an external
+display (closed-display mode). On battery power, the computer sleeps as usual, unless you also turn
+on **Also on battery**.
+
+`pmset -g assertions` can show an OpenBot entry named `WebRTC has active PeerConnections`. It
+exists only while another device is connected to this computer, so the computer can sleep after that
+device disconnects. With the setting on, the entry is named `Electron`.
+
+To see when a Mac slept, run `pmset -g log | grep -E " Sleep | Wake "`. `logs/main/main.log` (see
+[Report a problem](#report-a-problem)) has a `Keeping this computer awake.` line when OpenBot
+starts to keep it awake. For routines that run when no computer of yours is on, use a
+[hosted server](hosted-servers.md) or a [self-hosted server](self-hosted-server.md).
 
 ## A company firewall or proxy blocks OpenBot
 

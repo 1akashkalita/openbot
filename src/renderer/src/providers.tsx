@@ -4,6 +4,11 @@ import {
   agentProviderDescriptor,
   LOCAL_SERVER_ID,
 } from "@openbot/contracts/ipc";
+import { CLAUDE_API_KEY_CAPABILITY } from "@openbot/contracts/team-protocol/claude-api-key-v1";
+import {
+  PROVIDER_ACCOUNT_RELAY_CAPABILITY,
+  PROVIDER_ACCOUNT_RELAY_PROVIDERS,
+} from "@openbot/contracts/team-protocol/provider-account-relay-v1";
 import { PROVIDER_ACCOUNTS_CAPABILITY } from "@openbot/contracts/team-protocol/provider-accounts-v1";
 import { PROVIDER_USAGE_RESET_CAPABILITY } from "@openbot/contracts/team-protocol/provider-usage-reset-v1";
 import { classifyFailure } from "@openbot/telemetry";
@@ -68,12 +73,15 @@ const Providers = createSimpleContext({
         managesRuntimes: () => activeServer()?.kind === "local" || providerAdminServerId() !== undefined,
       },
     );
+    // A boolean, so that a server-list update that keeps the capability does not rebuild the keys.
+    const hostReadsClaudeKey = createMemo(() => serverSupportsCapability(activeServer(), CLAUDE_API_KEY_CAPABILITY));
     /** The provider keys of the computer the providers run on. A saved key is recorded, never its value. */
     const providerKeys = createMemo(() => {
       const serverId = providerAdminServerId();
       const api = serverId ? hostProviderKeyApi(providerAdmin, serverId) : providerKeyApi;
       return {
         ...api,
+        readsClaudeKey: !serverId || hostReadsClaudeKey(),
         setProviderApiKey: async (input: { provider: AgentProviderId; key: string }) => {
           const analytics = desktopAnalytics.scope();
           const tracked = { provider: input.provider, action: "api_key_saved", method: "api_key" } as const;
@@ -363,6 +371,32 @@ const Providers = createSimpleContext({
     }
 
     /**
+     * An account sign-in that the host relays to this computer's browser (`provider-account-relay-v1`).
+     * The other relay requests run it by its provider, and the accounts are read again when it ends.
+     */
+    function accountRelay(serverId: string) {
+      return {
+        providers: PROVIDER_ACCOUNT_RELAY_PROVIDERS,
+        hostName: activeServer()?.name ?? "",
+        start: (provider: AgentProviderId, accountId: string | null) =>
+          providerAdmin().startAccountRelaySignIn({ provider, accountId }, serverId),
+        status: async (provider: AgentProviderId) => {
+          const status = await providerAdmin().relaySignInStatus(provider, serverId);
+          if (status.result) await refreshHostAccounts().catch(() => undefined);
+          return status;
+        },
+        open: (provider: AgentProviderId) => providerAdmin().openRelaySignIn(provider, serverId),
+        paste: (provider: AgentProviderId, address: string) =>
+          providerAdmin().pasteRelaySignIn({ provider, address }, serverId),
+        cancel: async (provider: AgentProviderId) => {
+          const status = await providerAdmin().cancelRelaySignIn(provider, serverId);
+          await refreshHostAccounts().catch(() => undefined);
+          return status;
+        },
+      };
+    }
+
+    /**
      * The provider sign-in as the one object its surfaces take. Onboarding, Settings, the composer
      * and the model picker all offer it, so each offers the same ways in.
      */
@@ -385,6 +419,10 @@ const Providers = createSimpleContext({
                 cancel: (provider) => providerAdmin().cancelHostSignIn(provider, serverId),
               },
               ...(accountsAdminServerId() === serverId ? { accountSignIn: accountSignIn(serverId) } : {}),
+              ...(accountsAdminServerId() === serverId &&
+              serverSupportsCapability(activeServer(), PROVIDER_ACCOUNT_RELAY_CAPABILITY)
+                ? { accountRelay: accountRelay(serverId) }
+                : {}),
               relay: {
                 hostName: activeServer()?.name ?? "",
                 start: (provider) => providerAdmin().startRelaySignIn(provider, serverId),

@@ -1,3 +1,4 @@
+import { providerDisplayName } from "@openbot/contracts/agent-providers";
 import { chatVisualReply } from "@openbot/contracts/chat-visual";
 import type { ConversationMessageSender, MessageReaction } from "@openbot/contracts/ipc";
 import type { ConversationUiBlock } from "@openbot/contracts/ui-blocks";
@@ -5,7 +6,8 @@ import { Button } from "@openbot/ui";
 import type { AgentMessage, ChatActionMarkerModel } from "@openbot/ui/data";
 import { ChannelActivityIndicator } from "@openbot/ui/features/channels/ChannelActivityIndicator";
 import { AgentActivityIndicator } from "@openbot/ui/features/conversation/AgentActivity";
-import { AgentStepsDisclosure } from "@openbot/ui/features/conversation/AgentSteps";
+import { AgentChatEmptyState } from "@openbot/ui/features/conversation/AgentChatEmptyState";
+import { AgentStepsDisclosure, type AgentStepsTrace } from "@openbot/ui/features/conversation/AgentSteps";
 import { AgentTaskChips } from "@openbot/ui/features/conversation/AgentTasks";
 import { AttachmentCards } from "@openbot/ui/features/conversation/AttachmentCards";
 import { UsageLimitAskCard } from "@openbot/ui/features/conversation/BackupModels";
@@ -30,7 +32,7 @@ import { useText } from "@openbot/ui/text";
 import { createMemo, createSignal, For, Loading, lazy, onCleanup, Show, untrack } from "solid-js";
 import { useShowAgentSteps } from "../../agent-steps-preference";
 import { planItems, planTitle } from "../../app-message-projection";
-import { deviceSendShortcut } from "../../send-shortcut-preference";
+import { currentDevicePlatform, deviceSendShortcut } from "../../send-shortcut-preference";
 import { remoteRoutineRecovery } from "../servers/server-capabilities";
 import { speechModelReady } from "../speech/speech-model";
 import { recordingGone, speechReading, spokenReply } from "../speech/speech-playback";
@@ -44,6 +46,7 @@ import {
 } from "../speech/speech-replies";
 import { groupedMessageIds } from "./agent-message-timeline";
 import { continuesSenderRun } from "./chat-grouping";
+import { isChatVisualAppShortcut } from "./chat-visual-shortcuts";
 import { chatVisualPageUrl } from "./chat-visual-url";
 import { conversationRuntime } from "./conversation-runtime";
 import { useConversationViewScope } from "./conversation-scope";
@@ -55,7 +58,7 @@ import { RoutineChatCard } from "./RoutineChatCard";
 import { createChatWebhookRoutines, RoutineWebhookChatCard } from "./RoutineWebhookChatCard";
 import { desktopChatEventRoutinesApi } from "./routine-webhooks-api";
 import { PENDING_SEND_ID_PREFIX, pendingSendRetrySafe } from "./stores/pending-send-store";
-import { createTurnSteps } from "./turn-steps";
+import { createTurnSteps, SUBAGENT_SPAN_PREFIX } from "./turn-steps";
 
 /**
  * A message that renders only an action marker, with no bubble of its own. A routine instruction is
@@ -138,6 +141,7 @@ export function ConversationTimeline() {
     newMessageCount,
     timelineMessages,
     toggleRoutineRun,
+    toggleAgentMessage,
     timelineIndexById,
     unreadBoundaryMessageId,
     moveChatSearch,
@@ -151,6 +155,7 @@ export function ConversationTimeline() {
     openWorkspaceFile,
     openQuote,
     pendingSendFor,
+    presentedQueueDeliveries,
     providerUpdateRequired,
     previewAttachment,
     props,
@@ -158,9 +163,13 @@ export function ConversationTimeline() {
     sendCardMessage,
     reactToMessage,
     renderedAgentActivity,
+    providerOffline,
+    providerSilentMinutes,
     replyJump,
     respondToBrowserTakeover,
     replyToMessage,
+    addPageText,
+    setPageContext,
     retryPendingSend,
     scheduleUnreadDividerVisibilityUpdate,
     setChatSearchQuery,
@@ -182,7 +191,14 @@ export function ConversationTimeline() {
     shownSubagentId,
     toggleSubagentPanel,
   } = useConversationViewScope();
-  const { t, format } = useText();
+  const { t, format, sourceText } = useText();
+  // A named function, not a ternary in the prop: the compiler wraps a ternary prop in a memo, and
+  // the avatar reads it in a tracked effect, where a new memo halts the reactive system.
+  const waitingProviderName = () => {
+    const agent = props.agent;
+    const waiting = providerSilentMinutes() !== null || providerOffline();
+    return waiting && agent ? providerDisplayName(agent.provider) : undefined;
+  };
   /** An agent reply can be read aloud by this computer's speech model, in this chat's voice. */
   const readAloudAction = (message: AgentMessage) => {
     const agentId = props.agent?.id;
@@ -283,6 +299,76 @@ export function ConversationTimeline() {
       name: (member ? teamMemberName(member) : sender.name.trim()) || t("chat.message.memberFallback"),
       avatarSeed: sender.id,
     };
+  };
+  /** The agent messages of the chat by their exchange id, so a marker finds its text and its request. */
+  const agentMessagesByExchangeId = createMemo(
+    () =>
+      new Map(
+        props.messages.flatMap((message) => (message.exchange ? [[message.exchange.messageId, message] as const] : [])),
+      ),
+  );
+  const exchangeAuthor = (message: AgentMessage): ChatMessageAuthor => {
+    const agentId = message.exchange?.senderAgentId;
+    const agent = props.agents.find((candidate) => candidate.id === agentId);
+    return { kind: "agent", name: agent?.name ?? t("chat.message.agentFallback"), agent, avatarSeed: agentId };
+  };
+  // The request of an agent message is another agent message, or a message of this chat.
+  const exchangeRequest = (replyToMessageId: string | null | undefined) =>
+    replyToMessageId
+      ? (agentMessagesByExchangeId().get(replyToMessageId) ??
+        props.messages.find((candidate) => candidate.id === replyToMessageId) ??
+        props.messageReferences?.[replyToMessageId])
+      : undefined;
+  const requestAuthorName = (request: AgentMessage): string | undefined => {
+    if (request.exchange) return exchangeAuthor(request).name;
+    const sender = otherSender(request);
+    if (sender) return memberAuthor(sender).name;
+    return request.author === "agent" ? props.agent?.name : undefined;
+  };
+  /*
+   * The text of an agent message opens under its marker as the sender's message, with a quote of the
+   * request it answers. Its attachments stay under the marker, so the row draws none.
+   */
+  const agentMessageText = (messageId: string) => {
+    const message = () => agentMessagesByExchangeId().get(messageId);
+    const request = () => exchangeRequest(message()?.exchange?.replyToMessageId);
+    const quoted = (): AgentMessage | undefined => {
+      const current = request();
+      return (
+        current && { id: current.id, author: current.author, body: current.body, time: current.time, kind: "text" }
+      );
+    };
+    const quotedAuthorName = () => {
+      const current = request();
+      return current && requestAuthorName(current);
+    };
+    return (
+      <Show when={message()}>
+        {(current) => (
+          <ChatMessageRow
+            message={{
+              id: current().id,
+              author: "agent",
+              body: current().body,
+              time: current().time,
+              ...(current().createdAt === undefined ? {} : { createdAt: current().createdAt }),
+              kind: "text",
+            }}
+            author={exchangeAuthor(current())}
+            showAuthor
+            showTime
+            agents={props.agents}
+            referencedMessage={quoted()}
+            referencedAuthorName={quotedAuthorName()}
+            onSelectAgent={props.onSelectAgent}
+            onOpenLink={(url) => void openExternalMessageUrl(url)}
+            onPreview={(attachment) => void previewAttachment(attachment)}
+            onAttachmentAction={attachmentAction}
+            onOpenQuote={openQuote}
+          />
+        )}
+      </Show>
+    );
   };
   // A run of one sender breaks where another person starts to write, and in a channel where another
   // agent starts to write.
@@ -392,6 +478,34 @@ export function ConversationTimeline() {
     activeTurnId: () => props.activeTurnId,
   });
   const showAgentSteps = useShowAgentSteps();
+  const traceKeyboard = currentDevicePlatform() === "darwin" ? "mac" : "pc";
+  /** The trace that the steps row above an answer opens. */
+  const traceAbove = (messageId: string | undefined): AgentStepsTrace => ({
+    spans: () =>
+      turnSteps.traceAbove(messageId, {
+        agent: props.agent?.name ?? t("chat.message.agentFallback"),
+        thinking: t("chat.trace.step.thinking"),
+        answer: t("chat.trace.step.answer"),
+        progress: sourceText,
+        message: (agents) => t("chat.trace.step.message", { agents }),
+        subagent: (title) => t("chat.trace.step.subagent", { title }),
+        reply: t("chat.trace.step.reply"),
+        agentNames: (ids) =>
+          format.list(
+            ids.map(
+              (id) => props.agents.find((candidate) => candidate.id === id)?.name ?? t("chat.message.agentFallback"),
+            ),
+          ),
+      }),
+    keyboard: traceKeyboard,
+    // The chat shows a subagent of the trace in the side panel, as its card in the chat does.
+    canSelectSpan: (id) => id.startsWith(SUBAGENT_SPAN_PREFIX),
+    onSelectSpan: (id) => {
+      const subagentId = id.slice(SUBAGENT_SPAN_PREFIX.length);
+      if (shownSubagentId() !== subagentId) toggleSubagentPanel(subagentId);
+    },
+  });
+  const channelWorkingSteps = createMemo(() => (channel ? turnSteps.workingSteps(channel.workingTurns()) : []));
   let cachedPrompt: { key: string; prompt: NonNullable<ConversationProps["prompt"]> } | null = null;
   const keyedPrompt = createMemo(() => {
     const prompt = props.prompt;
@@ -409,6 +523,28 @@ export function ConversationTimeline() {
    * agent asked without one, the prompt's questions draw it.
    */
   const pendingPromptBlock = createMemo(() => (keyedPrompt() ? props.promptUiBlock : undefined));
+  /**
+   * A direct chat with no message yet, and no turn, queued send or question. A queued send leaves the
+   * timeline for the queue tray, and the activity line shows only after a delay, so both are read here.
+   * Its empty state plays a faint turn from the agent's own routine and skill.
+   */
+  const emptyAgent = createMemo(() =>
+    !channel &&
+    timelineMessages().length === 0 &&
+    !props.hasOlder &&
+    !props.activeTurnId &&
+    presentedQueueDeliveries().length === 0 &&
+    !renderedAgentActivity() &&
+    !keyedPrompt()
+      ? props.agent
+      : undefined,
+  );
+  const sampleRoutinePrompt = () =>
+    props.routines?.find((routine) => routine.active && routine.instruction.trim())?.instruction ??
+    props.routines?.find((routine) => routine.instruction.trim())?.instruction;
+  // A skill of the agent's own: every agent has the managed OpenBot skills.
+  const sampleSkillName = () =>
+    installedSkills().find((skill) => skill.enabled !== false && skill.origin !== "managed")?.name;
   return (
     <>
       <span class="sr-only" role="status" aria-live="polite" aria-atomic="true">
@@ -482,7 +618,17 @@ export function ConversationTimeline() {
             <Show when={timelineMessages().length === 0}>
               <channel.EmptyState />
             </Show>
-          ) : null}
+          ) : (
+            <Show when={emptyAgent()}>
+              {(agent) => (
+                <AgentChatEmptyState
+                  agent={agent()}
+                  samplePrompt={sampleRoutinePrompt()}
+                  sampleSkillName={sampleSkillName()}
+                />
+              )}
+            </Show>
+          )}
           <div
             ref={setVirtualRootElement}
             class={["virtual-chat-list", { "virtual-chat-list-static": !messageVirtualizer.isVirtualized() }]}
@@ -670,6 +816,8 @@ export function ConversationTimeline() {
                                                 onOpenRoutine={openRoutineSettings}
                                                 onOpenHostedSite={(url) => void openExternalMessageUrl(url)}
                                                 onToggleRoutineRun={toggleRoutineRun}
+                                                onToggleAgentMessage={toggleAgentMessage}
+                                                agentMessageText={agentMessageText}
                                               />
                                             }
                                           >
@@ -709,6 +857,7 @@ export function ConversationTimeline() {
                                         messageId={message()?.id ?? initialMessage.id}
                                         appId={suggestion().appId}
                                         connectors={props.connectors}
+                                        mcpServers={mcpServers()}
                                         onOpenMarketplaceApp={props.onOpenMarketplaceApp}
                                       />
                                     )}
@@ -962,6 +1111,9 @@ export function ConversationTimeline() {
                             title={(message() ?? initialMessage).body}
                             height={visual().height}
                             onOpenLink={(url) => void openExternalMessageUrl(url)}
+                            onMessage={addPageText}
+                            onContext={(text) => setPageContext(message() ?? initialMessage, text)}
+                            isAppShortcut={isChatVisualAppShortcut}
                           />
                         </article>
                       </ChatRowBoundary>
@@ -1028,10 +1180,15 @@ export function ConversationTimeline() {
                         }}
                       />
                     </Show>
-                    <Show when={channel ? undefined : turnSteps.stepsAbove(message()?.id)}>
+                    <Show when={turnSteps.stepsAbove(message()?.id)}>
                       {(steps) => (
                         <ChatRowBoundary>
-                          <AgentStepsDisclosure steps={steps()} defaultOpen={showAgentSteps()} />
+                          <AgentStepsDisclosure
+                            steps={steps()}
+                            defaultOpen={showAgentSteps()}
+                            trace={traceAbove(message()?.id)}
+                            facts={turnSteps.factsAbove(message()?.id)}
+                          />
                         </ChatRowBoundary>
                       )}
                     </Show>
@@ -1208,7 +1365,11 @@ export function ConversationTimeline() {
               when={!channel}
               fallback={
                 <Show when={channel && channel.workers().length > 0}>
-                  <ChannelActivityIndicator workers={channel?.workers() ?? []} />
+                  <ChannelActivityIndicator
+                    workers={channel?.workers() ?? []}
+                    steps={channelWorkingSteps()}
+                    stepsOpenByDefault={showAgentSteps()}
+                  />
                 </Show>
               }
             >
@@ -1222,6 +1383,7 @@ export function ConversationTimeline() {
                     since={activity().since}
                     steps={turnSteps.activeSteps()}
                     stepsOpenByDefault={showAgentSteps()}
+                    waitingFor={waitingProviderName()}
                   />
                 )}
               </Show>
@@ -1306,10 +1468,11 @@ export function ConversationTimeline() {
                 onOpen={openBrowserTakeoverTab}
                 onComplete={() => respondToBrowserTakeover("complete")}
                 onCancel={() => respondToBrowserTakeover("cancel")}
-                onSignInLocally={localSignIn.canStart(browserTakeoverTab()) ? localSignIn.startForTakeover : undefined}
+                onSignInLocally={localSignIn.canStartForTakeover() ? localSignIn.startForTakeover : undefined}
                 signInBlocked={localSignIn.blockedTakeover()}
                 browserSecret={{
                   loadPreview: runtime.browser.capturePreview,
+                  vaultSave: props.server?.kind === "local",
                   onRespond: runtime.agent.respondToBrowserSecret,
                 }}
               />

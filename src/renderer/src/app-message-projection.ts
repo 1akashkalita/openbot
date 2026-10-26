@@ -6,6 +6,7 @@ import {
   hostedSiteConversationEvent,
   isChannelChangeMarker,
   isContextResetMarker,
+  isVaultChangeMarker,
   marketplaceSuggestionEvent,
   mcpSignInEvent,
   modelSwitchReason,
@@ -46,10 +47,12 @@ export function toAgentProfile(stored: ClientAgentSummary): AgentProfile {
     ...(stored.quickAcknowledgement === undefined ? {} : { quickAcknowledgement: stored.quickAcknowledgement }),
     ...(stored.fastMode === undefined ? {} : { fastMode: stored.fastMode }),
     ...(stored.ownBrowserSession === undefined ? {} : { ownBrowserSession: stored.ownBrowserSession }),
+    ...(stored.browserProfileId === undefined ? {} : { browserProfileId: stored.browserProfileId }),
     ...(stored.busyMessageMode === undefined ? {} : { busyMessageMode: stored.busyMessageMode }),
     ...(stored.taskLimit === undefined ? {} : { taskLimit: stored.taskLimit }),
     ...(stored.backupModels === undefined ? {} : { backupModels: stored.backupModels }),
     ...(stored.usageLimitReturn === undefined ? {} : { usageLimitReturn: stored.usageLimitReturn }),
+    ...(stored.pendingRuntime === undefined ? {} : { pendingRuntime: stored.pendingRuntime }),
     threadId: stored.threadId,
     workspacePath: stored.workspacePath,
     avatarSeed: stored.avatarSeed,
@@ -121,6 +124,7 @@ export function toAgentMessage(message: ConversationMessage, ownerAgentId?: stri
     ...(plan ? { plan } : {}),
     ...(subagents?.length ? { subagents } : {}),
     ...(memoryChanges && message.memoryChanges ? { memoryChanges: message.memoryChanges } : {}),
+    ...(message.trace === undefined ? {} : { trace: message.trace }),
     ...(status === undefined ? {} : { status }),
   };
 }
@@ -187,6 +191,7 @@ export function toAgentMessages(
       existing.itemIds = [...(existing.itemIds ?? []), message.id];
       existing.itemCreatedAt = [...(existing.itemCreatedAt ?? []), message.createdAt];
       existing.streaming = existing.streaming || message.status === "streaming";
+      if (message.trace) existing.trace = message.trace;
       continue;
     }
 
@@ -204,6 +209,7 @@ export function toAgentMessages(
       items: [text],
       itemIds: [message.id],
       itemCreatedAt: [message.createdAt],
+      ...(message.trace === undefined ? {} : { trace: message.trace }),
     };
     thinkingByTurn.set(key, thinking);
     result.push(thinking);
@@ -224,8 +230,17 @@ export function agentProfilesEqual(left: AgentProfile, right: AgentProfile): boo
     left.providerAccountId === right.providerAccountId &&
     JSON.stringify(left.backupModels) === JSON.stringify(right.backupModels) &&
     JSON.stringify(left.usageLimitReturn) === JSON.stringify(right.usageLimitReturn) &&
+    JSON.stringify(left.pendingRuntime) === JSON.stringify(right.pendingRuntime) &&
     left.access === right.access &&
     left.computerUse === right.computerUse &&
+    left.allowAutomation === right.allowAutomation &&
+    left.allowNewChat === right.allowNewChat &&
+    left.quickAcknowledgement === right.quickAcknowledgement &&
+    left.fastMode === right.fastMode &&
+    left.ownBrowserSession === right.ownBrowserSession &&
+    left.browserProfileId === right.browserProfileId &&
+    left.busyMessageMode === right.busyMessageMode &&
+    left.taskLimit === right.taskLimit &&
     left.threadId === right.threadId &&
     left.avatarSeed === right.avatarSeed &&
     left.avatarHue === right.avatarHue &&
@@ -319,6 +334,7 @@ function chatActionMarker(
     return { kind: "model-switch", reason: switchReason, text: message.text, timestamp: message.createdAt };
   if (isChannelChangeMarker(message))
     return { kind: "channel-change", text: message.text, timestamp: message.createdAt };
+  if (isVaultChangeMarker(message)) return { kind: "vault-change", text: message.text, timestamp: message.createdAt };
   const skillEvent = skillConversationEvent(message);
   if (skillEvent) return { ...skillEvent, kind: "skill-lifecycle", timestamp: message.createdAt };
   const suggestion = marketplaceSuggestionEvent(message);

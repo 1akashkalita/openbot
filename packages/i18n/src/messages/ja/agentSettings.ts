@@ -75,8 +75,6 @@ export const messages = {
   "agentSettings.avatar.processFailed": "エージェントのアバターを処理できませんでした。",
 
   "agentSettings.runtime.model": "エージェントのモデル",
-  "agentSettings.runtime.providerBusy":
-    "プロバイダーやアカウントを変更する前に、現在の作業が終わるまでお待ちください。",
   "agentSettings.runtime.modelUnavailable": "エージェント CLI が接続されると、モデルを選択できます。",
   "agentSettings.runtime.reasoning": "推論",
   "agentSettings.runtime.reasoningLabel": "エージェントの推論レベル",
@@ -157,9 +155,15 @@ export const messages = {
   "agentSettings.quickAcknowledgement.title": "長いタスクの前に計画を表示",
   "agentSettings.quickAcknowledgement.description":
     "長いタスクの前に、エージェントが計画を表示します。10 秒後、または開始を押すと始まります。",
-  "agentSettings.ownBrowserSession.title": "専用のブラウザーセッション",
-  "agentSettings.ownBrowserSession.description":
-    "エージェントのタブは専用のサインインと Cookie を保持します。変更すると、エージェントの開いているタブが閉じます。",
+  "agentSettings.browserProfile.label": "ブラウザープロファイル",
+  "agentSettings.browserProfile.shared": "共有",
+  "agentSettings.browserProfile.agent": "このエージェントのみ",
+  "agentSettings.browserProfile.missing": "削除されたプロファイル",
+  "agentSettings.browserProfile.new": "新しいプロファイル",
+  "agentSettings.browserProfile.manageTitle": "ブラウザープロファイル",
+  "agentSettings.browserProfile.manageDescription":
+    "各プロファイルは専用のサインインと Cookie を保持します。変更すると、エージェントの開いているタブが閉じます。",
+  "agentSettings.browserProfile.manage": "管理",
   "agentSettings.runtime.workspaceEnforcedProcess":
     "{provider} のプロセス全体がサンドボックス内で実行されるため、外部への書き込みは失敗します。macOS でのみ利用できます。",
 } as const satisfies PartialTranslation<typeof source>;

@@ -17,6 +17,8 @@ import {
 import { parseHostedSiteList, parseHostedSiteSummary } from "@openbot/contracts/hosted-sites";
 import {
   type AccountSession,
+  AGENT_DEFAULT_KEYS,
+  type AgentDefaults,
   type AgentMemoryLimitPreference,
   type AnalyticsPreference,
   type AppAppearancePreference,
@@ -32,16 +34,25 @@ import {
   type CentralAuthIssue,
   type CentralAuthState,
   type CentralAuthUser,
+  type ChatWindowTarget,
+  CUSTOM_AGENT_LIMITS,
   type CustomAgentCheckResult,
   type CustomAgentResult,
   type CustomAgentSummary,
+  type CustomAgentUsage,
   type CustomProviderResult,
   type CustomProviderSummary,
+  DEFAULT_AGENT_DEFAULTS,
   type DetectedAcpAgent,
   type DetectedModelServer,
   type DiscoverModelsResult,
+  decodeExternalLinkTarget,
   decodeScheduledUpdateRestart,
   type ExportResult,
+  type ExternalLinkBrowser,
+  type ExternalLinkBrowsers,
+  type ExternalLinkFallback,
+  type ExternalLinkPreference,
   type GitHubConnectorRepositories,
   type GitHubConnectorStatus,
   type HostedSiteList,
@@ -60,6 +71,7 @@ import {
   isCustomAgentCheckResult,
   isCustomAgentResult,
   isCustomAgentSummary,
+  isCustomAgentUsage,
   isCustomProviderResult,
   isCustomProviderSummary,
   isDetectedAcpAgent,
@@ -154,6 +166,13 @@ export function decodeBusyMessageModePreference(value: unknown): BusyMessageMode
   return { mode: preference.mode };
 }
 
+export function decodeAgentDefaults(value: unknown): AgentDefaults {
+  const defaults = decodeRecord(value, "agent defaults");
+  const decoded = { ...DEFAULT_AGENT_DEFAULTS };
+  for (const key of AGENT_DEFAULT_KEYS) decoded[key] = requiredBoolean(defaults, key);
+  return decoded;
+}
+
 export function decodeAgentMemoryLimitPreference(value: unknown): AgentMemoryLimitPreference {
   const preference = decodeRecord(value, "agent memory limit preference");
   if (!isAgentMemoryLimit(preference.limit)) throw new Error("Invalid agent memory limit.");
@@ -175,13 +194,23 @@ export function decodeAppLogoColorPreference(value: unknown): AppLogoColorPrefer
 export function decodeAppAppearancePreference(value: unknown): AppAppearancePreference {
   const preference = decodeRecord(value, "appearance preference");
   if (!isAppAppearance(preference.appearance)) throw new Error("Invalid appearance.");
-  return { appearance: preference.appearance };
+  if (typeof preference.transparentWindow !== "boolean") throw new Error("Invalid transparent window.");
+  return { appearance: preference.appearance, transparentWindow: preference.transparentWindow };
 }
 
 export function decodeAppInterfaceSizePreference(value: unknown): AppInterfaceSizePreference {
   const preference = decodeRecord(value, "interface size preference");
   if (!isAppInterfaceSize(preference.percent)) throw new Error("Invalid interface size.");
   return { percent: preference.percent };
+}
+
+export function decodeChatWindowTargets(value: unknown): ChatWindowTarget[] {
+  if (!Array.isArray(value)) throw new Error("Invalid chat windows.");
+  return value.map((item) => {
+    const target = decodeRecord(item, "chat window");
+    if (!isString(target.serverId) || !isString(target.agentId)) throw new Error("Invalid chat window.");
+    return { serverId: target.serverId, agentId: target.agentId };
+  });
 }
 
 export function decodeCentralAuthState(value: unknown): CentralAuthState {
@@ -323,7 +352,37 @@ export function decodeAppBehaviorPreference(value: unknown): AppBehaviorPreferen
   return {
     launchAtLogin: nullableBoolean(preference, "launchAtLogin"),
     keepRunningInBackground: nullableBoolean(preference, "keepRunningInBackground"),
+    keepAwake: nullableBoolean(preference, "keepAwake"),
+    keepAwakeOnBattery: nullableBoolean(preference, "keepAwakeOnBattery"),
   };
+}
+
+export function decodeExternalLinkPreference(value: unknown): ExternalLinkPreference {
+  const target = decodeExternalLinkTarget(decodeRecord(value, "external link preference").target);
+  if (!target) throw new Error("Invalid external link target.");
+  return { target };
+}
+
+function decodeExternalLinkBrowser(value: unknown): ExternalLinkBrowser {
+  const browser = decodeRecord(value, "browser");
+  return { name: requiredString(browser, "name"), path: requiredString(browser, "path") };
+}
+
+export function decodeExternalLinkBrowserOrNull(value: unknown): ExternalLinkBrowser | null {
+  return value === null ? null : decodeExternalLinkBrowser(value);
+}
+
+export function decodeExternalLinkBrowsers(value: unknown): ExternalLinkBrowsers {
+  const list = decodeRecord(value, "browser list");
+  if (!Array.isArray(list.browsers)) throw new Error("Invalid browser list.");
+  return {
+    defaultBrowser: decodeExternalLinkBrowserOrNull(list.defaultBrowser),
+    browsers: list.browsers.map(decodeExternalLinkBrowser),
+  };
+}
+
+export function decodeExternalLinkFallback(value: unknown): ExternalLinkFallback {
+  return { name: requiredString(decodeRecord(value, "external link fallback"), "name") };
 }
 
 export function decodeRemoteSessionReusePreference(value: unknown): RemoteSessionReusePreference {
@@ -548,6 +607,13 @@ export function decodeCustomAgents(value: unknown): CustomAgentSummary[] {
 
 export function decodeCustomAgentResult(value: unknown): CustomAgentResult {
   if (!isCustomAgentResult(value)) throw new Error("Invalid custom agent response.");
+  return value;
+}
+
+export function decodeCustomAgentUsage(value: unknown): CustomAgentUsage[] {
+  if (!Array.isArray(value) || value.length > CUSTOM_AGENT_LIMITS.agents || !value.every(isCustomAgentUsage)) {
+    throw new Error("Invalid custom agent usage response.");
+  }
   return value;
 }
 

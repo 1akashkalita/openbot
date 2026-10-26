@@ -1,7 +1,9 @@
 import {
+  AGENT_DEFAULT_KEYS,
   type ApprovalAutomationPreference,
   agentAutoApprovalEnabled,
   type DynamicIslandGeometry,
+  type ExternalLinkTarget,
 } from "@openbot/contracts/ipc";
 import { DEFAULT_GENERAL_SETTINGS, type GeneralSettingsValue } from "@openbot/ui/features/settings/app-settings";
 import { currentText } from "@openbot/ui/text";
@@ -21,6 +23,10 @@ import { isOpenSettingsShortcut } from "./settings-shortcut";
 import type { SettingsTab } from "./settings-tabs";
 
 const ANALYTICS_APP_VERSION_STORAGE_KEY = "openbot:analytics-app-version";
+
+function sameExternalLinkTarget(left: ExternalLinkTarget, right: ExternalLinkTarget): boolean {
+  return left.kind === right.kind && (left.kind !== "app" || right.kind !== "app" || left.path === right.path);
+}
 
 /** Tells the user why a switch went back to its previous value. */
 function showSaveFailure(error: unknown): void {
@@ -131,10 +137,14 @@ const Settings = createSimpleContext({
     let autoInstallUpdatesChanged = false;
     let notificationPreferenceChanged = false;
     let busyMessageModeChanged = false;
+    let agentDefaultsChanged = false;
     let agentMemoryLimitChanged = false;
     let keepRemoteSessionsChanged = false;
+    let externalLinkTargetChanged = false;
     let launchAtLoginChanged = false;
     let keepRunningInBackgroundChanged = false;
+    let keepAwakeChanged = false;
+    let keepAwakeOnBatteryChanged = false;
 
     createEffect(
       () => ({
@@ -162,7 +172,8 @@ const Settings = createSimpleContext({
             // Version attribution is optional and must not block startup.
           }
         }
-        if (analyticsOpened) return;
+        // A chat window is not another start of the app.
+        if (analyticsOpened || platform.chatWindow) return;
         analyticsOpened = true;
         desktopAnalytics.track("desktop_app_opened", {
           setup_completed: setup.completed,
@@ -266,6 +277,10 @@ const Settings = createSimpleContext({
           (preference) => preference.mode,
         );
       }
+      if (AGENT_DEFAULT_KEYS.some((key) => previous.agentDefaults[key] !== value.agentDefaults[key])) {
+        agentDefaultsChanged = true;
+        persistField("agentDefaults", settingsPort().setAgentDefaults({ ...value.agentDefaults }), (saved) => saved);
+      }
       // A hidden switch is null and cannot change.
       if (value.launchAtLogin !== null && previous.launchAtLogin !== value.launchAtLogin) {
         launchAtLoginChanged = true;
@@ -284,6 +299,30 @@ const Settings = createSimpleContext({
           "keepRunningInBackground",
           settingsPort().setAppBehaviorPreference({ keepRunningInBackground: value.keepRunningInBackground }),
           (preference) => preference.keepRunningInBackground,
+        );
+      }
+      if (value.keepAwake !== null && previous.keepAwake !== value.keepAwake) {
+        keepAwakeChanged = true;
+        persistField(
+          "keepAwake",
+          settingsPort().setAppBehaviorPreference({ keepAwake: value.keepAwake }),
+          (preference) => preference.keepAwake,
+        );
+      }
+      if (value.keepAwakeOnBattery !== null && previous.keepAwakeOnBattery !== value.keepAwakeOnBattery) {
+        keepAwakeOnBatteryChanged = true;
+        persistField(
+          "keepAwakeOnBattery",
+          settingsPort().setAppBehaviorPreference({ keepAwakeOnBattery: value.keepAwakeOnBattery }),
+          (preference) => preference.keepAwakeOnBattery,
+        );
+      }
+      if (!sameExternalLinkTarget(previous.externalLinkTarget, value.externalLinkTarget)) {
+        externalLinkTargetChanged = true;
+        persistField(
+          "externalLinkTarget",
+          settingsPort().setExternalLinkPreference({ target: value.externalLinkTarget }),
+          (preference) => preference.target,
         );
       }
       if (previous.keepRemoteSessions !== value.keepRemoteSessions) {
@@ -397,8 +436,17 @@ const Settings = createSimpleContext({
           autoInstallUpdates: preference.autoInstall,
         }));
       });
+      // A page can open from main with no click here, such as a sign-in page, so main sends the notice.
+      const unsubscribeLinkFallback = settingsPort().onExternalLinkFallback(({ name }) => {
+        const { t } = currentText();
+        actionToast.warning(t("settings.externalLinks.fallback.title", { name }), {
+          id: "external-link-fallback",
+          description: t("settings.externalLinks.fallback.description"),
+        });
+      });
       return () => {
         window.removeEventListener("keydown", handleSettingsShortcut);
+        unsubscribeLinkFallback();
         unsubscribe();
         unsubscribeApprovals();
         unsubscribeMemoryLimit();
@@ -451,6 +499,12 @@ const Settings = createSimpleContext({
             setGeneralSettings((current) => ({ ...current, busyMessageMode: preference.mode }));
           }),
         settingsPort()
+          .getAgentDefaults()
+          .then((defaults) => {
+            if (agentDefaultsChanged) return;
+            setGeneralSettings((current) => ({ ...current, agentDefaults: defaults }));
+          }),
+        settingsPort()
           .getAgentMemoryLimitPreference()
           .then((preference) => {
             if (agentMemoryLimitChanged) return;
@@ -465,7 +519,17 @@ const Settings = createSimpleContext({
               keepRunningInBackground: keepRunningInBackgroundChanged
                 ? current.keepRunningInBackground
                 : preference.keepRunningInBackground,
+              keepAwake: keepAwakeChanged ? current.keepAwake : preference.keepAwake,
+              keepAwakeOnBattery: keepAwakeOnBatteryChanged
+                ? current.keepAwakeOnBattery
+                : preference.keepAwakeOnBattery,
             }));
+          }),
+        settingsPort()
+          .getExternalLinkPreference()
+          .then((preference) => {
+            if (externalLinkTargetChanged) return;
+            setGeneralSettings((current) => ({ ...current, externalLinkTarget: preference.target }));
           }),
         settingsPort()
           .getRemoteSessionReusePreference()
@@ -483,21 +547,24 @@ const Settings = createSimpleContext({
               notificationPreview: preference.messagePreview,
             }));
           }),
-        settingsPort()
-          .dynamicIsland.getPreference()
-          .then((preference) =>
-            setGeneralSettings((current) => ({
-              ...current,
-              macBookNotch: preference.enabled,
-              macBookNotchHaptics: preference.hapticsEnabled,
-              macBookNotchIdle: preference.idleVisible,
-              macBookNotchAdditionalDisplays: preference.additionalDisplaysEnabled,
-              macBookNotchWidthPercent: preference.widthPercent,
-              macBookNotchHeightPercent: preference.heightPercent,
-              macBookNotchServers: preference.serverVisibility,
-              macBookNotchNewServers: preference.newServersVisible,
-            })),
-          ),
+        // Main accepts island calls only from the main window, which owns the island.
+        platform.chatWindow
+          ? Promise.resolve()
+          : settingsPort()
+              .dynamicIsland.getPreference()
+              .then((preference) =>
+                setGeneralSettings((current) => ({
+                  ...current,
+                  macBookNotch: preference.enabled,
+                  macBookNotchHaptics: preference.hapticsEnabled,
+                  macBookNotchIdle: preference.idleVisible,
+                  macBookNotchAdditionalDisplays: preference.additionalDisplaysEnabled,
+                  macBookNotchWidthPercent: preference.widthPercent,
+                  macBookNotchHeightPercent: preference.heightPercent,
+                  macBookNotchServers: preference.serverVisibility,
+                  macBookNotchNewServers: preference.newServersVisible,
+                })),
+              ),
       ]).then((results) => {
         setPreferencesLoad(results.some((result) => result.status === "rejected") ? "failed" : "loaded");
       });
@@ -509,6 +576,7 @@ const Settings = createSimpleContext({
         .getApprovalAutomation()
         .then(setApprovalAutomation)
         .catch(() => undefined);
+      if (platform.chatWindow) return;
       void settingsPort()
         .dynamicIsland.getBuiltInDisplayGeometry()
         .then((geometry) => setBuiltInDisplayGeometry(geometry))

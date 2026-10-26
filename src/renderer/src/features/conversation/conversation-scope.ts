@@ -5,7 +5,7 @@ import {
   fileQuoteTarget,
   limitedQuoteText,
 } from "@openbot/contracts/chat-tag-references";
-import type { McpSignInRelayPage, UpdateAgentInput } from "@openbot/contracts/ipc";
+import { type McpSignInRelayPage, relayableSignInLink, type UpdateAgentInput } from "@openbot/contracts/ipc";
 import type { QuoteRequest } from "@openbot/ui/features/conversation/ComposerEditor";
 import { currentText } from "@openbot/ui/text";
 import { usesTouchLayout } from "@openbot/ui/utils";
@@ -25,7 +25,13 @@ import { createAttachmentImportSounds } from "./attachment-import-sounds";
 import { useConversationController } from "./conversation-controller-context";
 import { agentConversationKey, composerDraftKey } from "./conversation-keys";
 import { conversationRuntime } from "./conversation-runtime";
-import type { ComposerDraft, ConversationProps, ConversationTarget, SidePanelPane } from "./conversation-types";
+import type {
+  AgentSettingsRequest,
+  ComposerDraft,
+  ConversationProps,
+  ConversationTarget,
+  SidePanelPane,
+} from "./conversation-types";
 import {
   clearQuotedTextHighlight,
   highlightQuotedText,
@@ -54,6 +60,18 @@ import { createVoiceStore } from "./stores/voice-store";
 
 /** A keyboard or wheel scroll moves the chat within a few frames of its input. */
 const READER_INPUT_WINDOW_MS = 250;
+
+/**
+ * Settings requests that a chat has already opened. The request stays set after it is handled, and the
+ * chat mounts again when the user comes back from another page; it must not open a new routine again.
+ */
+const handledSettingsRequests = new WeakSet<AgentSettingsRequest>();
+
+/** An http or https page that the built-in browser can show. A relayed sign-in page needs this computer's browser. */
+function builtInBrowserPage(url: string): boolean {
+  const page = URL.parse(url);
+  return (page?.protocol === "http:" || page?.protocol === "https:") && relayableSignInLink(url) === null;
+}
 
 function followConversationBottom(element: HTMLDivElement): void {
   element.scrollTop = element.scrollHeight - element.clientHeight;
@@ -87,6 +105,7 @@ export function createConversationViewScope(props: ConversationProps) {
     setEditingOriginalAttachmentIds,
     editingPendingSave,
     setEditingPendingSave,
+    persistDrafts,
     composerFocusRequest,
     setComposerFocusRequest,
     pendingSends,
@@ -357,6 +376,8 @@ export function createConversationViewScope(props: ConversationProps) {
     setAgentActivitySpaceReserved,
     agentActivity,
     runningTurnRuntime,
+    providerSilentMinutes,
+    providerOffline,
   } = activity;
   const browser = createBrowserStore({
     props,
@@ -491,6 +512,7 @@ export function createConversationViewScope(props: ConversationProps) {
     messageVirtualizer,
     timelineMessages,
     toggleRoutineRun,
+    toggleAgentMessage,
     timelineIndexById,
     unreadBoundaryMessageId,
     updateScrollFade,
@@ -596,6 +618,7 @@ export function createConversationViewScope(props: ConversationProps) {
     setEditingOriginalAttachmentIds,
     editingPendingSave,
     setEditingPendingSave,
+    persistQueueEdit: persistDrafts,
     submitting,
     setSubmitting,
     voicePhase,
@@ -697,7 +720,7 @@ export function createConversationViewScope(props: ConversationProps) {
     setComposerError: setScopedComposerError,
     setComposerFocusRequest,
   });
-  const { replyToMessage, reactToMessage, copyMessage, removeAttachment } = messageActions;
+  const { replyToMessage, addPageText, setPageContext, reactToMessage, copyMessage, removeAttachment } = messageActions;
   const settings = createSettingsStore({
     props,
     runtimeSettingsAttempts: resources.runtimeSettingsAttempts,
@@ -748,7 +771,6 @@ export function createConversationViewScope(props: ConversationProps) {
   let stickToLatest = true;
   let lastConversationIdentity: string | undefined;
   let lastPanelAgentId: string | undefined;
-  let lastHandledSettingsRequestNonce: number | undefined;
   let lastHandledMessageFocusNonce: number | undefined;
   const [quoteRequest, setQuoteRequest] = createSignal<QuoteRequest | undefined>(undefined);
   let lastRuntimeSettingsSignature: string | undefined;
@@ -1171,11 +1193,21 @@ export function createConversationViewScope(props: ConversationProps) {
     () => {
       const agent = props.agent;
       if (!agent) return null;
+      const queued = agent.pendingRuntime;
       return {
-        signature: [agent.id, agent.provider, agent.model, agent.reasoningEffort].join("\u0000"),
-        provider: agent.provider,
-        model: agent.model,
-        reasoningEffort: agent.reasoningEffort,
+        signature: [
+          agent.id,
+          agent.provider,
+          agent.model,
+          agent.reasoningEffort,
+          queued?.provider,
+          queued?.model,
+          queued?.reasoningEffort,
+          queued?.providerAccountId,
+        ].join("\u0000"),
+        provider: queued?.provider ?? agent.provider,
+        model: queued?.model ?? agent.model,
+        reasoningEffort: queued?.reasoningEffort ?? agent.reasoningEffort,
       };
     },
     (agent) => {
@@ -1235,7 +1267,7 @@ export function createConversationViewScope(props: ConversationProps) {
     },
     ({ agentId, panel, request }) => {
       const settingsRequested =
-        request !== null && agentId === request.agentId && request.nonce !== lastHandledSettingsRequestNonce;
+        request !== null && agentId === request.agentId && !handledSettingsRequests.has(request);
       if (agentId !== lastPanelAgentId) {
         resetPanelsForAgent(agentId, panel);
         // The user can type to the agent they opened. Edit agent leaves the focus where it is, and a touch
@@ -1244,7 +1276,7 @@ export function createConversationViewScope(props: ConversationProps) {
           setComposerFocusRequest((value) => value + 1);
       }
       if (!request || !settingsRequested) return;
-      lastHandledSettingsRequestNonce = request.nonce;
+      handledSettingsRequests.add(request);
       if (request.routine) openRoutineSettings(request.routine);
       else setActiveRightPanel("settings", agentId);
     },
@@ -1382,6 +1414,19 @@ export function createConversationViewScope(props: ConversationProps) {
     const target = currentTarget();
     const runtime = conversationRuntime(props);
     try {
+      // A relayed sign-in page must open on this computer, so it does not go to the built-in browser.
+      // A joined server's browser runs on its host, and the other members see its tabs.
+      // When no tab opens, the link opens as it does with no setting.
+      if (
+        props.openLinksInBrowser &&
+        props.server?.kind !== "remote" &&
+        props.browserEnabled !== false &&
+        builtInBrowserPage(url) &&
+        (await openBrowserAddress(url, true))
+      ) {
+        setActiveRightPanel("browser");
+        return;
+      }
       if (target && runtime.agent.openMessageLink) {
         const page = await runtime.agent.openMessageLink({ agentId: target.agentId, url }, target.serverId);
         if (page) setMessageLinkRelay({ url, target, page });
@@ -1510,6 +1555,8 @@ export function createConversationViewScope(props: ConversationProps) {
     noteReaderIntent(event.deltaY < 0);
   }
   function readerKeyDown(event: KeyboardEvent) {
+    // A control that used the key, such as the rows of a trace dialog, did not scroll the chat.
+    if (event.defaultPrevented) return;
     if (event.key === "ArrowUp" || event.key === "PageUp" || event.key === "Home") noteReaderIntent(true);
     else if (event.key === "ArrowDown" || event.key === "PageDown" || event.key === "End") noteReaderIntent(false);
     else if (event.key === " ") noteReaderIntent(event.shiftKey);
@@ -1681,6 +1728,7 @@ export function createConversationViewScope(props: ConversationProps) {
     messageVirtualizer,
     timelineMessages,
     toggleRoutineRun,
+    toggleAgentMessage,
     timelineIndexById,
     unreadBoundaryMessageId,
     moveChatSearch,
@@ -1723,9 +1771,13 @@ export function createConversationViewScope(props: ConversationProps) {
     stopBrowserTab,
     removeAttachment,
     renderedAgentActivity,
+    providerSilentMinutes,
+    providerOffline,
     reorderPresentedQueue,
     replyTarget,
     replyToMessage,
+    addPageText,
+    setPageContext,
     skillSettingsRequest,
     openSkillSettings,
     routineSettingsRequest,

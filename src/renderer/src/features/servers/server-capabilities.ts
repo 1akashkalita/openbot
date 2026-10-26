@@ -43,11 +43,13 @@ export function serverSupportsCapability(
       capability === "bitwarden-connector-v1" ||
       capability === "provider-host-sign-in-v1" ||
       capability === "storage-v1" ||
+      capability === "storage-disk-v1" ||
       capability === "hosted-sites-v1" ||
       capability === "agent-admin-v1" ||
       capability === "agent-host-settings-v1" ||
       capability === "agent-backup-models-v1" ||
       capability === "agent-task-limit-v1" ||
+      capability === "browser-profiles-v1" ||
       capability === "provider-usage-reset-v1" ||
       capability === "skills-admin-v1" ||
       capability === "shared-tables-v1" ||
@@ -66,6 +68,8 @@ export function serverSupportsCapability(
       capability === "host-release-v1" ||
       capability === "host-timezone-v1" ||
       capability === "agent-memory-limit-v1" ||
+      capability === "prompt-cache-ttl-v1" ||
+      capability === "claude-api-key-v1" ||
       capability === "agent-access-v1" ||
       capability === "discord-access-v1" ||
       capability === "events-v1" ||

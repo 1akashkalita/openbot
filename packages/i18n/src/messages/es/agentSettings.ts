@@ -72,8 +72,6 @@ export const messages = {
   "agentSettings.avatar.saveFailed": "No se pudo guardar el avatar del agente.",
   "agentSettings.avatar.processFailed": "No se pudo procesar el avatar del agente.",
   "agentSettings.runtime.model": "Modelo del agente",
-  "agentSettings.runtime.providerBusy":
-    "Espera a que termine el trabajo actual antes de cambiar de proveedor o de cuenta.",
   "agentSettings.runtime.modelUnavailable": "Los modelos estarán disponibles cuando se conecte una CLI de agente.",
   "agentSettings.runtime.reasoning": "Razonamiento",
   "agentSettings.runtime.reasoningLabel": "Nivel de razonamiento del agente",
@@ -161,9 +159,15 @@ export const messages = {
   "agentSettings.quickAcknowledgement.title": "Mostrar el plan antes de tareas largas",
   "agentSettings.quickAcknowledgement.description":
     "Antes de una tarea larga, el agente muestra su plan. Empieza tras 10 s o cuando pulsas Iniciar.",
-  "agentSettings.ownBrowserSession.title": "Sesión de navegador propia",
-  "agentSettings.ownBrowserSession.description":
-    "Las pestañas del agente guardan sus propios inicios de sesión y cookies. Un cambio cierra las pestañas abiertas del agente.",
+  "agentSettings.browserProfile.label": "Perfil del navegador",
+  "agentSettings.browserProfile.shared": "Compartido",
+  "agentSettings.browserProfile.agent": "Solo este agente",
+  "agentSettings.browserProfile.missing": "Perfil eliminado",
+  "agentSettings.browserProfile.new": "Nuevo perfil",
+  "agentSettings.browserProfile.manageTitle": "Perfiles del navegador",
+  "agentSettings.browserProfile.manageDescription":
+    "Cada perfil guarda sus propios inicios de sesión y cookies. Un cambio cierra las pestañas abiertas del agente.",
+  "agentSettings.browserProfile.manage": "Gestionar",
   "agentSettings.runtime.workspaceEnforcedProcess":
     "Todo el proceso de {provider} se ejecuta en un entorno aislado, por lo que la escritura fuera falla. Solo disponible en macOS.",
 } as const satisfies PartialTranslation<typeof source>;

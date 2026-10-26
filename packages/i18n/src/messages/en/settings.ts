@@ -12,6 +12,9 @@ export const messages = defineMessages("settings", {
   "settings.appearance.theme.system": "System",
   "settings.appearance.theme.light": "Light",
   "settings.appearance.theme.dark": "Dark",
+  "settings.appearance.transparentWindow.title": "Transparent window",
+  "settings.appearance.transparentWindow.description":
+    "Show the blurred desktop behind the window. Websites and menus then use the app theme.",
   "settings.interfaceSize.title": "Interface size",
   "settings.interfaceSize.description": "The size of text and controls in OpenBot.",
   "settings.logoColor.title": "Logo color",
@@ -34,13 +37,27 @@ export const messages = defineMessages("settings", {
   "settings.launchAtLogin.description": "Open the app when you sign in to this computer.",
   "settings.keepRunning.title": "Keep OpenBot running in the background",
   "settings.keepRunning.description": "Keep active tasks running after you close the window.",
+  "settings.keepAwake.title": "Keep this computer awake",
+  "settings.keepAwake.description":
+    "Routines run on time while the computer is connected to power. The display can still turn off.",
+  "settings.keepAwakeOnBattery.title": "Also on battery",
+  "settings.keepAwakeOnBattery.description":
+    "Keep the computer awake on battery power too. The battery runs down faster.",
   "settings.restoreWorkspace.title": "Restore the last workspace on launch",
   "settings.restoreWorkspace.description": "Open the workspace and tasks from your previous session.",
   "settings.externalLinks.title": "Open external links in",
-  "settings.externalLinks.description": "Choose where links from conversations open.",
+  "settings.externalLinks.description": "Links in chats, sign-in pages and billing pages open here.",
   // The two link targets. The saved value stays in English; only the label is translated.
   "settings.externalLinks.defaultBrowser": "Default browser",
   "settings.externalLinks.openbot": "OpenBot",
+  "settings.externalLinks.defaultBrowserNamed": "Default browser ({name})",
+  "settings.externalLinks.otherApp": "Other app…",
+  "settings.externalLinks.command": "Command…",
+  "settings.externalLinks.commandLabel": "Browser command",
+  "settings.externalLinks.commandPlaceholder": "Program path or command",
+  "settings.externalLinks.useCommand": "Use",
+  "settings.externalLinks.fallback.title": "Could not open {name}",
+  "settings.externalLinks.fallback.description": "The link opened in the default browser.",
   // The message send shortcut. The saved mode stays in English; only the labels are translated.
   "settings.sendShortcut.title": "Send shortcut",
   "settings.sendShortcut.description": "Choose the keys that send a message on this device and browser.",
@@ -53,6 +70,23 @@ export const messages = defineMessages("settings", {
   "settings.busyMessage.title": "Steer agents while they work",
   "settings.busyMessage.description":
     "New messages join the agent’s current work, not the queue. Works with ChatGPT and Claude.",
+  // The Agents tab: the defaults of the agents on this computer.
+  "settings.agentDefaults.title": "Defaults",
+  "settings.agentDefaults.description": "Agents follow these defaults, unless you change them for an agent.",
+  "settings.agentDefaults.value": "Default: {value}",
+  "settings.agentDefaults.on": "On",
+  "settings.agentDefaults.off": "Off",
+  "settings.agentDefaults.followDefault": "Default ({value})",
+  "settings.agentDefaults.count": "{on} of {total} on",
+  "settings.agentDefaults.open": "Open {name}",
+  "settings.agentDefaults.agentList": "On for {names}",
+  "settings.agentDefaults.defaultTitle": "Default",
+  "settings.agentDefaults.defaultDescription": "New agents use it. Agents on Default follow it.",
+  "settings.agentDefaults.agents": "Agents",
+  "settings.agentDefaults.setAll": "Set all",
+  "settings.agentDefaults.setAllLabel": "Set {setting} for all agents",
+  "settings.agentDefaults.agentLabel": "{setting} for {agent}",
+  "settings.agentDefaults.loadFailed": "The agents could not be read.",
   "settings.keepRemoteSessions.title": "Fast connection to servers",
   "settings.keepRemoteSessions.description":
     "Keep the connection to your joined servers between launches. OpenBot starts about a second faster. When you quit OpenBot, the OpenBot service does not close the connection.",
@@ -113,6 +147,9 @@ export const messages = defineMessages("settings", {
   // The Settings window shell: its tab list, headers and save bar.
   "settings.tab.general.title": "General",
   "settings.tab.general.description": "Control how OpenBot behaves on this computer.",
+  "settings.tab.agents.title": "Agents",
+  "settings.tab.agents.description":
+    "Choose what the agents on this computer can do when you do not set it for an agent.",
   "settings.tab.notifications.title": "Notifications",
   "settings.tab.notifications.description": "Choose how OpenBot alerts you.",
   "settings.tab.voice.title": "Voice",

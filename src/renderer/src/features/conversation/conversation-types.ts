@@ -2,6 +2,7 @@ import type {
   AccountUsage,
   AgentApproval,
   AgentContextState,
+  AgentDefaults,
   AgentEvent,
   AgentModelChoice,
   AgentProviderId,
@@ -37,6 +38,7 @@ import type { AwaitingReplyItem } from "@openbot/ui/features/conversation/Awaiti
 import type { UsageLimitAskCardProps } from "@openbot/ui/features/conversation/BackupModels";
 import type { ChatMessageAuthor } from "@openbot/ui/features/conversation/ChatMessageRow";
 import type { UnloadedHistory } from "@openbot/ui/features/conversation/ChatScrollRail";
+import type { SidebarAgentWait } from "@openbot/ui/features/sidebar/sidebar-agent-states";
 import type { JSX } from "@solidjs/web";
 import type { ConnectorRegistry } from "../connectors/connector-registry";
 import type { ConversationRuntime } from "./conversation-runtime";
@@ -51,11 +53,11 @@ import type { TurnStepLines } from "./turn-step-lines";
  * through only because one direction is `import type`.
  */
 
-/** Opens an agent's settings panel. A `routine` opens that routine's settings in it. */
+/** Opens an agent's settings panel. A `routine` opens that routine's settings in it; `"new"` starts a routine. */
 export interface AgentSettingsRequest {
   agentId: string;
   nonce: number;
-  routine?: { routineId: string; name: string };
+  routine?: { routineId: string; name: string } | "new";
 }
 
 /** The conversation that a draft, an error or a send belongs to. For a channel, `agentId` is the channel id. */
@@ -100,6 +102,8 @@ export interface ConversationChannelSource {
   author: (message: AgentMessage) => ChatMessageAuthor;
   /** The agents that work now. */
   workers: () => ChannelWorker[];
+  /** The turns of the workers that run now, whose steps show under the activity line. */
+  workingTurns: () => readonly string[];
   /** The agent that the prompt, approval or takeover on screen comes from. */
   interactionAgentName: () => string | undefined;
   /** The agents that a lead asked and that did not reply yet. */
@@ -174,6 +178,11 @@ export interface ConversationProps {
   onSignInWithCodeProvider?: ((provider: AgentProviderId) => void) | undefined;
   /** Open the Providers section of this server's settings, where the user adds an endpoint. */
   onManageProviders?: ((trigger: HTMLElement) => void) | undefined;
+  /**
+   * Open the Browser profiles section of the settings of the server that runs the agent. Absent for
+   * a member, and for a host without `browser-profiles-v1`.
+   */
+  onManageBrowserProfiles?: ((trigger: HTMLElement) => void) | undefined;
   agent: AgentProfile | undefined;
   agents: AgentProfile[];
   /**
@@ -239,6 +248,8 @@ export interface ConversationProps {
    */
   isOwnSender: (senderId: string) => boolean;
   browserEnabled?: boolean | undefined;
+  /** Settings → General sends links in chats to the built-in browser, when it shows. */
+  openLinksInBrowser?: boolean | undefined;
   remoteDesktopEnabled?: boolean | undefined;
   remoteDesktopSessionActive: boolean;
   remoteDesktopVisible: boolean;
@@ -255,6 +266,11 @@ export interface ConversationProps {
   usageLimited?: ((choice: AgentModelChoice) => boolean) | undefined;
   browserTakeover: Extract<AgentEvent, { type: "browser-takeover-requested" }>["request"] | undefined;
   onSelectAgent: (agentId: string) => void;
+  /**
+   * What stops each agent in its own chat: a question, an approval, a browser takeover or a usage
+   * limit. The waiting block names it for each agent that this agent asked.
+   */
+  agentWaits?: Record<string, SidebarAgentWait> | undefined;
   onUpdateAgent: (agentId: string, updates: Omit<UpdateAgentInput, "agentId">) => Promise<void>;
   onSetAgentAvatar: (agentId: string, image: AvatarImageInput | null) => Promise<void>;
   /**
@@ -295,6 +311,8 @@ export interface ConversationProps {
   remoteTaskLimitLoaded?: boolean | undefined;
   /** The app default an agent without its own busy-message setting follows. Local agents only. */
   defaultBusyMessageMode?: BusyMessageMode | undefined;
+  /** The account defaults an agent without its own value follows. Local agents only. */
+  agentDefaults?: AgentDefaults | undefined;
   /** The app memory cap. Local agents only. */
   agentMemoryLimit?: number | undefined;
   /** Writes the agent's Permissions level. Absent where the user may not change it. */
