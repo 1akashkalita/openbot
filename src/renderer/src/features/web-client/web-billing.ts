@@ -98,7 +98,7 @@ function errorMessage(value: unknown): string {
 export const WEB_APP_BILLING_PARAM = "billing";
 
 /** The pricing page sends `/app?start=server` or `/app?start=license`, with the order of its form. */
-export const WEB_APP_START_PARAM = "start";
+const WEB_APP_START_PARAM = "start";
 /**
  * What a pricing page button opens: the add server dialog or Billing, where the license is. With the order, the
  * dialog fills it in and goes on to Checkout. An old link has no order.
