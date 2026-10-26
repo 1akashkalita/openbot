@@ -4,6 +4,7 @@ import {
   type AgentIpcRequest,
   type AgentMemorySelectionChange,
   type AgentTaskInput,
+  agentThreadTitle,
   type CancelAgentWaitInput,
   type CancelMessageLinkInput,
   type CancelQueuedMessageInput,
@@ -44,6 +45,7 @@ import {
   type OpenWorkspaceFileInput,
   type PasteMessageLinkInput,
   type ReadConversationPageInput,
+  type RenameAgentTaskInput,
   type ReorderQueueInput,
   type RespondToApprovalInput,
   type RespondToBrowserTakeoverInput,
@@ -457,6 +459,7 @@ export function parseSearchConversationMessages(value: unknown): SearchConversat
       : { agentId: requireString(value.agentId, "agentId", INPUT_LIMITS.identifier) }),
     ...(value.cursor === undefined ? {} : { cursor: requireString(value.cursor, "cursor", 2048) }),
     limit,
+    ...(value.includeSideThreads === true ? { includeSideThreads: true } : {}),
   };
 }
 
@@ -565,6 +568,14 @@ export function parseAgentTask(value: unknown): AgentTaskInput {
     agentId: requireString(value.agentId, "agentId"),
     taskId: requireString(value.taskId, "taskId"),
   };
+}
+
+export function parseRenameAgentTask(value: unknown): RenameAgentTaskInput {
+  const task = parseAgentTask(value);
+  if (!isObject(value)) throw new Error("Invalid task request.");
+  const title = agentThreadTitle(value.title);
+  if (title === null) throw new Error("Invalid title.");
+  return { ...task, title };
 }
 
 export function parseMessageReaction(value: unknown): SetMessageReactionInput {
