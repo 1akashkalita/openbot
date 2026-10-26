@@ -727,6 +727,17 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       // endpoint can refuse the prompt itself, after the waits every caller above it makes.
       credentials: {
         ...credentials,
+        // The server variables reach Claude and the ACP providers with the agent environment. The
+        // thread lifecycle below gets the agent environment without them, so the fingerprint of a
+        // Codex session stays the same; Codex reads them from the spawn environment of its app-server.
+        ...(credentials.serverEnvironment
+          ? {
+              agentEnvironment: (inherited) => ({
+                ...credentials.serverEnvironment,
+                ...credentials.agentEnvironment?.(inherited),
+              }),
+            }
+          : {}),
         history: (provider) => {
           const history = credentials.history
             ? credentials.history(provider)
@@ -1163,7 +1174,8 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
         redactMcp: (text) => this.#mcp.redact(text),
         isStopping: () => this.#stopping,
         servesModel: (model) => this.#endpoints.serves(model),
-        requeueChannelDelivery: (deliveryId) => this.#requeueChannelDelivery(deliveryId),
+        requeueChannelDelivery: (deliveryId, continueWork) => this.#requeueChannelDelivery(deliveryId, continueWork),
+        mayFailOver: (agentId) => this.#usageLimitBackup(agentId) !== undefined,
         turnEnded: (turnId) => this.#turn.hasEnded(turnId),
         turnRestarting: (turnId) => this.#turn.forgetEnded(turnId),
         startRequestedNewChat: (agentId) => this.#startRequestedNewChat(agentId),
@@ -1269,7 +1281,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
         emitToolUsage: (usage) => this.emit("toolUsage", usage),
         turnModel: (agentId, turnId) => this.#drain.modelForTurn(agentId, turnId),
         mayFailOver: (agentId) => this.#usageLimitBackup(agentId) !== undefined,
-        requeueChannelDelivery: (deliveryId) => this.#requeueChannelDelivery(deliveryId),
+        requeueChannelDelivery: (deliveryId, continueWork) => this.#requeueChannelDelivery(deliveryId, continueWork),
         quietRoutineDelivery: (deliveryId) => this.#routines.quietRunForDelivery(deliveryId),
         takeRoutinePreview: (deliveryId) => this.#routines.takePreviewBeforeRun(deliveryId),
         closeRoutineSession: (externalThreadId) => this.#threads.closeRoutineThread(externalThreadId),
@@ -1315,6 +1327,10 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
             for (const threadId of threadIds) yield* this.#forgetExecutionThread(threadId);
             yield* lifecycleStep("delete agent tasks", () => this.#tasks.deleteForAgent(agentId));
           }).pipe(Effect.mapError((failure) => new AgentRemovalFailed({ cause: failure.cause }))),
+        stopAgentProcess: (agentId) =>
+          this.#providers
+            .stopAgentProcess(agentId)
+            .pipe(Effect.mapError((failure) => new AgentRemovalFailed({ cause: failure.cause }))),
       },
     });
     this.#tools = new OpenBotToolRouter({
@@ -1485,10 +1501,14 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
    * Every id the sidebar layout may place: agents and channels alike, because the user files and
    * orders both in the same sections. An id missing from this set is pruned as gone the next time
    * the layout is reconciled, which would silently drop where the user put a channel.
+   *
+   * Channels come first. The layout store appends the ids that `agentOrder` does not hold yet in this
+   * order, and the sidebar shows those channels above those agents. In another order, the first drop
+   * after a chat was filed with "Move to" lands in a different place than the sidebar showed (#3229).
    */
   sidebarChatIds(): Set<string> {
-    const ids = new Set(this.listAgents().map((agent) => agent.id));
-    for (const channelId of this.channels.store.ids()) ids.add(channelId);
+    const ids = new Set(this.channels.store.ids());
+    for (const agent of this.listAgents()) ids.add(agent.id);
     return ids;
   }
 
@@ -2827,9 +2847,11 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       return { input: move(agent.usageLimitReturn, agent.usageLimitReturn.reasoningEffort), move: "return" };
     const limited = !this.#usageLimits.mayDrain(agentId);
     const failed = !limited && this.#usageLimits.isFailed(usageLimitOf(agentModelChoice(agent)));
+    if (!limited && !failed) return null;
+    const taskWork = () =>
+      this.#mailbox.queuedTaskIds(agentId).some((taskId) => this.#mailbox.nextQueued(agentId, taskId));
     // A channel task that the limit refused went back to its channel, so the queue can be empty.
-    if ((!limited && !failed) || (!this.#mailbox.nextQueued(agentId) && !this.channels.ownsWaitingWork(agentId)))
-      return null;
+    if (!this.#mailbox.nextQueued(agentId) && !taskWork() && !this.channels.ownsWaitingWork(agentId)) return null;
     const next = this.#usageLimitBackup(agentId);
     return next ? { input: { ...move(next), leaveUsageLimit: true }, move: failed ? "provider-error" : null } : null;
   }
@@ -4066,8 +4088,8 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
    * Gives a channel task that a spent plan holds back to its channel, so its assignment does not
    * reserve the host until the reset. A task of a channel routine set to skip is dropped instead.
    */
-  #requeueChannelDelivery(deliveryId: string): Effect.Effect<boolean> {
-    return this.channels.requeueForLimit(deliveryId);
+  #requeueChannelDelivery(deliveryId: string, continueWork = false): Effect.Effect<boolean> {
+    return this.channels.requeueForLimit(deliveryId, continueWork);
   }
 
   /**

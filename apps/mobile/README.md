@@ -21,12 +21,12 @@ After switching from the isolated linker to the hoisted linker, move the old
 from the repository root. A normal install can retain old workspace symlinks and cause
 the local fingerprint to differ from the clean EAS installation.
 
-Expo 58.0.16 is patched in `patches/expo@58.0.16.patch` so a DOM component ignores a props
+Expo 58.0.17 is patched in `patches/expo@58.0.17.patch` so a DOM component ignores a props
 message that it sends before Android mounts its web view, or after Android removes it. Android
 rejects these calls, and the rejection shows as a console error. The DOM component asks for the
 props again when it is ready.
 
-expo-splash-screen 58.0.10 is patched in `patches/expo-splash-screen@58.0.10.patch` so Android 12
+expo-splash-screen 58.0.11 is patched in `patches/expo-splash-screen@58.0.11.patch` so Android 12
 and 13 get no splash exit animation listener. With the listener, the platform hides the starting
 window on the first draw, and the app crashes when that window is already gone. Gradle links the
 prebuilt AAR of an Expo module and ignores a patch to its Kotlin source, so
@@ -45,7 +45,7 @@ centers each line in its `lineHeight`. Without the offset, the text view drew ea
 of its line box, so iOS message bubbles had more space above the text than below it. Remove the
 patch when a release applies the offset.
 
-Expo Router 58.0.24 is patched in `patches/expo-router@58.0.24.patch` to apply zoom dismissal
+Expo Router 58.0.25 is patched in `patches/expo-router@58.0.25.patch` to apply zoom dismissal
 bounds when its enabler registers after the chat mounts. This keeps the avatar-to-header zoom
 interactive from the left edge without enabling dismissal from the middle of the chat.
 If a row or pinned avatar is tapped during the native return transition, the app retains that
@@ -118,8 +118,9 @@ The native UI does not depend on a native WebRTC module. A hidden Expo DOM compo
 `RTCPeerConnection` and its authenticated DataChannels, then forwards validated commands and live
 events to React Native. This keeps the production transport identical while remaining testable in
 Expo Go without a development build. Expo Go on Android does not include `@expo/dom-webview`, so there
-the component uses `react-native-webview`. `react-native.config.js` keeps that package out of Android
-builds. iOS builds link it for the PDF preview (`pdf-preview.ios.tsx`).
+the component uses `react-native-webview`. Native builds link that package for HTML pages
+(`html-page-view.native.tsx`), and iOS also uses it for the PDF preview (`pdf-preview.ios.tsx`). An Android
+build from before it was linked shows HTML pages with no scripts.
 
 Remote connection recovery starts the first attempt immediately, then waits 10 seconds after each failure. After
 five failures it waits two minutes before starting a new series. The agent list shows `Reconnecting`

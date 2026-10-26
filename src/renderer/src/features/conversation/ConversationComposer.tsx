@@ -1,4 +1,4 @@
-import { isKnownAgentProvider, providerDisplayName } from "@openbot/contracts/agent-providers";
+import { isKnownAgentProvider } from "@openbot/contracts/agent-providers";
 import { supportedAttachmentExtensions } from "@openbot/contracts/attachment-files";
 import {
   type AgentWait,
@@ -51,6 +51,7 @@ import { reportErrorBanner, reportNotification } from "../../error-reports";
 import { deviceSendShortcut, sendShortcutAriaKey, sendShortcutHintKey } from "../../send-shortcut-preference";
 import { speechReading } from "../speech/speech-playback";
 import { stopSpokenReply } from "../speech/speech-replies";
+import { copyComposerSelection, readComposerCopy } from "./composer-clipboard";
 import { useConversationViewScope } from "./conversation-scope";
 
 // Module scope: the composer remounts on navigation, and a dismissed notice must stay dismissed.
@@ -84,12 +85,14 @@ export function ConversationComposer() {
     editingPendingSave,
     openAttachmentPicker,
     openAttachmentPickerFromKey,
+    pasteFiles,
     presentedQueueDeliveries,
     previewAttachment,
     props,
     quoteRequest,
     openQuote,
     queuePanelVisible,
+    releaseCutAttachments,
     removeAttachment,
     reorderPresentedQueue,
     replyTarget,
@@ -120,6 +123,7 @@ export function ConversationComposer() {
     channel,
     providerSilentMinutes,
     providerOffline,
+    agentProviderName,
   } = useConversationViewScope();
   const { t, format, sourceText: localizeSourceText } = useText();
   const messageLabel = () =>
@@ -191,9 +195,8 @@ export function ConversationComposer() {
   };
   /** Why the running turn has no reply: the computer is offline, or the provider sends nothing. */
   const providerWaitNotice = createMemo(() => {
-    const agent = props.agent;
-    if (!agent) return null;
-    const provider = providerDisplayName(agent.provider);
+    const provider = agentProviderName();
+    if (!provider) return null;
     if (providerOffline())
       return { title: t("composer.providerWait.offlineTitle"), body: t("composer.providerWait.offline", { provider }) };
     const minutes = providerSilentMinutes();
@@ -673,8 +676,14 @@ export function ConversationComposer() {
               sendShortcut={deviceSendShortcut(props.platform)}
               onPickerOpenChange={setPickerOpen}
               dictation={{ text: voiceLiveText(), final: voicePhase() === "transcribing" }}
-              onPasteFiles={(files) => {
-                if (props.runtime?.importFiles) void props.runtime.importFiles(files);
+              onPasteFiles={pasteFiles}
+              onCopyAttachments={(clipboard, text, attachments, remaining) => {
+                const copied = copyComposerSelection(clipboard, text, attachments, props.runtime?.previewAttachment);
+                if (remaining !== undefined) releaseCutAttachments(attachments, remaining, copied);
+              }}
+              onPasteAttachments={(clipboard, selection) => {
+                const copy = readComposerCopy(clipboard);
+                return copy ? pasteFiles(copy.files, selection, copy) : undefined;
               }}
               onOpenAttachment={(attachment) =>
                 canPreviewAttachment(attachment)

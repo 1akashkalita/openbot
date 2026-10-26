@@ -2,6 +2,7 @@
 // registries. They live here rather than inside the route files so that the
 // tests can assert on the XML without standing up a router.
 
+import { BRAND_PAGE_UPDATED_AT, BRAND_ROUTE } from "../lib/brand-page";
 import { changelogUrl } from "../lib/changelog";
 import { CHANGELOG_UPDATED_AT } from "../lib/changelog-releases";
 import { CONTENT_COLLECTIONS } from "../lib/content";
@@ -75,6 +76,7 @@ function contentSitemapXml(): string {
     { loc: changelogUrl(), lastmod: CHANGELOG_UPDATED_AT },
     { loc: new URL(TEAMS_ROUTE, OPENBOT_SITE_URL).toString(), lastmod: TEAMS_PAGE_UPDATED_AT },
     { loc: new URL(PRICING_ROUTE, OPENBOT_SITE_URL).toString(), lastmod: PRICING_PAGE_UPDATED_AT },
+    { loc: new URL(BRAND_ROUTE, OPENBOT_SITE_URL).toString(), lastmod: BRAND_PAGE_UPDATED_AT },
     { loc: new URL(PRIVACY_POLICY_ROUTE, OPENBOT_SITE_URL).toString(), lastmod: PRIVACY_POLICY_UPDATED_AT },
   ];
 

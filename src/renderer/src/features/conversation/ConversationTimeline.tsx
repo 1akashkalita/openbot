@@ -1,4 +1,3 @@
-import { providerDisplayName } from "@openbot/contracts/agent-providers";
 import { chatVisualReply } from "@openbot/contracts/chat-visual";
 import type { ConversationMessageSender, MessageReaction } from "@openbot/contracts/ipc";
 import type { ConversationUiBlock } from "@openbot/contracts/ui-blocks";
@@ -165,6 +164,7 @@ export function ConversationTimeline() {
     renderedAgentActivity,
     providerOffline,
     providerSilentMinutes,
+    agentProviderName,
     replyJump,
     respondToBrowserTakeover,
     replyToMessage,
@@ -195,9 +195,8 @@ export function ConversationTimeline() {
   // A named function, not a ternary in the prop: the compiler wraps a ternary prop in a memo, and
   // the avatar reads it in a tracked effect, where a new memo halts the reactive system.
   const waitingProviderName = () => {
-    const agent = props.agent;
     const waiting = providerSilentMinutes() !== null || providerOffline();
-    return waiting && agent ? providerDisplayName(agent.provider) : undefined;
+    return waiting ? agentProviderName() : undefined;
   };
   /** An agent reply can be read aloud by this computer's speech model, in this chat's voice. */
   const readAloudAction = (message: AgentMessage) => {
@@ -1353,145 +1352,151 @@ export function ConversationTimeline() {
               }}
             </For>
           </div>
-          <Show when={!compactionBefore()}>
-            <CompactionMarker />
-          </Show>
-          <div
-            class="agent-activity-slot"
-            data-reserved={agentActivitySpaceReserved() ? "true" : "false"}
-            ref={setAgentActivitySlotElement}
-          >
-            <Show
-              when={!channel}
-              fallback={
-                <Show when={channel && channel.workers().length > 0}>
-                  <ChannelActivityIndicator
-                    workers={channel?.workers() ?? []}
-                    steps={channelWorkingSteps()}
-                    stepsOpenByDefault={showAgentSteps()}
-                  />
-                </Show>
-              }
-            >
-              <Show when={renderedAgentActivity()}>
-                {(activity) => (
-                  <AgentActivityIndicator
-                    agent={activity().agent}
-                    detail={activity().detail}
-                    label={activity().label}
-                    phase={activity().phase}
-                    since={activity().since}
-                    steps={turnSteps.activeSteps()}
-                    stepsOpenByDefault={showAgentSteps()}
-                    waitingFor={waitingProviderName()}
-                  />
-                )}
-              </Show>
+          <div class="conversation-live">
+            <Show when={!compactionBefore()}>
+              <CompactionMarker />
             </Show>
-          </div>
-          <Show when={props.tasks}>
-            {(tasks) => (
-              <AgentTaskChips
-                tasks={openTasks()}
-                onOpen={openTaskPanel}
-                onClose={(taskId) => tasks().onClose(taskId)}
-                waitsForApproval={(task) => tasks().approval(task) !== undefined}
-              />
-            )}
-          </Show>
-          <Show when={keyedPrompt()} keyed>
-            {(entry) => {
-              const presentResolution = () =>
-                props.onPromptResolutionPresented?.(entry.prompt.agentId, entry.prompt.turnId, entry.prompt.requestId);
-              return (
-                <Loading>
-                  <Show
-                    when={pendingPromptBlock()}
-                    fallback={
-                      <QuestionPromptBubble
-                        questions={entry.prompt.questions}
-                        elementRef={setRequiredInteractionElement}
-                        sendShortcut={deviceSendShortcut(props.platform)}
-                        onSubmit={props.onAnswerPrompt}
-                        onResolutionPresented={presentResolution}
-                      />
-                    }
-                  >
-                    {(block) => (
-                      <UiBlockPrompt
-                        block={block()}
-                        agents={props.agents}
-                        onSelectAgent={props.onSelectAgent}
-                        onOpenLink={(url) => void openExternalMessageUrl(url)}
-                        elementRef={setRequiredInteractionElement}
-                        onAnswer={props.onAnswerPrompt}
-                        onAnswered={presentResolution}
-                      />
-                    )}
+            <div
+              class="agent-activity-slot"
+              data-reserved={agentActivitySpaceReserved() ? "true" : "false"}
+              ref={setAgentActivitySlotElement}
+            >
+              <Show
+                when={!channel}
+                fallback={
+                  <Show when={channel && channel.workers().length > 0}>
+                    <ChannelActivityIndicator
+                      workers={channel?.workers() ?? []}
+                      steps={channelWorkingSteps()}
+                      stepsOpenByDefault={showAgentSteps()}
+                    />
                   </Show>
+                }
+              >
+                <Show when={renderedAgentActivity()}>
+                  {(activity) => (
+                    <AgentActivityIndicator
+                      agent={activity().agent}
+                      detail={activity().detail}
+                      label={activity().label}
+                      phase={activity().phase}
+                      since={activity().since}
+                      steps={turnSteps.activeSteps()}
+                      stepsOpenByDefault={showAgentSteps()}
+                      waitingFor={waitingProviderName()}
+                    />
+                  )}
+                </Show>
+              </Show>
+            </div>
+            <Show when={props.tasks}>
+              {(tasks) => (
+                <AgentTaskChips
+                  tasks={openTasks()}
+                  onOpen={openTaskPanel}
+                  onClose={(taskId) => tasks().onClose(taskId)}
+                  waitsForApproval={(task) => tasks().approval(task) !== undefined}
+                />
+              )}
+            </Show>
+            <Show when={keyedPrompt()} keyed>
+              {(entry) => {
+                const presentResolution = () =>
+                  props.onPromptResolutionPresented?.(
+                    entry.prompt.agentId,
+                    entry.prompt.turnId,
+                    entry.prompt.requestId,
+                  );
+                return (
+                  <Loading>
+                    <Show
+                      when={pendingPromptBlock()}
+                      fallback={
+                        <QuestionPromptBubble
+                          questions={entry.prompt.questions}
+                          elementRef={setRequiredInteractionElement}
+                          sendShortcut={deviceSendShortcut(props.platform)}
+                          onSubmit={props.onAnswerPrompt}
+                          onResolutionPresented={presentResolution}
+                        />
+                      }
+                    >
+                      {(block) => (
+                        <UiBlockPrompt
+                          block={block()}
+                          agents={props.agents}
+                          onSelectAgent={props.onSelectAgent}
+                          onOpenLink={(url) => void openExternalMessageUrl(url)}
+                          elementRef={setRequiredInteractionElement}
+                          onAnswer={props.onAnswerPrompt}
+                          onAnswered={presentResolution}
+                        />
+                      )}
+                    </Show>
+                  </Loading>
+                );
+              }}
+            </Show>
+            <Show keyed when={props.approval}>
+              {(approval) => (
+                <Loading>
+                  <ApprovalCard
+                    approval={approval}
+                    agentName={interactionAgentName()}
+                    onApprove={() => props.onRespondToApproval("accept")}
+                    onReject={() => props.onRespondToApproval("decline")}
+                    onAlwaysAllow={props.onAlwaysAllowApproval}
+                  />
                 </Loading>
-              );
-            }}
-          </Show>
-          <Show keyed when={props.approval}>
-            {(approval) => (
+              )}
+            </Show>
+            <Show when={props.usageLimitAsk}>
+              {(ask) => (
+                <UsageLimitAskCard
+                  provider={ask().provider}
+                  resetsAt={ask().resetsAt}
+                  options={ask().options}
+                  onSend={ask().onSend}
+                  onWait={ask().onWait}
+                />
+              )}
+            </Show>
+            <Show when={props.browserTakeover}>
               <Loading>
-                <ApprovalCard
-                  approval={approval}
-                  agentName={interactionAgentName()}
-                  onApprove={() => props.onRespondToApproval("accept")}
-                  onReject={() => props.onRespondToApproval("decline")}
-                  onAlwaysAllow={props.onAlwaysAllowApproval}
+                <BrowserTakeoverCard
+                  request={props.browserTakeover}
+                  agentName={interactionAgentName() ?? t("chat.message.agentFallback")}
+                  tab={browserTakeoverTab()}
+                  preview={browserTakeoverPreview().preview}
+                  previewStatus={browserTakeoverPreview().status}
+                  onOpen={openBrowserTakeoverTab}
+                  onComplete={() => respondToBrowserTakeover("complete")}
+                  onCancel={() => respondToBrowserTakeover("cancel")}
+                  onSignInLocally={localSignIn.canStartForTakeover() ? localSignIn.startForTakeover : undefined}
+                  signInBlocked={localSignIn.blockedTakeover()}
+                  browserSecret={{
+                    loadPreview: runtime.browser.capturePreview,
+                    vaultSave: props.server?.kind === "local",
+                    onRespond: runtime.agent.respondToBrowserSecret,
+                  }}
                 />
               </Loading>
-            )}
-          </Show>
-          <Show when={props.usageLimitAsk}>
-            {(ask) => (
-              <UsageLimitAskCard
-                provider={ask().provider}
-                resetsAt={ask().resetsAt}
-                options={ask().options}
-                onSend={ask().onSend}
-                onWait={ask().onWait}
-              />
-            )}
-          </Show>
-          <Show when={props.browserTakeover}>
-            <Loading>
-              <BrowserTakeoverCard
-                request={props.browserTakeover}
-                agentName={interactionAgentName() ?? t("chat.message.agentFallback")}
-                tab={browserTakeoverTab()}
-                preview={browserTakeoverPreview().preview}
-                previewStatus={browserTakeoverPreview().status}
-                onOpen={openBrowserTakeoverTab}
-                onComplete={() => respondToBrowserTakeover("complete")}
-                onCancel={() => respondToBrowserTakeover("cancel")}
-                onSignInLocally={localSignIn.canStartForTakeover() ? localSignIn.startForTakeover : undefined}
-                signInBlocked={localSignIn.blockedTakeover()}
-                browserSecret={{
-                  loadPreview: runtime.browser.capturePreview,
-                  vaultSave: props.server?.kind === "local",
-                  onRespond: runtime.agent.respondToBrowserSecret,
-                }}
-              />
-            </Loading>
-          </Show>
-          <Show when={!props.browserTakeover && browserTakeoverResolution()}>
-            {(resolution) => (
-              <BrowserTakeoverCard
-                agentName={interactionAgentName() ?? t("chat.message.agentFallback")}
-                tab={resolution().tab}
-                preview={resolution().preview}
-                previewStatus={resolution().previewStatus}
-                decision={resolution().decision}
-                signInBlocked={resolution().signInBlocked}
-                onComplete={async () => false}
-                onCancel={async () => false}
-              />
-            )}
-          </Show>
+            </Show>
+            <Show when={!props.browserTakeover && browserTakeoverResolution()}>
+              {(resolution) => (
+                <BrowserTakeoverCard
+                  agentName={interactionAgentName() ?? t("chat.message.agentFallback")}
+                  tab={resolution().tab}
+                  preview={resolution().preview}
+                  previewStatus={resolution().previewStatus}
+                  decision={resolution().decision}
+                  signInBlocked={resolution().signInBlocked}
+                  onComplete={async () => false}
+                  onCancel={async () => false}
+                />
+              )}
+            </Show>
+          </div>
         </Show>
       </div>
     </>

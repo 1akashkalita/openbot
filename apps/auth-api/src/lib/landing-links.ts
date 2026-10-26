@@ -72,6 +72,7 @@ export type FooterLink =
         | "/providers"
         | "/teams"
         | "/pricing"
+        | "/brand"
         | "/contact"
         | "/privacy-policy";
       readonly hash?: string;
@@ -100,6 +101,7 @@ export const FOOTER_COLUMNS: readonly FooterColumn[] = [
       { label: "Teams", external: false, to: "/teams" },
       { label: "Pricing", external: false, to: "/pricing" },
       { label: "Contact", external: false, to: "/contact" },
+      { label: "Brand", external: false, to: "/brand" },
       { label: "Source code", external: true, href: OPENBOT_LINKS.repository },
       { label: "License", external: true, href: OPENBOT_LINKS.license },
       { label: "Privacy policy", external: false, to: "/privacy-policy" },
@@ -136,17 +138,17 @@ export const FOOTER_COLUMNS: readonly FooterColumn[] = [
   {
     title: "Compare",
     links: [
+      { label: "OpenBot vs Grok Bot", external: false, to: "/compare/$slug", slug: "grok-bot" },
+      { label: "OpenBot vs Hermes Agent", external: false, to: "/compare/$slug", slug: "hermes-agent" },
+      { label: "OpenBot vs Muse", external: false, to: "/compare/$slug", slug: "muse" },
+      { label: "OpenBot vs OpenClaw", external: false, to: "/compare/$slug", slug: "openclaw" },
+      { label: "OpenBot vs Claude Cowork", external: false, to: "/compare/$slug", slug: "claude-cowork" },
+      { label: "OpenBot vs ChatGPT dots", external: false, to: "/compare/$slug", slug: "chatgpt-dots" },
+      { label: "OpenBot vs Manus", external: false, to: "/compare/$slug", slug: "manus" },
+      { label: "OpenBot vs Devin", external: false, to: "/compare/$slug", slug: "devin" },
       { label: "OpenBot vs Paperclip", external: false, to: "/compare/$slug", slug: "paperclip" },
       { label: "OpenBot vs Viktor", external: false, to: "/compare/$slug", slug: "viktor" },
       { label: "OpenBot vs Instinct", external: false, to: "/compare/$slug", slug: "instinct" },
-      { label: "OpenBot vs ChatGPT dots", external: false, to: "/compare/$slug", slug: "chatgpt-dots" },
-      { label: "OpenBot vs Grok Bot", external: false, to: "/compare/$slug", slug: "grok-bot" },
-      { label: "OpenBot vs Muse", external: false, to: "/compare/$slug", slug: "muse" },
-      { label: "OpenBot vs Hermes Agent", external: false, to: "/compare/$slug", slug: "hermes-agent" },
-      { label: "OpenBot vs OpenClaw", external: false, to: "/compare/$slug", slug: "openclaw" },
-      { label: "OpenBot vs Manus", external: false, to: "/compare/$slug", slug: "manus" },
-      { label: "OpenBot vs Claude Cowork", external: false, to: "/compare/$slug", slug: "claude-cowork" },
-      { label: "OpenBot vs Devin", external: false, to: "/compare/$slug", slug: "devin" },
       { label: "Best AI agent apps", external: false, to: "/compare/$slug", slug: "best-ai-agent-apps" },
       { label: "All comparisons", external: false, to: "/compare" },
     ],
