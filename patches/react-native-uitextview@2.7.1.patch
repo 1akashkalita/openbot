@@ -1,7 +1,16 @@
 diff --git a/ios/RNUITextView.mm b/ios/RNUITextView.mm
-index 2f76e86a8cda5f8cb4154552f3bf5cead201ee53..0d531664359da0ac1316e330cd4c18fea5275fcb 100644
+index 2f76e86a8cda5f8cb4154552f3bf5cead201ee53..f0615f91ae241c707345efb067828bf40d73a31c 100644
 --- a/ios/RNUITextView.mm
 +++ b/ios/RNUITextView.mm
+@@ -8,7 +8,7 @@
+ #import <react/renderer/components/RNUITextViewSpec/EventEmitters.h>
+ #import <react/renderer/components/RNUITextViewSpec/Props.h>
+ #import <react/renderer/components/RNUITextViewSpec/RCTComponentViewHelpers.h>
+-#import "RCTFabricComponentsPlugins.h"
++#import <React/RCTFabricComponentsPlugins.h>
+ 
+ #include <cmath>
+ 
 @@ -240,7 +240,9 @@ static NSLineBreakMode RCTNSLineBreakModeFromEllipsizeMode(RNUITextViewEllipsize
    const auto &props = *std::static_pointer_cast<RNUITextViewProps const>(_props);
  
@@ -45,6 +54,19 @@ index 2f76e86a8cda5f8cb4154552f3bf5cead201ee53..0d531664359da0ac1316e330cd4c18fe
  - (void)textViewDidChangeSelection:(UITextView *)textView
  {
    if (_suppressSelectionChange) {
+diff --git a/ios/RNUITextViewChild.mm b/ios/RNUITextViewChild.mm
+index 2114aba2a871d5f0e3ad3a9944b274352158b476..fa4c82d983a3b9fced32c618e373ec641dbb32d6 100644
+--- a/ios/RNUITextViewChild.mm
++++ b/ios/RNUITextViewChild.mm
+@@ -4,7 +4,7 @@
+ #import <react/renderer/components/RNUITextViewSpec/EventEmitters.h>
+ #import <react/renderer/components/RNUITextViewSpec/Props.h>
+ #import <react/renderer/components/RNUITextViewSpec/RCTComponentViewHelpers.h>
+-#import "RCTFabricComponentsPlugins.h"
++#import <React/RCTFabricComponentsPlugins.h>
+ 
+ using namespace facebook::react;
+ 
 diff --git a/ios/RNUITextViewManager.mm b/ios/RNUITextViewManager.mm
 index e2e062d4f7be71217ffe479182cff4e71d0cbaac..47ea37e935ce559add45bbbc31ced0419c908d0c 100644
 --- a/ios/RNUITextViewManager.mm

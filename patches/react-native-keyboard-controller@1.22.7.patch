@@ -1,3 +1,94 @@
+diff --git a/ios/views/ClippingScrollViewDecoratorViewManager.mm b/ios/views/ClippingScrollViewDecoratorViewManager.mm
+index 44571a2ef51e68fa0d30720a0df9a92770b94b5a..8c0da574fada107ae9cd90ad023b22ffc49b42ef 100644
+--- a/ios/views/ClippingScrollViewDecoratorViewManager.mm
++++ b/ios/views/ClippingScrollViewDecoratorViewManager.mm
+@@ -13,7 +13,7 @@
+ #import <react/renderer/components/RNKC/RCTComponentViewHelpers.h>
+ #import <react/renderer/components/RNKC/RNKCClippingScrollViewDecoratorViewComponentDescriptor.h>
+ 
+-#import "RCTFabricComponentsPlugins.h"
++#import <React/RCTFabricComponentsPlugins.h>
+ #endif
+ 
+ #import <TargetConditionals.h>
+diff --git a/ios/views/KeyboardBackgroundViewManager.mm b/ios/views/KeyboardBackgroundViewManager.mm
+index 44a9a1d8ffa1ae4441a4eecc275240bf6671dc6c..8cb4c2e1c4eb5ffc27d41d0e3ae94335497f18b8 100644
+--- a/ios/views/KeyboardBackgroundViewManager.mm
++++ b/ios/views/KeyboardBackgroundViewManager.mm
+@@ -19,7 +19,7 @@
+ #import <react/renderer/components/RNKC/RCTComponentViewHelpers.h>
+ #import <react/renderer/components/RNKC/RNKCKeyboardBackgroundViewComponentDescriptor.h>
+ 
+-#import "RCTFabricComponentsPlugins.h"
++#import <React/RCTFabricComponentsPlugins.h>
+ #endif
+ 
+ #import <React/RCTView.h>
+diff --git a/ios/views/KeyboardControllerView.mm b/ios/views/KeyboardControllerView.mm
+index ea262b916ab1f38343e0819671905f140892477a..ae89e24214b02c0df414fea8de7194a3a21b2e02 100644
+--- a/ios/views/KeyboardControllerView.mm
++++ b/ios/views/KeyboardControllerView.mm
+@@ -26,7 +26,7 @@
+ #import <react/renderer/components/RNKC/RNKCKeyboardControllerViewComponentDescriptor.h>
+ 
+ #import "KeyboardControllerModule-Header.h"
+-#import "RCTFabricComponentsPlugins.h"
++#import <React/RCTFabricComponentsPlugins.h>
+ 
+ using namespace facebook::react;
+ 
+diff --git a/ios/views/KeyboardExtenderManager.mm b/ios/views/KeyboardExtenderManager.mm
+index 18f2d8cf1821c950f12da033016dc2775fe725f0..20c7dbe8709b55c81d70ae1a6952264e959158ba 100644
+--- a/ios/views/KeyboardExtenderManager.mm
++++ b/ios/views/KeyboardExtenderManager.mm
+@@ -21,7 +21,7 @@
+ #import <react/renderer/components/RNKC/RCTComponentViewHelpers.h>
+ #import <react/renderer/components/RNKC/RNKCKeyboardExtenderComponentDescriptor.h>
+ 
+-#import "RCTFabricComponentsPlugins.h"
++#import <React/RCTFabricComponentsPlugins.h>
+ #endif
+ 
+ #import <React/RCTTouchHandler.h>
+diff --git a/ios/views/KeyboardGestureAreaManager.mm b/ios/views/KeyboardGestureAreaManager.mm
+index 0911e418e68ad2e9217c95d6acfc2731063fd02f..a3b772c965b4295c2c30ddfd4b0b395db7a25ffe 100644
+--- a/ios/views/KeyboardGestureAreaManager.mm
++++ b/ios/views/KeyboardGestureAreaManager.mm
+@@ -19,7 +19,7 @@
+ #import <react/renderer/components/RNKC/RCTComponentViewHelpers.h>
+ #import <react/renderer/components/RNKC/RNKCKeyboardGestureAreaComponentDescriptor.h>
+ 
+-#import "RCTFabricComponentsPlugins.h"
++#import <React/RCTFabricComponentsPlugins.h>
+ #endif
+ 
+ #import <UIKit/UIKit.h>
+diff --git a/ios/views/KeyboardToolbarGroupViewManager.mm b/ios/views/KeyboardToolbarGroupViewManager.mm
+index 9e95eabd9a09cec7aac54ce652f29a4b47aed7a1..fba7780c5f877f42b00165919af991983cf6c091 100644
+--- a/ios/views/KeyboardToolbarGroupViewManager.mm
++++ b/ios/views/KeyboardToolbarGroupViewManager.mm
+@@ -13,7 +13,7 @@
+ #import <react/renderer/components/RNKC/RCTComponentViewHelpers.h>
+ #import <react/renderer/components/RNKC/RNKCKeyboardToolbarGroupViewComponentDescriptor.h>
+ 
+-#import "RCTFabricComponentsPlugins.h"
++#import <React/RCTFabricComponentsPlugins.h>
+ #endif
+ 
+ #import <UIKit/UIKit.h>
+diff --git a/ios/views/OverKeyboardViewManager.mm b/ios/views/OverKeyboardViewManager.mm
+index ddfae052219515a2b03bdefbbc4b9ca49d7a3e8c..cec3eb6461ac54c9837109c19b9f1d80598dc630 100644
+--- a/ios/views/OverKeyboardViewManager.mm
++++ b/ios/views/OverKeyboardViewManager.mm
+@@ -21,7 +21,7 @@
+ #import <react/renderer/components/RNKC/RCTComponentViewHelpers.h>
+ #import <react/renderer/components/RNKC/RNKCOverKeyboardViewComponentDescriptor.h>
+ 
+-#import "RCTFabricComponentsPlugins.h"
++#import <React/RCTFabricComponentsPlugins.h>
+ #endif
+ 
+ #import <React/RCTTouchHandler.h>
 diff --git a/lib/commonjs/components/KeyboardAwareScrollView/index.js b/lib/commonjs/components/KeyboardAwareScrollView/index.js
 index 07e7294cf395103e39c55d9b3f230c1bfa72ec4c..15edd0a2ab8865906ac2ae9906f83fd0e414f994 100644
 --- a/lib/commonjs/components/KeyboardAwareScrollView/index.js
