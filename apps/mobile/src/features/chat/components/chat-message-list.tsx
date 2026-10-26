@@ -513,8 +513,7 @@ const MessageRow = memo(function MessageRow({
       : foreground;
   // A touch and hold lifts a sent message with text out of the chat, with its actions.
   const focusable = shared.canFocus && bubble !== null && bubble.body.trim().length > 0;
-  // Select text lifts the message with its text selected; a touch and hold lifts it as it is.
-  const focus = (selecting = false) => {
+  const focus = () => {
     const node = bubbleRef.current;
     if (!bubble || !node) return;
     node.measureInWindow((x, y, width, height) => {
@@ -534,7 +533,6 @@ const MessageRow = memo(function MessageRow({
             : undefined,
         textColor,
         copyText: messageCopyText(bubble),
-        selecting,
       });
     });
   };
@@ -737,7 +735,6 @@ const MessageRow = memo(function MessageRow({
           agentsById={agentsById}
           onReact={shared.canReact ? (emoji) => actions.react(message, emoji) : undefined}
           onReply={shared.canReply ? () => actions.reply(message) : undefined}
-          onSelectText={focusable ? () => focus(true) : undefined}
         />
       ) : null}
     </View>

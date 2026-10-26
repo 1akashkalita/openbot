@@ -1,5 +1,5 @@
 diff --git a/ios/RNUITextView.mm b/ios/RNUITextView.mm
-index 2f76e86a8cda5f8cb4154552f3bf5cead201ee53..8a7eeb85fcfcd76942aff137b996f17b7dbbf27c 100644
+index 2f76e86a8cda5f8cb4154552f3bf5cead201ee53..0d531664359da0ac1316e330cd4c18fea5275fcb 100644
 --- a/ios/RNUITextView.mm
 +++ b/ios/RNUITextView.mm
 @@ -240,7 +240,9 @@ static NSLineBreakMode RCTNSLineBreakModeFromEllipsizeMode(RNUITextViewEllipsize
@@ -28,6 +28,23 @@ index 2f76e86a8cda5f8cb4154552f3bf5cead201ee53..8a7eeb85fcfcd76942aff137b996f17b
      const auto location = [self getLocationOfPress:sender];
      const auto isWithinRetention = [self isLocationWithinActivePressRect:location];
      if (sender.exceededLongPressMovement || !isWithinRetention) {
+@@ -787,6 +797,16 @@ static NSLineBreakMode RCTNSLineBreakModeFromEllipsizeMode(RNUITextViewEllipsize
+ 
+ // MARK: - UITextViewDelegate
+ 
++// OpenBot shows its own actions for selected text under the text, so the
++// system edit menu (Copy, Look Up, Translate) would cover them. An empty menu
++// shows nothing.
++- (UIMenu *)textView:(UITextView *)textView
++    editMenuForTextInRange:(NSRange)range
++          suggestedActions:(NSArray<UIMenuElement *> *)suggestedActions API_AVAILABLE(ios(16.0))
++{
++  return [UIMenu menuWithChildren:@[]];
++}
++
+ - (void)textViewDidChangeSelection:(UITextView *)textView
+ {
+   if (_suppressSelectionChange) {
 diff --git a/ios/RNUITextViewManager.mm b/ios/RNUITextViewManager.mm
 index e2e062d4f7be71217ffe479182cff4e71d0cbaac..47ea37e935ce559add45bbbc31ced0419c908d0c 100644
 --- a/ios/RNUITextViewManager.mm

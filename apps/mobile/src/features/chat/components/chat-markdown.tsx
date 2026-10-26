@@ -38,6 +38,7 @@ import {
   StreamRevealProvider,
 } from "@/features/chat/components/streaming-tail-text";
 import type { MobileAgent } from "@/features/workspace/model/workspace-types";
+import { APP_FONT } from "@/shared/lib/app-font";
 import { graphemes } from "@/shared/lib/graphemes";
 import { haptics } from "@/shared/lib/haptics";
 import { useMotionPreference } from "@/shared/lib/motion";
@@ -472,11 +473,13 @@ function inline(tokens: Token[], parentPresentation: TextPresentation): ReactNod
 }
 
 /** The HeroUI text types as plain styles: a native text view takes no class names. */
+// The app font, as `Typography` draws the same text in the list. Without it the native text view
+// takes the system font, which is narrower, and a lifted message wraps its lines in other places.
 const NATIVE_TEXT_STYLES: Record<TextPresentation["type"], TextStyle> = {
-  body: { fontSize: 16, lineHeight: 28 },
-  "body-sm": { fontSize: 14, lineHeight: 24 },
-  h4: { fontSize: 20, lineHeight: 28, letterSpacing: -0.5 },
-  h5: { fontSize: 18, lineHeight: 28, letterSpacing: -0.45 },
+  body: { fontFamily: APP_FONT, fontSize: 16, lineHeight: 28 },
+  "body-sm": { fontFamily: APP_FONT, fontSize: 14, lineHeight: 24 },
+  h4: { fontFamily: APP_FONT, fontSize: 20, lineHeight: 28, letterSpacing: -0.5 },
+  h5: { fontFamily: APP_FONT, fontSize: 18, lineHeight: 28, letterSpacing: -0.45 },
 };
 
 /**

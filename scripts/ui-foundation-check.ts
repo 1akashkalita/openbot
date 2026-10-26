@@ -9,7 +9,11 @@ function filesUnder(directory: string): string[] {
     // node_modules that statSync follows straight into the hoisted install.
     if (entry === "node_modules") return [];
     const path = resolve(directory, entry);
-    return statSync(path).isDirectory() ? filesUnder(path) : [path];
+    // A local native build leaves links to generated files that a later build removes, such as
+    // in apps/mobile/ios/Pods. A link to nothing holds no markup or style.
+    const stats = statSync(path, { throwIfNoEntry: false });
+    if (!stats) return [];
+    return stats.isDirectory() ? filesUnder(path) : [path];
   });
 }
 

@@ -62,8 +62,6 @@ export interface MessageFocusTarget {
   textColor: ColorValue | undefined;
   /** The text that Copy puts on the clipboard. */
   copyText: string;
-  /** Select text under the message lifted it: its text opens selected. */
-  selecting: boolean;
 }
 
 const EASE_OUT = Easing.bezier(0.23, 1, 0.32, 1);
@@ -96,6 +94,8 @@ const DIVIDER = 1 + MENU_PADDING * 2;
 const MENU_WIDTH = 268;
 const ICON_SIZE = 20;
 const CHIP = 36;
+/** The widest part of the list that a message bubble takes, as `max-w-[88%]` on its row. */
+const BUBBLE_MAX_WIDTH = 0.88;
 const CHIP_GAP = 6;
 const CHIP_GAP_MAX = 20;
 /** The least part of a chip that shows at the edge of the row, so the row reads as one that scrolls. */
@@ -289,9 +289,8 @@ export function ChatMessageFocus({
   const [area, setArea] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
   const [layout, setLayout] = useState<{ top: number; bubbleTop: number; bubbleMaxHeight: number } | null>(null);
   const [selected, setSelected] = useState("");
-  // Native text views select in place with a touch and hold. Without them, the read-only field of
-  // the chat covers the text, with all of it selected.
-  const [selecting, setSelecting] = useState(target.selecting && !nativeTextSelection);
+  // Without native text views, Select text puts the read-only field of the chat over the text.
+  const [selecting, setSelecting] = useState(false);
   const [selectionHeight, setSelectionHeight] = useState(0);
   const [moreEmoji, setMoreEmoji] = useState(false);
   const [chipViewport, setChipViewport] = useState(0);
@@ -442,7 +441,14 @@ export function ChatMessageFocus({
     transform: [{ translateY: travel * (1 - presence.get()) }, { scale: 1 + 0.02 * presence.get() }],
   }));
   const edge = align === "end" ? "flex-end" : "flex-start";
-  const bubbleLeft = area ? frame.x - area.x - SIDE : 0;
+  // The copy keeps the side of the message and may grow to the widest bubble of the list: its text
+  // view may measure a line a little wider than the list text, and must not wrap it then.
+  const bubbleInset = area
+    ? align === "end"
+      ? { marginRight: area.x + area.width - SIDE - (frame.x + frame.width) }
+      : { marginLeft: frame.x - area.x - SIDE }
+    : {};
+  const bubbleMaxWidth = area ? Math.max(frame.width, (area.width - SIDE * 2) * BUBBLE_MAX_WIDTH) : frame.width;
 
   return (
     <View
@@ -511,7 +517,7 @@ export function ChatMessageFocus({
           ) : null}
           <Animated.View
             style={[
-              { marginLeft: bubbleLeft, width: frame.width, opacity: layout ? 1 : 0 },
+              { ...bubbleInset, alignSelf: edge, maxWidth: bubbleMaxWidth, opacity: layout ? 1 : 0 },
               { transformOrigin: align === "end" ? "100% 50%" : "0% 50%" },
               bubbleStyle,
             ]}

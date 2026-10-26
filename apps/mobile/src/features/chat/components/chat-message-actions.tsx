@@ -6,7 +6,6 @@ import Copy from "lucide-react-native/icons/copy";
 import SmilePlus from "lucide-react-native/icons/face-slightly-smiling-plus";
 import Plus from "lucide-react-native/icons/plus";
 import Reply from "lucide-react-native/icons/reply";
-import TextSelect from "lucide-react-native/icons/square-dashed-text";
 import { type PropsWithChildren, useMemo, useState } from "react";
 import { type AccessibilityState, Pressable, View } from "react-native";
 import Animated, { FadeIn, FadeOut, ReduceMotion } from "react-native-reanimated";
@@ -24,7 +23,7 @@ const PRESSED = { transform: [{ scale: 0.94 }] };
 
 /**
  * A button of the row under a message, with the size and look of a small ghost HeroUI `Button`. It
- * is a plain pressable: each message in the chat has four of these, and each HeroUI button mounts an
+ * is a plain pressable: each message in the chat has three of these, and each HeroUI button mounts an
  * animated pressable with about nine shared values and four animated styles, which made the chat
  * lag while it scrolled. The press shows at once, without an animation.
  */
@@ -62,8 +61,8 @@ function ActionButton({
 }
 
 /**
- * The row under a message: its reactions, Copy, React, Reply, Select text and the time. A phone has
- * no hover, so the row always shows, and each action takes one tap.
+ * The row under a message: its reactions, Copy, React, Reply and the time. A phone has no hover, so
+ * the row always shows, and each action takes one tap. A touch and hold on the message has the rest.
  */
 export function ChatMessageActions({
   align,
@@ -73,7 +72,6 @@ export function ChatMessageActions({
   agentsById,
   onReact,
   onReply,
-  onSelectText,
 }: {
   align: "start" | "end";
   /** The text that Copy puts on the clipboard. Empty for a message of files only. */
@@ -84,8 +82,6 @@ export function ChatMessageActions({
   /** Unset where a reaction cannot be saved. `null` removes the reader's reaction. */
   onReact?: (emoji: string | null) => Promise<void>;
   onReply?: () => void;
-  /** Lifts the message out of the chat with its text selected, as a touch and hold lifts it. */
-  onSelectText?: () => void;
 }) {
   const { t, format } = useText();
   const mutedColor = useThemeColor("muted");
@@ -192,17 +188,6 @@ export function ChatMessageActions({
             }}
           >
             <Reply size={ICON_SIZE} color={muted} />
-          </ActionButton>
-        ) : null}
-        {onSelectText ? (
-          <ActionButton
-            accessibilityLabel={t("mobile.chat.message.selectText")}
-            onPress={() => {
-              void haptics.selection();
-              onSelectText();
-            }}
-          >
-            <TextSelect size={ICON_SIZE} color={muted} />
           </ActionButton>
         ) : null}
         {time ? (
