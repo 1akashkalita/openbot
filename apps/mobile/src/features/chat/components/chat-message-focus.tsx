@@ -570,8 +570,6 @@ export function ChatMessageFocus({
                         color={target.textColor}
                         onHeight={setSelectionHeight}
                         onSelectionChange={setSelected}
-                        // The menu under the message has Copy selection and the other actions.
-                        systemMenu={false}
                       />
                     ) : null}
                   </View>

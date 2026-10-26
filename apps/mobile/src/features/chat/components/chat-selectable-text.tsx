@@ -40,7 +40,6 @@ export function ChatSelectableText({
   color,
   onHeight,
   onSelectionChange,
-  systemMenu = true,
 }: {
   text: string;
   color: ColorValue | undefined;
@@ -48,11 +47,6 @@ export function ChatSelectableText({
   onHeight: (height: number) => void;
   /** The selected part of `text`. Empty when the selection is only a cursor. */
   onSelectionChange: (selected: string) => void;
-  /**
-   * Off where the chat shows its own actions for the selection, so the system menu does not cover
-   * them. iOS only: Android cannot hide the menu and keep the selection.
-   */
-  systemMenu?: boolean;
 }) {
   const { t } = useText();
   const { fontScale } = useWindowDimensions();
@@ -86,9 +80,10 @@ export function ChatSelectableText({
       showSoftInputOnFocus={false}
       caretHidden
       selectTextOnFocus
-      // Android hides the menu by refusing its action mode, and that also ends the selection, so
+      // The lifted message shows its own actions for the selection, so the system menu would cover
+      // them. Android hides the menu by refusing its action mode, which also ends the selection, so
       // Android keeps its menu.
-      contextMenuHidden={!systemMenu && isIOS}
+      contextMenuHidden={isIOS}
       onContentSizeChange={({ nativeEvent }) => onHeight(nativeEvent.contentSize.height)}
       onSelectionChange={({ nativeEvent }) =>
         onSelectionChange(text.slice(nativeEvent.selection.start, nativeEvent.selection.end))
