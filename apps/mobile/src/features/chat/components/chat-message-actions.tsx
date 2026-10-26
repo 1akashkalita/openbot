@@ -74,7 +74,6 @@ export function ChatMessageActions({
   onReact,
   onReply,
   onSelectText,
-  selecting = false,
 }: {
   align: "start" | "end";
   /** The text that Copy puts on the clipboard. Empty for a message of files only. */
@@ -85,12 +84,11 @@ export function ChatMessageActions({
   /** Unset where a reaction cannot be saved. `null` removes the reader's reaction. */
   onReact?: (emoji: string | null) => Promise<void>;
   onReply?: () => void;
-  /** Starts the selection of the text in the bubble, or ends it while `selecting`. */
+  /** Lifts the message out of the chat with its text selected, as a touch and hold lifts it. */
   onSelectText?: () => void;
-  selecting?: boolean;
 }) {
   const { t, format } = useText();
-  const [mutedColor, foregroundColor] = useThemeColor(["muted", "foreground"]);
+  const mutedColor = useThemeColor("muted");
   const muted = String(mutedColor);
   const { copy, copied } = useCopyMessage(copyText);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -198,16 +196,13 @@ export function ChatMessageActions({
         ) : null}
         {onSelectText ? (
           <ActionButton
-            // Drawn as pressed while the text is selected: a second tap ends the selection.
-            selected={selecting}
             accessibilityLabel={t("mobile.chat.message.selectText")}
-            accessibilityState={{ selected: selecting }}
             onPress={() => {
               void haptics.selection();
               onSelectText();
             }}
           >
-            <TextSelect size={ICON_SIZE} color={selecting ? String(foregroundColor) : muted} />
+            <TextSelect size={ICON_SIZE} color={muted} />
           </ActionButton>
         ) : null}
         {time ? (

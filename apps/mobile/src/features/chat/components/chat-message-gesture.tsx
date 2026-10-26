@@ -13,12 +13,9 @@ import { haptics } from "@/shared/lib/haptics";
  */
 export function ChatMessageGesture({
   children,
-  selecting,
   onReply,
   onHold,
 }: PropsWithChildren<{
-  /** The text is selected in the bubble: the handles get the touches, not the swipe. */
-  selecting: boolean;
   onReply?: () => void;
   onHold?: () => void;
 }>) {
@@ -31,8 +28,8 @@ export function ChatMessageGesture({
   const [iconShown, setIconShown] = useState(false);
   const handlers = useRef({ onReply, onHold });
   handlers.current = { onReply, onHold };
-  const canReply = Boolean(onReply) && !selecting;
-  const canHold = Boolean(onHold) && !selecting;
+  const canReply = Boolean(onReply);
+  const canHold = Boolean(onHold);
   // Build the gestures once per row. A streaming reply re-renders its row for each chunk, and a new
   // gesture would reconfigure the native handler each time.
   const gesture = useMemo(() => {

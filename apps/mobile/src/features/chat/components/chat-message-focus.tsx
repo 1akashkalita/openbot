@@ -62,6 +62,8 @@ export interface MessageFocusTarget {
   textColor: ColorValue | undefined;
   /** The text that Copy puts on the clipboard. */
   copyText: string;
+  /** Select text under the message lifted it: its text opens selected. */
+  selecting: boolean;
 }
 
 const EASE_OUT = Easing.bezier(0.23, 1, 0.32, 1);
@@ -287,7 +289,9 @@ export function ChatMessageFocus({
   const [area, setArea] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
   const [layout, setLayout] = useState<{ top: number; bubbleTop: number; bubbleMaxHeight: number } | null>(null);
   const [selected, setSelected] = useState("");
-  const [selecting, setSelecting] = useState(false);
+  // Native text views select in place with a touch and hold. Without them, the read-only field of
+  // the chat covers the text, with all of it selected.
+  const [selecting, setSelecting] = useState(target.selecting && !nativeTextSelection);
   const [selectionHeight, setSelectionHeight] = useState(0);
   const [moreEmoji, setMoreEmoji] = useState(false);
   const [chipViewport, setChipViewport] = useState(0);

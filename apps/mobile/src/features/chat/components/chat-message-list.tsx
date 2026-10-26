@@ -3,7 +3,6 @@ import type { AnchoredEndSpaceConfig } from "@legendapp/list/react-native";
 import { expandAttachmentReferences } from "@openbot/contracts/attachment-references";
 import { expandChatTagReferences } from "@openbot/contracts/chat-tag-references";
 import type { AttachmentSummary, BrowserTakeoverRequest } from "@openbot/contracts/ipc";
-import { markdownPlainText } from "@openbot/contracts/markdown-preview-text";
 import type { MobileTextKey } from "@openbot/i18n/mobile";
 import { useIsFocused } from "expo-router";
 import { Button, Typography } from "heroui-native";
@@ -36,7 +35,6 @@ import {
 } from "react";
 import {
   AccessibilityInfo,
-  type GestureResponderEvent,
   Pressable,
   StyleSheet,
   useWindowDimensions,
@@ -85,7 +83,6 @@ import { isAndroid } from "@/shared/lib/platform";
 import { useText } from "@/shared/lib/text";
 import { mentionDraft } from "../model/chat-mentions";
 import type { ChatTarget } from "../model/chat-target";
-import { nativeTextSelection } from "../model/native-text-selection";
 import { isStreamingReply } from "../model/reply-reveal";
 import { uploadProgressAt } from "../model/upload-progress";
 import { type AttachmentTint, ChatAttachmentView } from "./chat-attachment";
@@ -96,15 +93,8 @@ import { ChatMessageActions } from "./chat-message-actions";
 import type { MessageFocusTarget } from "./chat-message-focus";
 import { ChatMessageGesture, ChatMessageHold } from "./chat-message-gesture";
 import { ChatOutboxStatus, OutboxMessageMenu, type OutboxRowStatus } from "./chat-outbox-status";
-import { ChatSelectableText } from "./chat-selectable-text";
 import { HistoryShownContext } from "./use-history-shown";
 import { useReplyHaptics } from "./use-reply-haptics";
-
-/** The most movement and time of a touch that ends the selection: more is a scroll or a hold. */
-const TAP_SLOP = 10;
-const TAP_DURATION_MS = 400;
-/** The selection handles stand this far out of the row of the selected message. */
-const HANDLE_MARGIN = 24;
 
 /** A row of the list. Thinking steps show in the activity row instead. */
 type VisibleMessage = Exclude<ChatMessage, { kind: "thinking" }> | ExchangeGroup;
@@ -286,15 +276,6 @@ interface ChatMessageListProps {
   onReply?: (message: ChatBubbleMessage) => void;
   /** Sets the reader's reaction on a message. `null` removes it. */
   onReact?: (message: ChatBubbleMessage, emoji: string | null) => Promise<void>;
-  /** The message whose text the reader selects in its bubble. */
-  selectingMessageId?: string | null;
-  onSelectText?: (message: ChatBubbleMessage) => void;
-  /** The selected part of the message text, or an empty string. */
-  onSelectionChange?: (selected: string) => void;
-  /** Native text views report the text selected in a message, or an empty string at its end. */
-  onNativeSelection?: (message: ChatBubbleMessage, selected: string) => void;
-  /** A tap outside the selected text ends the selection. */
-  onDismissSelection?: () => void;
   /** A touch and hold on a sent message lifts it out of the chat, with its actions. */
   onFocusMessage?: (target: MessageFocusTarget) => void;
   /** The lifted message: its copy covers it, so its bubble in the list hides. */
@@ -346,7 +327,6 @@ interface MessageRowShared {
   replyHaptics: ReturnType<typeof useReplyHaptics>;
   canReply: boolean;
   canReact: boolean;
-  canSelectText: boolean;
   canSelectQuestion: boolean;
   /** A touch and hold lifts a message: its text in the list is not selectable in place. */
   canFocus: boolean;
@@ -356,11 +336,6 @@ interface MessageRowShared {
     reply: (message: ChatBubbleMessage) => void;
     selectQuestion: (messageId: string) => void;
     react: (message: ChatBubbleMessage, emoji: string | null) => Promise<void>;
-    selectText: (message: ChatBubbleMessage) => void;
-    selectionChange: (selected: string) => void;
-    nativeSelection: (message: ChatBubbleMessage, selected: string) => void;
-    /** The row of the selected message. A tap outside it ends the selection. */
-    selectionArea: (view: ViewInstance | null) => void;
     focus: (target: MessageFocusTarget) => void;
   };
 }
@@ -458,7 +433,6 @@ const MessageRow = memo(function MessageRow({
   questionForm,
   upload,
   outbox,
-  selecting = false,
   lifted = false,
   arriving,
   revealed,
@@ -477,36 +451,15 @@ const MessageRow = memo(function MessageRow({
   upload?: ChatUpload;
   /** Set only on a message that waits on the phone or failed. */
   outbox?: OutboxRowStatus;
-  /** The reader selects the text of this message in its bubble. */
-  selecting?: boolean;
   /** The lifted copy of this message covers it. */
   lifted?: boolean;
   shared: MessageRowShared;
 }) {
   const { t } = useText();
-  const [selectionHeight, setSelectionHeight] = useState(0);
-  // Native text views keep a selection until they draw again. When the chat ends the selection
-  // from outside, such as with a tap elsewhere, the next generation draws them without it.
-  const [selectionGeneration, setSelectionGeneration] = useState(0);
-  const wasSelecting = useRef(selecting);
-  useEffect(() => {
-    if (wasSelecting.current && !selecting) setSelectionGeneration((generation) => generation + 1);
-    wasSelecting.current = selecting;
-  }, [selecting]);
   const waiting = awaitingFirstWord(message, shared, arriving, revealed);
   // A message that the host does not have yet, or that still streams, has no host ID to act on:
   // it has no actions and no native selection.
   const bubble = message.kind === "message" && !outbox && !message.streaming && !waiting ? message : null;
-  const nativeSelect = shared.actions.nativeSelection;
-  // A touch and hold lifts the message, so the text in the list is plain text. Only the message
-  // whose text the reader selects, after Select text, draws native text views.
-  const nativeSelection = useMemo(
-    () =>
-      bubble && nativeTextSelection && shared.canSelectText && (selecting || !shared.canFocus)
-        ? { generation: selectionGeneration, onSelect: (selected: string) => nativeSelect(bubble, selected) }
-        : undefined,
-    [bubble, nativeSelect, selectionGeneration, shared.canSelectText, shared.canFocus, selecting],
-  );
   const bubbleRef = useRef<ViewInstance>(null);
   const {
     agents,
@@ -548,8 +501,6 @@ const MessageRow = memo(function MessageRow({
         : undefined,
     [eligible, message.id, complete, replySession.progress, enabled, markRevealed, replyHaptics],
   );
-  // Native text views select in place, so only the fallback covers the text with a field.
-  const overlaySelecting = selecting && !nativeTextSelection;
   // The author of a channel message: its agent, or a person.
   const speaker = message.kind === "message" && message.speaker ? agentsById.get(message.speaker.id) : undefined;
   // Another person in an agent chat: a person's bubble in their own colour, seeded by the member id
@@ -562,7 +513,8 @@ const MessageRow = memo(function MessageRow({
       : foreground;
   // A touch and hold lifts a sent message with text out of the chat, with its actions.
   const focusable = shared.canFocus && bubble !== null && bubble.body.trim().length > 0;
-  const focus = () => {
+  // Select text lifts the message with its text selected; a touch and hold lifts it as it is.
+  const focus = (selecting = false) => {
     const node = bubbleRef.current;
     if (!bubble || !node) return;
     node.measureInWindow((x, y, width, height) => {
@@ -582,6 +534,7 @@ const MessageRow = memo(function MessageRow({
             : undefined,
         textColor,
         copyText: messageCopyText(bubble),
+        selecting,
       });
     });
   };
@@ -589,7 +542,7 @@ const MessageRow = memo(function MessageRow({
   // whole row. Only the author and the chat decide it, so the bubble keeps its place in the tree.
   const withOwnHold = (element: ReactElement) =>
     message.kind === "message" && message.author === "user" && shared.canFocus ? (
-      <ChatMessageHold enabled={focusable && !selecting} onHold={focus}>
+      <ChatMessageHold enabled={focusable} onHold={focus}>
         {element}
       </ChatMessageHold>
     ) : (
@@ -712,45 +665,22 @@ const MessageRow = memo(function MessageRow({
                   lifted ? LIFTED : undefined,
                 ]}
               >
-                {/* The message text stays mounted while the reader selects, so it does not change size or
-                    play its reveal again. Without native text views, the selectable text covers it at
-                    the same place. */}
-                <View style={overlaySelecting ? { minHeight: selectionHeight } : undefined}>
-                  <View
-                    style={overlaySelecting ? { opacity: 0 } : undefined}
-                    accessibilityElementsHidden={overlaySelecting}
-                    importantForAccessibility={overlaySelecting ? "no-hide-descendants" : "auto"}
-                  >
-                    <ChatMarkdown
-                      agents={agents}
-                      body={message.body}
-                      finished={!isStreamingReply(message)}
-                      // A touch and hold lifts the message instead of selecting the text in place.
-                      selectable={message.author === "user" && !shared.canFocus}
-                      color={textColor}
-                      playback={playback}
-                      animationEnabled={shared.animationActive && arriving}
-                      nativeSelection={nativeSelection}
-                    />
-                  </View>
-                  {overlaySelecting ? (
-                    <ChatSelectableText
-                      text={markdownPlainText(message.body)}
-                      color={textColor}
-                      onHeight={setSelectionHeight}
-                      onSelectionChange={actions.selectionChange}
-                    />
-                  ) : null}
-                </View>
+                <ChatMarkdown
+                  agents={agents}
+                  body={message.body}
+                  finished={!isStreamingReply(message)}
+                  // A touch and hold lifts the message instead of selecting the text in place.
+                  selectable={message.author === "user" && !shared.canFocus}
+                  color={textColor}
+                  playback={playback}
+                  animationEnabled={shared.animationActive && arriving}
+                />
               </ChatBubble>,
             )
           : null}
       </Animated.View>
     );
   if (message.kind !== "message") return rendered;
-  // Select text selects in the bubble. Without the lift, native text views select the word under
-  // the finger on their own and need no Select text.
-  const selectable = shared.canSelectText && (!nativeTextSelection || shared.canFocus) && Boolean(message.body.trim());
   const replyPreview =
     source?.kind === "message"
       ? mentionDraft(source.body).text || t("mobile.chat.reply.attachment")
@@ -758,9 +688,6 @@ const MessageRow = memo(function MessageRow({
   return (
     <View
       key={message.id}
-      // The selected text and its action row: a tap here does not end the selection, so the Select
-      // text button can end it on its own.
-      ref={selecting ? actions.selectionArea : undefined}
       className={
         message.author === "agent"
           ? "max-w-full self-start gap-1"
@@ -784,9 +711,8 @@ const MessageRow = memo(function MessageRow({
       ) : null}
       {message.author === "agent" ? (
         <ChatMessageGesture
-          selecting={selecting}
           onReply={shared.canReply ? () => actions.reply(message) : undefined}
-          onHold={focusable ? focus : !shared.canFocus && selectable ? () => actions.selectText(message) : undefined}
+          onHold={focusable ? focus : undefined}
         >
           {rendered}
         </ChatMessageGesture>
@@ -811,8 +737,7 @@ const MessageRow = memo(function MessageRow({
           agentsById={agentsById}
           onReact={shared.canReact ? (emoji) => actions.react(message, emoji) : undefined}
           onReply={shared.canReply ? () => actions.reply(message) : undefined}
-          onSelectText={selectable ? () => actions.selectText(message) : undefined}
-          selecting={selecting}
+          onSelectText={focusable ? () => focus(true) : undefined}
         />
       ) : null}
     </View>
@@ -836,7 +761,6 @@ interface RowContextValue {
   promptController: QuestionPromptController | undefined;
   upload: ChatUpload | null | undefined;
   outboxStatuses: ReadonlyMap<string, OutboxRowStatus> | undefined;
-  selectingMessageId: string | null;
   liftedMessageId: string | null;
 }
 
@@ -863,7 +787,6 @@ function ChatRow({ message }: { message: VisibleMessage }) {
         questionForm={message.id === row.promptController?.messageId ? row.promptController : undefined}
         upload={row.upload?.messageId === message.id ? row.upload : undefined}
         outbox={row.outboxStatuses?.get(message.id)}
-        selecting={message.id === row.selectingMessageId}
         lifted={message.id === row.liftedMessageId}
         arriving={row.arrivals.has(message.id)}
         revealed={row.revealedIds.has(message.id)}
@@ -997,11 +920,6 @@ export const ChatMessageList = memo(function ChatMessageList({
   onRetryHistory,
   onReply,
   onReact,
-  selectingMessageId = null,
-  onSelectText,
-  onSelectionChange,
-  onNativeSelection,
-  onDismissSelection,
   onFocusMessage,
   liftedMessageId = null,
   focusMessageId = null,
@@ -1151,72 +1069,22 @@ export const ChatMessageList = memo(function ChatMessageList({
   const onListReady = motion.onListReady;
   const hasRows = rows.length > 0;
   const onReady = useCallback(() => onListReady(hasRows), [onListReady, hasRows]);
-  const selectionArea = useRef<ViewInstance | null>(null);
-  const actionHandlers = useRef({
-    onReply,
-    onReact,
-    onSelectText,
-    onSelectionChange,
-    onNativeSelection,
-    onSelectQuestion,
-    onFocusMessage,
-  });
-  actionHandlers.current = {
-    onReply,
-    onReact,
-    onSelectText,
-    onSelectionChange,
-    onNativeSelection,
-    onSelectQuestion,
-    onFocusMessage,
-  };
+  const actionHandlers = useRef({ onReply, onReact, onSelectQuestion, onFocusMessage });
+  actionHandlers.current = { onReply, onReact, onSelectQuestion, onFocusMessage };
   const actions = useMemo<MessageRowShared["actions"]>(
     () => ({
       reply: (message) => actionHandlers.current.onReply?.(message),
       selectQuestion: (messageId) => actionHandlers.current.onSelectQuestion?.(messageId),
       react: async (message, emoji) => actionHandlers.current.onReact?.(message, emoji),
-      selectText: (message) => actionHandlers.current.onSelectText?.(message),
-      selectionChange: (selected) => actionHandlers.current.onSelectionChange?.(selected),
-      nativeSelection: (message, selected) => actionHandlers.current.onNativeSelection?.(message, selected),
-      selectionArea: (view) => {
-        selectionArea.current = view;
-      },
       focus: (target) => actionHandlers.current.onFocusMessage?.(target),
     }),
     [],
   );
-  // A tap, not a scroll, outside the selected text ends the selection. Touch events only listen, so
-  // the tap still reaches the button or the text under it.
-  const touchStart = useRef<{ x: number; y: number; time: number } | null>(null);
-  const dismissSelection = useRef(onDismissSelection);
-  dismissSelection.current = onDismissSelection;
-  const onTouchStart = ({ nativeEvent }: GestureResponderEvent) => {
-    touchStart.current = { x: nativeEvent.pageX, y: nativeEvent.pageY, time: nativeEvent.timestamp };
-  };
-  const onTouchEnd = ({ nativeEvent }: GestureResponderEvent) => {
-    const start = touchStart.current;
-    touchStart.current = null;
-    const area = selectionArea.current;
-    if (!start || !area || !dismissSelection.current) return;
-    const moved = Math.hypot(nativeEvent.pageX - start.x, nativeEvent.pageY - start.y);
-    if (moved > TAP_SLOP || nativeEvent.timestamp - start.time > TAP_DURATION_MS) return;
-    const { pageX, pageY } = nativeEvent;
-    area.measureInWindow((x, y, width, height) => {
-      // The selection handles stand out of the row, so a touch near it is still on the selection.
-      const inside =
-        pageX >= x - HANDLE_MARGIN &&
-        pageX <= x + width + HANDLE_MARGIN &&
-        pageY >= y - HANDLE_MARGIN &&
-        pageY <= y + height + HANDLE_MARGIN;
-      if (!inside) dismissSelection.current?.();
-    });
-  };
   const animationActive = animateMessages && motion.responseVisible;
   // The parent passes new handler functions on each render. The rows call them through
   // `actionHandlers`, so only their presence keeps `shared`, and every row, from rendering again.
   const canReply = Boolean(onReply);
   const canReact = Boolean(onReact);
-  const canSelectText = Boolean(onSelectText);
   const canSelectQuestion = Boolean(onSelectQuestion);
   const canFocus = Boolean(onFocusMessage);
   const listWidth = screen.width - LIST_PADDING * 2;
@@ -1245,7 +1113,6 @@ export const ChatMessageList = memo(function ChatMessageList({
       replyHaptics,
       canReply,
       canReact,
-      canSelectText,
       canSelectQuestion,
       canFocus,
       listWidth,
@@ -1273,7 +1140,6 @@ export const ChatMessageList = memo(function ChatMessageList({
       replyHaptics,
       canReply,
       canReact,
-      canSelectText,
       canSelectQuestion,
       canFocus,
       listWidth,
@@ -1303,7 +1169,6 @@ export const ChatMessageList = memo(function ChatMessageList({
       promptController,
       upload,
       outboxStatuses,
-      selectingMessageId,
       liftedMessageId,
     }),
     [
@@ -1318,7 +1183,6 @@ export const ChatMessageList = memo(function ChatMessageList({
       promptController,
       upload,
       outboxStatuses,
-      selectingMessageId,
       liftedMessageId,
     ],
   );
@@ -1400,8 +1264,6 @@ export const ChatMessageList = memo(function ChatMessageList({
 
   return (
     <Animated.View
-      onTouchStart={selectingMessageId ? onTouchStart : undefined}
-      onTouchEnd={selectingMessageId ? onTouchEnd : undefined}
       style={[{ flex: 1 }, historyState === "ready" ? motion.historyStyle : undefined]}
       accessibilityElementsHidden={accessibilityHidden || (historyState === "ready" && !motion.historyVisible)}
       importantForAccessibility={
