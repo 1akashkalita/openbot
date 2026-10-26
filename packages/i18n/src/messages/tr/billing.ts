@@ -90,6 +90,8 @@ export const messages = {
   "billing.license.offer.description": "1 kullanıcı için Starter veya {count} ya da daha fazla kullanıcı için Team.",
   "billing.license.buy.description": "OpenBot'u işte kaç kişi kullanıyor? Yapay zeka ajanları kullanıcı sayılmaz.",
   "billing.license.buy.confirm": "Ödemeye geç",
+  "billing.license.trial.until": "{date} tarihine kadar ücretsiz",
+  "billing.license.trial.confirm": "Ücretsiz denemeyi başlat",
   "billing.license.work.used": "{used} / {users} kullanıcı",
   "billing.license.tier.starter.title": "Starter lisansı",
   "billing.license.tier.team.title": "Team lisansı",

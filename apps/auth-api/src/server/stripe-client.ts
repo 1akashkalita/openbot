@@ -297,6 +297,8 @@ export class StripeClient {
       metadata?: Readonly<Record<string, string>>;
       /** Metadata for the session only, such as the order that a later page for the same server repeats. */
       sessionMetadata?: Readonly<Record<string, string>>;
+      /** The subscription is free until this time. Stripe refuses a time less than 48 hours away. */
+      trialEndSeconds?: number;
       successUrl: string;
       cancelUrl: string;
       nowSeconds: number;
@@ -319,6 +321,7 @@ export class StripeClient {
       body.set(`line_items[${index + 1}][quantity]`, String(item.quantity));
     }
     if (input.serverId) body.set("client_reference_id", input.serverId);
+    if (input.trialEndSeconds !== undefined) body.set("subscription_data[trial_end]", String(input.trialEndSeconds));
     for (const prefix of ["metadata", "subscription_data[metadata]"]) {
       body.set(`${prefix}[${BILLING_METADATA.userId}]`, input.userId);
       if (input.serverId) body.set(`${prefix}[${BILLING_METADATA.serverId}]`, input.serverId);
@@ -372,7 +375,8 @@ export class StripeClient {
 
   /**
    * Makes a subscription with one Price that renews at `anchorSeconds`. Stripe charges nothing until then:
-   * the period up to the anchor has no proration. The same idempotency key gives the same subscription.
+   * the period up to the anchor has no proration. With `trial`, that period is a free trial, and the
+   * subscription is `trialing` until it ends. The same idempotency key gives the same subscription.
    */
 
   readonly createSubscription = Effect.fn("StripeClient.createSubscription")(function* (
@@ -383,6 +387,7 @@ export class StripeClient {
       quantity: number;
       currency: BillingCurrency;
       anchorSeconds: number;
+      trial?: boolean;
       paymentMethodId: string | null;
       metadata: Readonly<Record<string, string>>;
     },
@@ -393,13 +398,31 @@ export class StripeClient {
       "items[0][price]": input.priceId,
       "items[0][quantity]": String(input.quantity),
       currency: input.currency,
-      billing_cycle_anchor: String(input.anchorSeconds),
-      proration_behavior: "none",
+      ...(input.trial
+        ? { trial_end: String(input.anchorSeconds) }
+        : { billing_cycle_anchor: String(input.anchorSeconds), proration_behavior: "none" }),
       "expand[]": "items.data.price.currency_options",
     });
     if (input.paymentMethodId) body.set("default_payment_method", input.paymentMethodId);
     for (const [key, value] of Object.entries(input.metadata)) body.set(`metadata[${key}]`, value);
     return yield* this.#requestEffect("POST", "/v1/subscriptions", body, subscriptionSchema, idempotencyKey);
+  }).bind(this);
+
+  /** Sets metadata on a subscription. An empty value removes the key. */
+
+  readonly setSubscriptionMetadata = Effect.fn("StripeClient.setSubscriptionMetadata")(function* (
+    this: StripeClient,
+    subscriptionId: string,
+    metadata: Readonly<Record<string, string>>,
+  ): Effect.fn.Return<void, StripeRequestError | StripeTransportError> {
+    const body = new URLSearchParams();
+    for (const [key, value] of Object.entries(metadata)) body.set(`metadata[${key}]`, value);
+    yield* this.#requestEffect(
+      "POST",
+      `/v1/subscriptions/${encodeURIComponent(subscriptionId)}`,
+      body,
+      subscriptionSchema,
+    );
   }).bind(this);
 
   /** Removes one item from a subscription. With no proration, Stripe gives no credit for the rest of the period. */

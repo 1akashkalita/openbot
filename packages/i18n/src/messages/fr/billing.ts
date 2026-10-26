@@ -95,6 +95,8 @@ export const messages = {
   "billing.license.buy.description":
     "Combien de personnes utilisent OpenBot au travail ? Les agents IA ne sont pas des utilisateurs.",
   "billing.license.buy.confirm": "Passer au paiement",
+  "billing.license.trial.until": "Gratuit jusqu’au {date}",
+  "billing.license.trial.confirm": "Commencer l’essai gratuit",
   "billing.license.work.used": "{used} sur {users} utilisateurs",
   "billing.license.tier.starter.title": "Licence Starter",
   "billing.license.tier.team.title": "Licence Team",

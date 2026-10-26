@@ -1,9 +1,11 @@
 import {
   BILLING_CURRENCIES,
   BILLING_INTERVALS,
+  BILLING_PLAN_IDS,
   BILLING_SUBSCRIPTION_STATUSES,
   type BillingCurrency,
   type BillingInterval,
+  type BillingPlanId,
   type BillingSubscriptionStatus,
   isStripeCheckoutUrl,
 } from "./billing";
@@ -75,6 +77,19 @@ export const LICENSE_METADATA = {
   orderSubscription: "openbot_order_subscription",
 } as const;
 export const LICENSE_METADATA_KIND = "license";
+
+/**
+ * The license order of a server Checkout page. A later page for the same server reads it from the page
+ * that it closes, so it sells the same license. A paid order normally has a license item, so the tier and
+ * the users are on the session only. During a promotion the order has no license item: all keys are also
+ * on the subscription, and the split makes a license that is free until `licenseTrialEnd`.
+ */
+export const ORDER_METADATA = {
+  licenseTier: "openbot_order_license_tier",
+  licenseUsers: "openbot_order_license_users",
+  licenseInterval: "openbot_order_license_interval",
+  licenseTrialEnd: "openbot_order_license_trial_end",
+} as const;
 
 /** The base price of the Team tier includes this many users. */
 export const LICENSE_INCLUDED_USERS = 5;
@@ -265,6 +280,12 @@ export function licenseOrderFor(people: number): LicenseOrder {
     : { tier: "team", users: Math.max(LICENSE_INCLUDED_USERS, people) };
 }
 
+/** The next user count to offer. 2 to 4 users cost the same as the Team minimum, so 1 steps to it and back. */
+export function stepLicenseUsers(users: number, delta: 1 | -1): number {
+  if (delta > 0) return users < LICENSE_INCLUDED_USERS ? LICENSE_INCLUDED_USERS : users + 1;
+  return users <= LICENSE_INCLUDED_USERS ? 1 : users - 1;
+}
+
 export interface License {
   /** The Stripe subscription id. */
   subscriptionId: string;
@@ -321,6 +342,11 @@ export interface LicenseState {
   coveredBy: LicenseCoverage[];
   /** True when the account pays for a hosted server, so a new license gets the bundle price. */
   bundle?: boolean;
+  /**
+   * A new license is free until this time, in milliseconds since the epoch: Stripe charges its first
+   * payment then. Absent when a new license is paid at once.
+   */
+  trialEnd?: number;
 }
 
 export interface LicenseCheckoutRequest {
@@ -391,6 +417,12 @@ function parseLicense(value: unknown): License | null {
   };
 }
 
+/**
+ * The date of a license trial end, as the app writes it. It is in UTC, so that the page that the Worker
+ * renders and each browser write the same day.
+ */
+export const LICENSE_TRIAL_DATE_FORMAT: Intl.DateTimeFormatOptions = { dateStyle: "long", timeZone: "UTC" };
+
 function parseLicenseUser(value: unknown): LicenseUser | null {
   if (
     !isDynamicRecord(value) ||
@@ -447,6 +479,7 @@ export function parseLicenseState(value: unknown): LicenseState | null {
     users,
     coveredBy,
     ...(isBoolean(value.bundle) ? { bundle: value.bundle } : {}),
+    ...(isNumber(value.trialEnd) && Number.isSafeInteger(value.trialEnd) ? { trialEnd: value.trialEnd } : {}),
   };
 }
 
@@ -485,6 +518,46 @@ export function parseLicenseOrder(value: unknown): LicenseOrder | null {
   )
     return null;
   return { tier: value.tier, users: value.users };
+}
+
+/** An order from the pricing page: a server plan, a license, or both, at one interval and currency. */
+export interface PricingOrder {
+  server: BillingPlanId | null;
+  license: LicenseOrder | null;
+  interval: BillingInterval;
+  currency: BillingCurrency;
+}
+
+/** The query parameters that carry a pricing page order to `/app`. */
+export const PRICING_ORDER_PARAMS = ["plan", "license", "users", "interval", "currency"] as const;
+
+/**
+ * The query of a pricing page order, so that the app goes to Checkout without a second choice. `users` stays a
+ * number: the router writes a string that looks like a number in quotes.
+ */
+export function pricingOrderSearch(
+  order: PricingOrder,
+): Partial<Record<(typeof PRICING_ORDER_PARAMS)[number], string | number>> {
+  return {
+    ...(order.server ? { plan: order.server } : {}),
+    ...(order.license ? { license: order.license.tier, users: order.license.users } : {}),
+    interval: order.interval,
+    currency: order.currency,
+  };
+}
+
+/** Returns null when the query has no complete pricing page order. */
+export function parsePricingOrder(params: URLSearchParams): PricingOrder | null {
+  const plan = params.get("plan") || null;
+  const tier = params.get("license") || null;
+  const interval = params.get("interval");
+  const currency = params.get("currency");
+  if (!isOneOf(BILLING_INTERVALS, interval) || !isOneOf(BILLING_CURRENCIES, currency)) return null;
+  if (plan !== null && !isOneOf(BILLING_PLAN_IDS, plan)) return null;
+  const license = tier === null ? null : parseLicenseOrder({ tier, users: Number(params.get("users")) });
+  if (tier !== null && license === null) return null;
+  if (plan === null && license === null) return null;
+  return { server: plan, license, interval, currency };
 }
 
 /** Returns the Checkout page URL from a `{ url }` response, or null when it is not a Stripe Checkout page. */

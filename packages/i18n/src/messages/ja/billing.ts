@@ -92,6 +92,8 @@ export const messages = {
   "billing.license.offer.description": "Starter は 1 ユーザー、Team は {count} ユーザー以上。",
   "billing.license.buy.description": "業務で OpenBot を使う人は何人ですか？AI エージェントはユーザーに含まれません。",
   "billing.license.buy.confirm": "お支払いへ進む",
+  "billing.license.trial.until": "{date}まで無料",
+  "billing.license.trial.confirm": "無料トライアルを開始",
   "billing.license.work.used": "ユーザー {used} / {users} 人",
   "billing.license.tier.starter.title": "Starter ライセンス",
   "billing.license.tier.team.title": "Team ライセンス",

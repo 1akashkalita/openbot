@@ -95,6 +95,8 @@ export const messages = defineMessages("billing", {
   "billing.license.offer.description": "Starter for 1 user, or Team for {count} or more users.",
   "billing.license.buy.description": "How many people use OpenBot at work? AI agents are not users.",
   "billing.license.buy.confirm": "Continue to payment",
+  "billing.license.trial.until": "Free until {date}",
+  "billing.license.trial.confirm": "Start free trial",
   // {used} people use the license; it is paid for {users}.
   "billing.license.work.used": "{used} of {users} users",
   "billing.license.tier.starter.title": "Starter license",

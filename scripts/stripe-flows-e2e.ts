@@ -40,6 +40,15 @@
  * - `license-legacy-request`: a checkout request from an app before the tiers buys Team monthly (€100).
  * - `license-member-limits`: a new Starter hosted server takes 1 member (the owner). A server made before
  *   the 1-member limit (`legacy_starter_members = 1`) takes 3.
+ *
+ * The license promotion (`LICENSE_TRIAL_END`, in `wrangler.jsonc`) has its own scenarios. They run only
+ * when the Worker sells the free trial, and `order-bundle` runs only when it does not. To run
+ * `order-bundle`, start the Worker with `LICENSE_TRIAL_END=` (empty).
+ * - `license-trial`: the license state gives the trial end, and the license Checkout page charges 0 now.
+ *   The paid page makes a trialing license that ends on the trial end, with no charge.
+ * - `order-trial`: a server order with a license gives a Checkout page with the server Price only, and
+ *   the order in its metadata. After the payment a trialing license of the order starts on its own
+ *   subscription, the order metadata leaves the server subscription, and a second order is refused.
  */
 import { spawnSync } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
@@ -70,6 +79,7 @@ import {
   licenseMonthlyAmount,
   licensePeriodAmount,
   licensePlanPrice,
+  ORDER_METADATA,
 } from "@openbot/contracts/license";
 import { type Browser, chromium } from "playwright-core";
 import { z } from "zod";
@@ -110,6 +120,8 @@ const SCENARIOS = [
   "license-upgrade",
   "license-legacy-request",
   "license-member-limits",
+  "license-trial",
+  "order-trial",
 ] as const;
 type Scenario = (typeof SCENARIOS)[number];
 const DAY = 86_400;
@@ -223,6 +235,7 @@ const licenseStateSchema = z.object({
   ),
   coveredBy: z.array(z.object({ ownerName: z.string().nullable(), ownerEmail: z.string() })),
   bundle: z.boolean().optional(),
+  trialEnd: z.number().optional(),
 });
 type LicenseView = z.infer<typeof licenseStateSchema>;
 const licenseCheckoutSchema = z.object({ url: z.string() });
@@ -252,6 +265,7 @@ type LicensePriceView = z.infer<typeof licensePriceSchema>;
 const checkoutLinesSchema = z.object({
   status: z.string().nullable(),
   currency: z.string().nullable(),
+  amount_total: z.number().nullable(),
   metadata: z.record(z.string(), z.string()).nullable(),
   line_items: z.object({
     data: z.array(
@@ -554,10 +568,17 @@ class Account {
 
   /**
    * Buys a license as a completed Checkout page does: a subscription of the Price of the plan, with the
-   * user count as its quantity and the license metadata that the Worker puts on the Checkout page.
+   * user count as its quantity and the license metadata that the Worker puts on the Checkout page. With
+   * `trialEnd` (ms) the license is free until then, as during the promotion.
    */
-  async buyLicense(users: number, currency: BillingCurrency = "eur", plan: LicensePlan = TEAM_MONTH) {
+  async buyLicense(
+    users: number,
+    currency: BillingCurrency = "eur",
+    plan: LicensePlan = TEAM_MONTH,
+    trialEnd?: number,
+  ) {
     const created = await stripe("POST", "/v1/subscriptions", idSchema, {
+      ...(trialEnd === undefined ? {} : { trial_end: String(Math.floor(trialEnd / 1_000)) }),
       customer: this.customer,
       "items[0][price]": await licensePriceId(plan),
       "items[0][quantity]": String(users),
@@ -574,16 +595,26 @@ class Account {
 
   /**
    * Pays for a server order as a completed Checkout page does: the open page closes, and one subscription
-   * starts with the server Price and the license bundle Price. It has the server metadata only.
+   * starts with the server Price and the license bundle Price. It has the server metadata only. With
+   * `trialEnd` (ms) it is an order of the promotion: the server Price only, and the order metadata.
    */
-  async payOrder(serverId: string, plan: BillingPlanId, license: LicenseOrder) {
+  async payOrder(serverId: string, plan: BillingPlanId, license: LicenseOrder, trialEnd?: number) {
     const session = this.row(serverId)?.checkout_session_id;
     if (session) await stripe("POST", `/v1/checkout/sessions/${session}/expire`, idSchema).catch(() => null);
     const created = await stripe("POST", "/v1/subscriptions", idSchema, {
       customer: this.customer,
       "items[0][price]": await priceId(plan, "month"),
-      "items[1][price]": await licensePriceId({ tier: license.tier, interval: "month", bundle: true }),
-      "items[1][quantity]": String(license.users),
+      ...(trialEnd === undefined
+        ? {
+            "items[1][price]": await licensePriceId({ tier: license.tier, interval: "month", bundle: true }),
+            "items[1][quantity]": String(license.users),
+          }
+        : {
+            [`metadata[${ORDER_METADATA.licenseTier}]`]: license.tier,
+            [`metadata[${ORDER_METADATA.licenseUsers}]`]: String(license.users),
+            [`metadata[${ORDER_METADATA.licenseInterval}]`]: "month",
+            [`metadata[${ORDER_METADATA.licenseTrialEnd}]`]: String(Math.floor(trialEnd / 1_000)),
+          }),
       currency: "eur",
       "metadata[openbot_user_id]": this.id,
       "metadata[openbot_server_id]": serverId,
@@ -2534,6 +2565,10 @@ const scenarios: Record<Scenario, (account: Account) => Promise<void>> = {
   },
 
   async "order-bundle"(account) {
+    if ((await account.license()).trialEnd !== undefined) {
+      print("SKIP [order-bundle] the Worker sells the license promotion: start it with LICENSE_TRIAL_END=");
+      return;
+    }
     const team = (users: number): LicenseOrder => ({ tier: "team", users });
     const starterPlan = await account.orderServer("Solo server", "starter", team(1));
     const tooMany = await account.orderServer("Big server", "standard", team(11));
@@ -2859,6 +2894,131 @@ const scenarios: Record<Scenario, (account: Account) => Promise<void>> = {
         joins[2]?.status === 409 &&
         joins[2].code === "member_limit_reached",
       { memberLimit: legacyLimit, joins: joins.map((join) => ({ status: join.status, code: join.code })) },
+    );
+  },
+
+  async "license-trial"(account) {
+    const { trialEnd } = await account.license();
+    if (trialEnd === undefined) {
+      print("SKIP [license-trial] the Worker sells no license promotion: set LICENSE_TRIAL_END");
+      return;
+    }
+    const opened = await account.request("POST", "v1/me/license/checkout", {
+      tier: "starter",
+      interval: "month",
+      users: 1,
+      currency: "eur",
+    });
+    const url = licenseCheckoutSchema.safeParse(opened.body).data?.url ?? "";
+    const session = url ? await licenseSession(url) : null;
+    const line = session?.line_items.data[0];
+    record(
+      "license-trial",
+      "the license state gives the trial end, and the Checkout page sells the Starter Price and charges 0 now",
+      opened.status === 200 &&
+        line?.price.lookup_key === licenseLookupKey(STARTER_MONTH) &&
+        session?.amount_total === 0,
+      { status: opened.status, code: opened.code, trialEnd, session },
+    );
+    if (REAL_CHECKOUT) {
+      await payCheckout(url, account.api, "license-e2e-trial.png");
+    } else {
+      await expireCheckout(url);
+      await account.buyLicense(1, "eur", STARTER_MONTH, trialEnd);
+    }
+    const trial = await licenseWhere(
+      account,
+      "license trialing",
+      (state) => state.license?.status === "trialing",
+      120_000,
+    );
+    const subscriptionId = trial.license?.subscriptionId ?? "";
+    const charged = subscriptionId ? await invoices(subscriptionId) : [];
+    record(
+      "license-trial",
+      "the paid page makes a trialing Starter license that ends on the trial end, with no charge",
+      trial.license?.tier === "starter" &&
+        trial.license.currentPeriodEnd === trialEnd &&
+        trial.license.amount === licensePeriodAmount(STARTER_MONTH, 1, "eur") &&
+        charged.every((invoice) => invoice.amount === 0),
+      { license: trial.license, invoices: charged },
+    );
+  },
+
+  async "order-trial"(account) {
+    const { trialEnd } = await account.license();
+    if (trialEnd === undefined) {
+      print("SKIP [order-trial] the Worker sells no license promotion: set LICENSE_TRIAL_END");
+      return;
+    }
+    const order: LicenseOrder = { tier: "team", users: 6 };
+    const opened = await account.orderServer("Trial order", "standard", order);
+    const created = createdSchema.safeParse(opened.body).data;
+    const session = created?.checkoutUrl ? await licenseSession(created.checkoutUrl) : null;
+    const lines = session?.line_items.data ?? [];
+    const metadata = session?.metadata ?? {};
+    record(
+      "order-trial",
+      "a Standard server with a Team order of 6 users: one Checkout page with the server Price only, and the order with the trial end in its metadata",
+      opened.status === 201 &&
+        lines.length === 1 &&
+        lines[0]?.price.lookup_key === "openbot_standard_month" &&
+        metadata[ORDER_METADATA.licenseTier] === "team" &&
+        metadata[ORDER_METADATA.licenseUsers] === String(order.users) &&
+        metadata[ORDER_METADATA.licenseInterval] === "month" &&
+        metadata[ORDER_METADATA.licenseTrialEnd] === String(Math.floor(trialEnd / 1_000)),
+      { status: opened.status, code: opened.code, lines, metadata },
+    );
+    if (!created) return;
+
+    const planSub = await account.payOrder(created.server.serverId, "standard", order, trialEnd);
+    const licensed = await licenseWhere(
+      account,
+      "trial license from the order",
+      (state) => state.license?.status === "trialing" && state.license.subscriptionId !== planSub,
+      120_000,
+    );
+    const licenseSub = licensed.license?.subscriptionId ?? "";
+    const split = await stripe(
+      "GET",
+      `/v1/subscriptions/${licenseSub}`,
+      z.object({ metadata: z.record(z.string(), z.string()) }),
+    );
+    const cleared = await waitFor(
+      "no order metadata on the server plan",
+      async () => {
+        const server = await stripe(
+          "GET",
+          `/v1/subscriptions/${planSub}`,
+          z.object({ metadata: z.record(z.string(), z.string()) }),
+        );
+        return Object.values(ORDER_METADATA).every((key) => server.metadata[key] === undefined)
+          ? server.metadata
+          : null;
+      },
+      60_000,
+    ).catch(() => null);
+    const charged = await invoices(licenseSub);
+    record(
+      "order-trial",
+      "a trialing Team license of 6 users at the bundle amount starts on its own subscription, ends its trial on the trial end, names the server subscription, charges nothing, and the order metadata leaves the server plan",
+      licensed.license?.tier === "team" &&
+        licensed.license.bundle === true &&
+        licensed.license.users === order.users &&
+        licensed.license.amount === licensePeriodAmount(TEAM_BUNDLE_MONTH, order.users, "eur") &&
+        licensed.license.currentPeriodEnd === trialEnd &&
+        split.metadata[LICENSE_METADATA.orderSubscription] === planSub &&
+        charged.every((invoice) => invoice.amount === 0) &&
+        cleared !== null,
+      { license: licensed.license, metadata: split.metadata, invoices: charged, serverMetadata: cleared },
+    );
+
+    const again = await account.orderServer("Second trial order", "standard", order);
+    record(
+      "order-trial",
+      "a second server order with a license: 409 license_exists",
+      again.status === 409 && again.code === "license_exists",
+      { status: again.status, code: again.code },
     );
   },
 };

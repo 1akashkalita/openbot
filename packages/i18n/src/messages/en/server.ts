@@ -97,6 +97,7 @@ export const messages = defineMessages("server", {
   // The plan summary for work: the price includes the license. {license} is the license line, such as
   // "Team license, 5 members".
   "server.add.license.included": "Includes {license}",
+  "server.add.license.includedTrial": "Includes {license}, free until {date}",
   "server.add.billedMonthly": "Billed monthly",
   "server.add.billedYearly": "{price} billed yearly",
   // {amount} is a formatted amount, such as "€120". It follows the yearly price.

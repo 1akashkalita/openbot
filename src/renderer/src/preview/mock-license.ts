@@ -51,8 +51,9 @@ export function createMockLicense(initial: Partial<LicenseState> = {}): LicenseD
         currency: request.currency,
         amount: licenseMonthlyAmount(plan, request.users, request.currency),
         ...plan,
-        status: "active",
-        currentPeriodEnd: Date.now() + (plan.interval === "year" ? 365 : 30) * DAY,
+        // During a promotion the license is free until the trial end, and its first period starts then.
+        status: state.trialEnd === undefined ? "active" : "trialing",
+        currentPeriodEnd: state.trialEnd ?? Date.now() + (plan.interval === "year" ? 365 : 30) * DAY,
         cancelAtPeriodEnd: false,
       };
     },

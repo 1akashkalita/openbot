@@ -53,6 +53,8 @@ export interface PricingOffer {
   plans: readonly HostedServerCatalogPlan[];
   /** A visitor in the EU sees "excl. VAT" beside the total. */
   inEu: boolean;
+  /** A license bought now is free until this time, in milliseconds since the epoch. */
+  licenseTrialEnd?: number;
 }
 
 /**

@@ -11,11 +11,12 @@ import {
   LICENSE_INCLUDED_USERS,
   LICENSE_MAX_USERS,
   LICENSE_PRICES,
+  LICENSE_TRIAL_DATE_FORMAT,
   LICENSE_YEAR_DISCOUNT_PERCENT,
-  type LicenseOrder,
   type LicenseTier,
   licenseListMonthly,
   licenseMonthlyPrice,
+  type PricingOrder,
 } from "@openbot/contracts/license";
 import type { AppTextKey } from "@openbot/i18n";
 import { Button } from "@openbot/ui/button";
@@ -29,12 +30,7 @@ import { formatMinorMoney } from "./money";
 import "./order-form.css";
 
 /** What the order form buys. A null server or license is not bought. */
-export interface OrderFormOrder {
-  interval: BillingInterval;
-  currency: BillingCurrency;
-  server: BillingPlanId | null;
-  license: LicenseOrder | null;
-}
+export type OrderFormOrder = PricingOrder;
 
 type LicenseChoice = LicenseTier | "none";
 type ServerChoice = BillingPlanId | "none";
@@ -52,6 +48,8 @@ export interface OrderFormProps {
   used?: number | undefined;
   /** A visitor in the EU sees "excl. VAT" beside the total. */
   inEu?: boolean | undefined;
+  /** A license bought now is free until this time, in milliseconds since the epoch. */
+  licenseTrialEnd?: number | undefined;
   initialServer?: BillingPlanId | null | undefined;
   initialLicense?: LicenseTier | null | undefined;
   /** Shows left of the switches, such as the heading of the page. */
@@ -517,6 +515,13 @@ export function OrderForm(props: OrderFormProps) {
             <span class="order-form-yearly" data-active={isYearly() ? "" : undefined}>
               {t("billing.order.yearlySaving", { percent: LICENSE_YEAR_DISCOUNT_PERCENT })}
             </span>
+            <Show when={props.licenseTrialEnd}>
+              {(end) => (
+                <span class="order-form-trial">
+                  {t("billing.license.trial.until", { date: format.date(end(), LICENSE_TRIAL_DATE_FORMAT) })}
+                </span>
+              )}
+            </Show>
           </div>
           <p class="order-form-half-summary">{t("billing.order.license.summary")}</p>
           <RadioGroup.Root

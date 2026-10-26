@@ -634,6 +634,18 @@ the tiers used the same lookup key. The license terms allow 3 devices for each u
   divides the order invoice into a server fact and a license fact, and ignores the 0 invoice of the
   split. The Checkout session metadata keeps the order, so "Open the payment page again" makes a page
   with the same license, unless the account has a license by then.
+- Promotion: the Worker setting `LICENSE_TRIAL_END` (ISO 8601, in `wrangler.jsonc`; empty turns it
+  off) makes each new license free until that time. `LicenseService.trialEnd()` gives it while it is
+  at least 49 hours away, because Stripe Checkout needs a `trial_end` 48 hours ahead; after that the
+  license sells at full price. `GET /v1/me/license` then has `trialEnd` (ms), and the app shows
+  "Free until" with the date in UTC. A license checkout sets `subscription_data[trial_end]`, so the
+  license is `trialing` and the first charge is on the trial end. A server order during the promotion
+  has no license item: the server is the only line, and the session and subscription metadata keep
+  the order (`openbot_order_license_{tier,users,interval,trial_end}`). `splitOrder` then makes the
+  license subscription at the bundle price with `trial_end` (at least 1 hour ahead, for a late
+  webhook) and removes the order metadata from the server subscription. The 0 trial invoice is a
+  `first_purchase` sales fact of 0, and the charge on the trial end is a `renewal`. Apps before the
+  promotion ignore `trialEnd`; Stripe Checkout still shows the trial.
 - The 1-user tier refuses `POST /v1/me/license/users` with 409 `license_one_user`.
   `POST /v1/me/license/plan` sells upgrades only: Starter to Team monthly or yearly, and
   Team monthly to yearly. It bills the difference now (`always_invoice`,

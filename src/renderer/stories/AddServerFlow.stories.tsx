@@ -22,7 +22,7 @@ interface FlowProps {
   /** The account has this many servers, the maximum, so the plans are disabled. */
   serverLimit?: number;
   /** The account has no license: the dialog offers personal or work use, with a license for work. */
-  licenseOffer?: { used: number };
+  licenseOffer?: { used: number; trialEnd?: number };
 }
 
 /**
@@ -204,6 +204,11 @@ export const Narrow: Story = {
  */
 export const WithLicense: Story = {
   render: () => <AddServerFlow startOpen licenseOffer={{ used: 3 }} />,
+};
+
+/** A promotion: the license of the order is free until 1 December. */
+export const WithLicenseTrial: Story = {
+  render: () => <AddServerFlow startOpen licenseOffer={{ used: 3, trialEnd: Date.UTC(2026, 11, 1) }} />,
 };
 
 /** A license offer in a narrow window. */

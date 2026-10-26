@@ -10,6 +10,9 @@ import { createMockLicense, previewLicenseUsers } from "../src/preview/mock-lice
 
 const DAY = 24 * 60 * 60_000;
 
+/** The end of the license promotion: a new license is free until then. */
+const TRIAL_END = Date.UTC(2026, 11, 1);
+
 /** Active server plans only, so the failed-payment alert of a server does not hide the license. */
 const SERVERS = previewBillingServers().filter((server) => server.status === "active");
 
@@ -85,6 +88,15 @@ export const BuyNewCustomer: Story = story({ currency: null, used: 1, users: pre
 
 /** No license, and the account pays in złoty. */
 export const BuyPln: Story = story({ currency: "pln" });
+
+/** A promotion: a new license is free until 1 December, and Stripe charges its first payment then. */
+export const BuyTrial: Story = story({ trialEnd: TRIAL_END });
+
+/** A license in its free trial. */
+export const Trial: Story = story({
+  license: license(5, { status: "trialing", currentPeriodEnd: TRIAL_END }),
+  trialEnd: TRIAL_END,
+});
 
 /** A Starter license. The row menu has Change to Team in place of Change users. */
 export const Starter: Story = story({

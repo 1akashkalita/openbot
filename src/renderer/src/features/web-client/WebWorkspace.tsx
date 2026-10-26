@@ -17,6 +17,7 @@ import {
   type ServerConnectionState,
   type ServerSummary,
 } from "@openbot/contracts/ipc";
+import type { PricingOrder } from "@openbot/contracts/license";
 import { AGENT_BACKUP_MODELS_ROUTES } from "@openbot/contracts/team-protocol/agent-backup-models-v1";
 import { AGENT_HOST_SETTINGS_ROUTES } from "@openbot/contracts/team-protocol/agent-host-settings-v1";
 import { AGENT_IMPORT_CAPABILITY } from "@openbot/contracts/team-protocol/agent-import-v1";
@@ -841,8 +842,8 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     },
   );
   const [billingOpen, setBillingOpen] = createSignal(false);
-  /** `/app?start=license` opens Billing with the license dialog open. */
-  const [licenseStart, setLicenseStart] = createSignal(false);
+  /** `/app?start=license` opens Billing with the license dialog open, and with the order of the pricing page. */
+  const [licenseStart, setLicenseStart] = createSignal<{ order: PricingOrder | null } | null>(null);
   const billingCalls = createWebBillingCalls(props.accountFetch);
   const billing = createBillingStore(() => billingCalls, billingOpen);
   const licenseCalls = createWebLicenseCalls(props.accountFetch);
@@ -908,12 +909,12 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
   // The add server dialog waits for the first list of hosted servers: before it, the account looks
   // like one that cannot create a server, and the join dialog would open.
   createEffect(
-    () => (props.start === "server" && !hostedServers.loaded() ? null : props.start),
+    () => (props.start?.kind === "server" && !hostedServers.loaded() ? null : props.start),
     (start) => {
       if (!start) return;
-      if (start === "server") hostedServers.openAddServer("pricing_page");
+      if (start.kind === "server") hostedServers.openAddServer("pricing_page", start.order);
       else {
-        setLicenseStart(true);
+        setLicenseStart({ order: start.order });
         setBillingOpen(true);
       }
       props.onStartConsumed?.();
@@ -1880,6 +1881,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                 <AddServerOverlay
                   open={hostedServers.addServer() !== null}
                   entryPoint={hostedServers.addServer()?.entryPoint}
+                  order={hostedServers.addServer()?.order}
                   calls={hostedServers.calls}
                   servers={servers()}
                   onRefreshServers={workspace.retryHosts}
@@ -2102,7 +2104,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                   open={billingOpen()}
                   onOpenChange={(open) => {
                     setBillingOpen(open);
-                    if (!open) setLicenseStart(false);
+                    if (!open) setLicenseStart(null);
                   }}
                   store={billing}
                   hostedServers={billingHostedServers}
@@ -2111,7 +2113,8 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                       store={license}
                       onManagePayment={() => void billing.openPortal({ flow: "manage" })}
                       onContactUs={licenseContactUs(() => window.location.assign(HOSTED_SERVER_CONTACT_URL))}
-                      startBuying={licenseStart()}
+                      startBuying={licenseStart() !== null}
+                      startOrder={licenseStart()?.order ?? undefined}
                     />
                   }
                 />

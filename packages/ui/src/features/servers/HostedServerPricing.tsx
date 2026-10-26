@@ -5,9 +5,11 @@ import {
   LICENSE_INCLUDED_USERS,
   LICENSE_MAX_USERS,
   LICENSE_PLAN_PRICES,
+  LICENSE_TRIAL_DATE_FORMAT,
   licenseListMonthly,
   licenseOrderFor,
   licenseOrderMonthly,
+  stepLicenseUsers,
 } from "@openbot/contracts/license";
 import type { AppFormat, AppTextKey } from "@openbot/i18n";
 import {
@@ -256,6 +258,8 @@ interface HostedCurrencySelectProps {
   currency: HostedCurrency;
   onChange: (currency: HostedCurrency) => void;
   disabled?: boolean | undefined;
+  /** The account pays its plans in this currency, so it shows as text, not as a choice. */
+  locked?: boolean | undefined;
   /** The dialog element the popover portals into, so that it stays inside the dialog's focus trap. */
   mount?: HTMLElement | undefined;
 }
@@ -264,21 +268,23 @@ interface HostedCurrencySelectProps {
 export function HostedCurrencySelect(props: HostedCurrencySelectProps) {
   const { t } = useText();
   return (
-    <Select<HostedCurrency>
-      class="hosted-currency"
-      options={CURRENCY_OPTIONS}
-      value={props.currency}
-      disabled={props.disabled ?? false}
-      onChange={(currency) => currency && props.onChange(currency)}
-      placement="bottom-start"
-      sameWidth={false}
-      itemComponent={(itemProps) => <SelectItem item={itemProps.item}>{itemProps.item.rawValue}</SelectItem>}
-    >
-      <SelectTrigger size="sm" aria-label={t("server.add.currency.label")}>
-        <SelectValue<HostedCurrency>>{(state) => state.selectedOption()}</SelectValue>
-      </SelectTrigger>
-      <SelectContent mount={props.mount} />
-    </Select>
+    <Show when={!props.locked} fallback={<span class="hosted-currency hosted-currency-locked">{props.currency}</span>}>
+      <Select<HostedCurrency>
+        class="hosted-currency"
+        options={CURRENCY_OPTIONS}
+        value={props.currency}
+        disabled={props.disabled ?? false}
+        onChange={(currency) => currency && props.onChange(currency)}
+        placement="bottom-start"
+        sameWidth={false}
+        itemComponent={(itemProps) => <SelectItem item={itemProps.item}>{itemProps.item.rawValue}</SelectItem>}
+      >
+        <SelectTrigger size="sm" aria-label={t("server.add.currency.label")}>
+          <SelectValue<HostedCurrency>>{(state) => state.selectedOption()}</SelectValue>
+        </SelectTrigger>
+        <SelectContent mount={props.mount} />
+      </Select>
+    </Show>
   );
 }
 
@@ -304,6 +310,8 @@ interface HostedServerPlansProps {
    * when the people or the billing change.
    */
   longestPrice?: { was: string; now: string } | undefined;
+  /** The license that the plans sell is free until this time, in milliseconds since the epoch. */
+  licenseTrialEnd?: number | undefined;
 }
 
 /** A plan price: "zł 90" in place of "PLN 90", so that the old and the new price fit in a column. */
@@ -352,6 +360,14 @@ export function HostedServerPlans(props: HostedServerPlansProps) {
     return license.tier === "team"
       ? t("billing.order.summary.license", { count: license.users })
       : t("billing.order.summary.starterLicense");
+  };
+  const licenseIncluded = () => {
+    const end = props.licenseTrialEnd;
+    if (end === undefined) return t("server.add.license.included", { license: licenseLine() });
+    return t("server.add.license.includedTrial", {
+      license: licenseLine(),
+      date: format.date(end, LICENSE_TRIAL_DATE_FORMAT),
+    });
   };
   const bundleDiscount = () =>
     LICENSE_BUNDLE_DISCOUNT[licenseOrderFor(people()).tier][HOSTED_BILLING_CURRENCY[props.currency]] / 100;
@@ -443,7 +459,7 @@ export function HostedServerPlans(props: HostedServerPlansProps) {
               <p class="hosted-plan-summary" data-license={work() ? "" : undefined}>
                 <Show when={work()} fallback={t(PLAN_TEXT[plan.id].summary)}>
                   <ShieldCheck aria-hidden="true" />
-                  {t("server.add.license.included", { license: licenseLine() })}
+                  {licenseIncluded()}
                 </Show>
               </p>
               <Button
@@ -474,8 +490,8 @@ export function HostedServerPlans(props: HostedServerPlansProps) {
                   <HardDrive aria-hidden="true" />
                   {t("settings.hostedServers.plan.disk", { count: plan.diskGb })}
                 </li>
-                {/* For work, the summary already names the license of the order. */}
-                <Show when={!work()}>
+                {/* For work, the summary already names the license of the order. An account with a license buys no license. */}
+                <Show when={props.people !== undefined && !work()}>
                   <li>
                     <ShieldCheck aria-hidden="true" />
                     {/* A server too small for the Team license sells the Starter license, at the bundle price. */}
@@ -588,7 +604,7 @@ export function HostedLicensePeople(props: {
           variant="outline"
           size="icon-sm"
           disabled={props.disabled || props.value <= props.min}
-          onClick={() => props.onChange(props.value - 1)}
+          onClick={() => props.onChange(stepLicenseUsers(props.value, -1))}
         >
           <Minus aria-hidden="true" />
         </IconButton>
@@ -598,7 +614,7 @@ export function HostedLicensePeople(props: {
           variant="outline"
           size="icon-sm"
           disabled={props.disabled || props.value >= LICENSE_MAX_USERS}
-          onClick={() => props.onChange(props.value + 1)}
+          onClick={() => props.onChange(stepLicenseUsers(props.value, 1))}
         >
           <Plus aria-hidden="true" />
         </IconButton>

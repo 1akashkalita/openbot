@@ -91,6 +91,8 @@ export const messages = {
   "billing.license.offer.description": "入门版适用于 1 位用户，团队版适用于 {count} 位及以上用户。",
   "billing.license.buy.description": "有多少人在工作中使用 OpenBot？AI 助手不算用户。",
   "billing.license.buy.confirm": "继续付款",
+  "billing.license.trial.until": "{date} 前免费",
+  "billing.license.trial.confirm": "开始免费试用",
   // {used} people use the license; it is paid for {users}.
   "billing.license.work.used": "{used}/{users} 位用户",
   "billing.license.tier.starter.title": "入门版许可证",

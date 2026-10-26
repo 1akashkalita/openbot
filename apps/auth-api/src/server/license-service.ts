@@ -26,6 +26,7 @@ import {
   licenseMonthlyAmount,
   licensePeriodAmount,
   licensePlanFromPrice,
+  ORDER_METADATA,
 } from "@openbot/contracts/license";
 import { isOneOf } from "@openbot/contracts/runtime-values";
 import { sourceText } from "@openbot/i18n/source";
@@ -116,6 +117,8 @@ export interface LicenseServiceOptions {
   database: D1Database;
   stripe: StripeClient;
   secretKey: string;
+  /** A license bought before this time is free until then, in milliseconds since the epoch. */
+  trialEnd?: number | null;
   now: () => number;
   /** The Stripe customer of the account. Server plans and the license use the same customer. */
   ensureCustomer: (user: { id: string; email: string }) => Effect.Effect<string, BillingError | BillingOperationError>;
@@ -141,9 +144,13 @@ export class LicenseService {
   readonly #ensureCustomer: LicenseServiceOptions["ensureCustomer"];
   readonly #analytics: AccountAnalytics;
   readonly #sales: BillingSales | null;
+  readonly #trialEnd: number | null;
+  readonly #now: () => number;
 
   constructor(options: LicenseServiceOptions) {
     this.#secretKey = options.secretKey;
+    this.#trialEnd = options.trialEnd ?? null;
+    this.#now = options.now;
     this.#ensureCustomer = options.ensureCustomer;
     this.#analytics = options.analytics ?? NO_ACCOUNT_ANALYTICS;
     this.#sales = options.sales ?? null;
@@ -152,6 +159,14 @@ export class LicenseService {
       stripe: options.stripe,
       now: options.now,
     });
+  }
+
+  /**
+   * The end of the free trial of a license bought now, in milliseconds since the epoch. Null when a new
+   * license is paid at once. Stripe Checkout refuses a trial that ends less than 48 hours after it.
+   */
+  trialEnd(): number | null {
+    return this.#trialEnd !== null && this.#trialEnd - this.#now() >= LICENSE_TRIAL_MARGIN_MS ? this.#trialEnd : null;
   }
 
   /**
@@ -203,6 +218,7 @@ export class LicenseService {
         { concurrency: "unbounded" },
       );
       const users = licenseUsers(userId, userRows.results);
+      const trialEnd = this.trialEnd();
       return {
         // Sales pause when the Stripe price is archived. The section still shows, and checkout then
         // tells the user whom to contact.
@@ -215,6 +231,7 @@ export class LicenseService {
           (row): LicenseCoverage => ({ ownerName: row.owner_name, ownerEmail: row.owner_email }),
         ),
         bundle,
+        ...(trialEnd === null ? {} : { trialEnd }),
       };
     },
     (operation) => operation.pipe(Effect.provide(this.#layer)),
@@ -224,7 +241,8 @@ export class LicenseService {
    * A Stripe Checkout page for a new license. An account has one open license and one open license page.
    * Two requests at the same time keep the newer page and both return it. Stripe is the source of truth:
    * a page paid before its webhook, or a page paid while this request runs, stops the new page.
-   * An account that pays for a hosted server buys the bundle price.
+   * An account that pays for a hosted server buys the bundle price. During a promotion the license is
+   * free until `trialEnd()`.
    */
   readonly createCheckout = Effect.fn("LicenseService.createCheckout")(
     function* (
@@ -254,6 +272,7 @@ export class LicenseService {
         return yield* new BillingError(409, "license_currency", sourceText("error.billing.licenseCurrency"));
       const customerId = yield* this.#ensureCustomer(user);
       const returnUrl = licenseReturnUrl(origin, target);
+      const trialEnd = this.trialEnd();
       const session = yield* this.#stripeCall(() =>
         dependencies.stripe.createCheckoutSession({
           customerId,
@@ -262,6 +281,7 @@ export class LicenseService {
           userId: user.id,
           quantity: request.users,
           metadata: licenseMetadata(plan),
+          ...(trialEnd === null ? {} : { trialEndSeconds: Math.floor(trialEnd / 1_000) }),
           successUrl: returnUrl,
           cancelUrl: `${returnUrl}${returnUrl.includes("?") ? "&" : "?"}cancelled=1`,
           nowSeconds: Math.floor(dependencies.now() / 1_000),
@@ -288,7 +308,7 @@ export class LicenseService {
         (subscription) =>
           isOneOf(BILLING_SUBSCRIPTION_STATUSES, subscription.status) &&
           isOpenBillingStatus(subscription.status) &&
-          subscription.items.data.some((item) => isLicensePrice(item.price)),
+          (subscription.items.data.some((item) => isLicensePrice(item.price)) || orderedLicense(subscription) !== null),
       );
       if (open && !subscriptionServerItem(open)) yield* this.sync(open, user.id, readAt);
       if (paid || open) {
@@ -518,8 +538,10 @@ export class LicenseService {
    * Moves the license of a paid server order to its own subscription. The order's one Checkout made one
    * subscription with a server item and a license item. The new subscription has the same customer, Price,
    * users and payment method, and renews on the same date with no charge before it. Then the license item
-   * leaves the server subscription with no proration. A failed step runs again on the next webhook: the
-   * idempotency key and the `orderSubscription` metadata make the license only once.
+   * leaves the server subscription with no proration. During a promotion the order has no license item:
+   * its metadata names the license, which is free until the trial end of the order. Then the metadata
+   * leaves the server subscription. A failed step runs again on the next webhook: the idempotency key and
+   * the `orderSubscription` metadata make the license only once.
    */
   readonly splitOrder = Effect.fn("LicenseService.splitOrder")(
     function* (
@@ -529,13 +551,24 @@ export class LicenseService {
     ): Effect.fn.Return<void, BillingError | BillingOperationError, LicenseDependencies> {
       const dependencies = yield* LicenseDependencies;
       const item = subscriptionLicenseItem(subscription);
-      if (!item || !subscriptionServerItem(subscription) || subscription.status !== "active") return;
+      const ordered = item ? null : orderedLicense(subscription);
+      if ((!item && !ordered) || !subscriptionServerItem(subscription) || subscription.status !== "active") return;
       const currency = subscription.currency.toLowerCase();
       const periodEnd = subscriptionPeriodEnd(subscription);
-      if (!isBillingCurrency(currency) || periodEnd === null) {
+      const price = item
+        ? item.price
+        : ordered
+          ? yield* this.#price({ tier: ordered.tier, interval: ordered.interval, bundle: true })
+          : null;
+      if (!isBillingCurrency(currency) || periodEnd === null || !price) {
         console.warn("billing: server order cannot be split", { subscriptionId: subscription.id });
         return;
       }
+      // A late webhook can come after the trial end. Stripe then needs a trial end in the future.
+      const nowSeconds = Math.floor(dependencies.now() / 1_000);
+      const anchorSeconds = ordered
+        ? Math.max(ordered.trialEndSeconds, nowSeconds + 3_600)
+        : Math.floor(periodEnd / 1_000);
       const customerId = subscriptionCustomerId(subscription);
       const listed = yield* this.#stripeCall(() => dependencies.stripe.listCustomerSubscriptions(customerId));
       const readAt = dependencies.now();
@@ -546,14 +579,15 @@ export class LicenseService {
             .createSubscription(
               {
                 customerId,
-                priceId: item.price.id,
-                quantity: item.quantity ?? 1,
+                priceId: price.id,
+                quantity: item ? (item.quantity ?? 1) : (ordered?.users ?? 1),
                 currency,
-                anchorSeconds: Math.floor(periodEnd / 1_000),
+                anchorSeconds,
+                trial: ordered !== null,
                 paymentMethodId: subscriptionPaymentMethodId(subscription),
                 metadata: {
                   [BILLING_METADATA.userId]: ownerId,
-                  ...licenseMetadata(licensePlanFromPrice(item.price)),
+                  ...licenseMetadata(licensePlanFromPrice(price)),
                   [LICENSE_METADATA.orderSubscription]: subscription.id,
                 },
               },
@@ -569,7 +603,14 @@ export class LicenseService {
             ),
         ));
       if (!license) return;
-      yield* this.#stripeCall(() => dependencies.stripe.deleteSubscriptionItem(item.id));
+      if (item) yield* this.#stripeCall(() => dependencies.stripe.deleteSubscriptionItem(item.id));
+      else
+        yield* this.#stripeCall(() =>
+          dependencies.stripe.setSubscriptionMetadata(
+            subscription.id,
+            Object.fromEntries(Object.values(ORDER_METADATA).map((key) => [key, ""])),
+          ),
+        );
       yield* this.sync(license, ownerId, readAt);
     },
     (operation) => operation.pipe(Effect.provide(this.#layer)),
@@ -637,7 +678,7 @@ export class LicenseService {
         (subscription) =>
           isOneOf(BILLING_SUBSCRIPTION_STATUSES, subscription.status) &&
           isOpenBillingStatus(subscription.status) &&
-          subscriptionLicenseItem(subscription) !== null,
+          ordersLicense(subscription),
       );
       if (!paid && !open && !newer) return;
       yield* this.#stripeCall(() => dependencies.stripe.expireCheckoutSession(sessionId));
@@ -1109,14 +1150,44 @@ function licenseReturnUrl(origin: string, target: LicenseReturnTarget): string {
   return `${origin}/billing/return?kind=license`;
 }
 
+/** A trial sold with less time left than this would end before Stripe accepts it (48 hours). */
+const LICENSE_TRIAL_MARGIN_MS = 49 * 60 * 60_000;
+
+/** The free license that a paid server order of a promotion names in its metadata, or null. */
+function orderedLicense(
+  subscription: StripeSubscription,
+): { tier: LicensePlan["tier"]; interval: BillingInterval; users: number; trialEndSeconds: number } | null {
+  const metadata = subscription.metadata;
+  const tier = metadata[ORDER_METADATA.licenseTier];
+  const interval = metadata[ORDER_METADATA.licenseInterval];
+  const users = Number(metadata[ORDER_METADATA.licenseUsers]);
+  const trialEndSeconds = Number(metadata[ORDER_METADATA.licenseTrialEnd]);
+  if (
+    !isOneOf(LICENSE_TIERS, tier) ||
+    !isOneOf(BILLING_INTERVALS, interval) ||
+    !Number.isSafeInteger(users) ||
+    users < 1 ||
+    !Number.isSafeInteger(trialEndSeconds)
+  )
+    return null;
+  return { tier, interval, users, trialEndSeconds };
+}
+
 /**
- * The license order of a server Checkout page, on the session only. A later page for the same server
- * reads it from the page that it closes, so it sells the same license.
+ * True for a server subscription whose license is not split yet: a license item, or the metadata of a
+ * promotion order.
  */
-export const ORDER_METADATA = {
-  licenseTier: "openbot_order_license_tier",
-  licenseUsers: "openbot_order_license_users",
-};
+export function ordersLicense(subscription: StripeSubscription): boolean {
+  return subscriptionLicenseItem(subscription) !== null || orderedLicense(subscription) !== null;
+}
+
+/** A trial end from the Worker settings, as an ISO 8601 time. Null when it is empty or not a time. */
+export function parseLicenseTrialEnd(value: string | undefined): number | null {
+  const trimmed = value?.trim();
+  if (!trimmed) return null;
+  const time = Date.parse(trimmed);
+  return Number.isFinite(time) ? time : null;
+}
 
 /** True for a Checkout page that sells a license: a license page, or a server order with a license. */
 function sellsLicense(page: { metadata: Readonly<Record<string, string>> }): boolean {

@@ -148,6 +148,11 @@
   gap: var(--openbot-space-2);
 }
 
+/* Billing opens on the dialog-host layer on the web, so the menu must open above it. */
+.billing-license-menu.ui-action-menu {
+  z-index: var(--openbot-layer-dialog-host);
+}
+
 .billing-license-divider {
   width: 100%;
   margin: var(--openbot-space-2) 0;

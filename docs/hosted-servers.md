@@ -62,6 +62,8 @@ when a server is idle or boat stops a sandbox; and `error` and `deleted`. The Wo
    An optional `license: {tier, users}` adds the commercial license at the bundle price to the same
    page, so one payment buys both. The first sync moves the license to its own subscription that
    renews on the same day as the server ([Commercial license](architecture/servers.md#commercial-license)).
+   While the license promotion (`LICENSE_TRIAL_END`) runs, the page has the server line only, and the
+   license starts with a free trial until the promotion ends.
    Refunds are by email only: email licenses@openbot.run within 24 hours of the first payment for a
    refund less a €3 / $3.60 / 13.20 zł fee, once per account. There are no refunds for later changes.
    The desktop main process opens the URL only when it is an `https://checkout.stripe.com` URL; the

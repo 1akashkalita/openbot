@@ -95,6 +95,7 @@ export const messages = {
   "server.add.license.bundle": "组合 −{price}",
   // The plan summary for work. {license} is the license line, such as "Team license, 5 members".
   "server.add.license.included": "包含{license}",
+  "server.add.license.includedTrial": "包含{license}，{date} 前免费",
   "server.add.billedMonthly": "按月计费",
   "server.add.billedYearly": "每年计费 {price}",
   // {amount} is a formatted amount, such as "€120". It follows the yearly price.

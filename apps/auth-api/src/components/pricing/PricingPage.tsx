@@ -1,5 +1,5 @@
 import type { BillingPlanId } from "@openbot/contracts/billing";
-import type { LicenseTier } from "@openbot/contracts/license";
+import { type LicenseTier, pricingOrderSearch } from "@openbot/contracts/license";
 import type { TranslatedLocale } from "@openbot/i18n";
 import { OrderForm, type OrderFormOrder } from "@openbot/ui/features/billing/OrderForm";
 import { TextProvider, useText } from "@openbot/ui/text";
@@ -34,9 +34,9 @@ const FIRST_SERVER: BillingPlanId = "standard";
 const FIRST_LICENSE: LicenseTier = "team";
 
 /**
- * A full page load, as the header's App link. The web app reads `start` after sign-in: an order with a server
- * opens the add server dialog, which sells the server and its license together, and a license alone opens
- * Billing.
+ * A full page load, as the header's App link. The web app reads `start` and the order after sign-in: an order with
+ * a server opens the add server dialog, which sells the server and its license together, and a license alone opens
+ * Billing. Each one fills in the order and goes on to Checkout, so the buyer does not choose again.
  */
 function OrderAction(props: { order: Accessor<OrderFormOrder> }) {
   const { t } = useText();
@@ -52,7 +52,7 @@ function OrderAction(props: { order: Accessor<OrderFormOrder> }) {
     <Show when={buying()} fallback={download()}>
       <ButtonLink
         to="/app"
-        search={{ start: start() }}
+        search={{ start: start(), ...pricingOrderSearch(props.order()) }}
         reloadDocument
         variant="primary"
         size="md"
@@ -106,6 +106,7 @@ export function PricingPage(props: {
             <OrderForm
               plans={props.offer.plans}
               inEu={props.offer.inEu}
+              licenseTrialEnd={props.offer.licenseTrialEnd}
               initialServer={FIRST_SERVER}
               initialLicense={FIRST_LICENSE}
               heading={heading}

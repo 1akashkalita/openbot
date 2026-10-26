@@ -7,6 +7,7 @@ import {
 import {
   LICENSE_INCLUDED_USERS,
   LICENSE_MAX_USERS,
+  LICENSE_TRIAL_DATE_FORMAT,
   LICENSE_YEAR_DISCOUNT_PERCENT,
   type License,
   type LicenseCheckoutRequest,
@@ -21,6 +22,7 @@ import {
   licensePeriodAmount,
   licensePlanOf,
   licensePlanPrice,
+  type PricingOrder,
 } from "@openbot/contracts/license";
 import type { AppTextKey } from "@openbot/i18n";
 import {
@@ -57,7 +59,7 @@ import {
   Zap,
 } from "@openbot/ui";
 import type { JSX } from "@solidjs/web";
-import { createEffect, createSignal, For, Match, Show, Switch, untrack } from "solid-js";
+import { createEffect, createSignal, For, Match, onSettled, Show, Switch, untrack } from "solid-js";
 import { useText } from "../../text";
 import { guessHostedCurrency, HOSTED_BILLING_CURRENCY, HostedBillingSwitch } from "../servers/HostedServerPricing";
 import type { LicenseStore } from "./license-store";
@@ -71,6 +73,8 @@ export interface LicenseSectionProps {
   onContactUs?: (() => void) | undefined;
   /** Opens the license dialog at once, as `/app?start=license` does. */
   startBuying?: boolean | undefined;
+  /** The order from the pricing page. The license dialog fills it in and goes on to Checkout. */
+  startOrder?: PricingOrder | undefined;
 }
 
 export { formatMinorMoney } from "./money";
@@ -157,6 +161,7 @@ export function LicenseSection(props: LicenseSectionProps): JSX.Element {
                     state={current()}
                     store={props.store}
                     startBuying={props.startBuying ?? false}
+                    startOrder={props.startOrder}
                     onContactUs={props.onContactUs}
                   />
                 }
@@ -344,6 +349,8 @@ function ActiveLicenseRow(props: {
   const periodEnd = () => {
     const end = props.license.currentPeriodEnd;
     if (end === null) return null;
+    if (props.license.status === "trialing" && !props.license.cancelAtPeriodEnd)
+      return t("billing.license.trial.until", { date: format.date(end, LICENSE_TRIAL_DATE_FORMAT) });
     const date = format.date(end, { dateStyle: "long" });
     return props.license.cancelAtPeriodEnd ? t("billing.server.ends", { date }) : t("billing.server.renews", { date });
   };
@@ -380,7 +387,7 @@ function ActiveLicenseRow(props: {
               <Ellipsis aria-hidden="true" />
             </DropdownMenu.Trigger>
             <DropdownMenu.Portal>
-              <DropdownMenu.Content>
+              <DropdownMenu.Content class="billing-license-menu">
                 <DropdownMenu.Item onSelect={() => props.onShowUsers()}>
                   <UsersRound aria-hidden="true" />
                   {t("billing.license.action.users")}
@@ -440,6 +447,7 @@ function LicenseOffer(props: {
   state: LicenseState;
   store: LicenseStore;
   startBuying: boolean;
+  startOrder: PricingOrder | undefined;
   onContactUs: (() => void) | undefined;
 }): JSX.Element {
   const { t, format } = useText();
@@ -493,7 +501,16 @@ function LicenseOffer(props: {
       <Item>
         <LicenseIcon offer />
         <ItemContent>
-          <ItemTitle>{t("billing.license.offer.title")}</ItemTitle>
+          <div class="billing-server-title">
+            <ItemTitle>{t("billing.license.offer.title")}</ItemTitle>
+            <Show when={props.state.trialEnd}>
+              {(end) => (
+                <Badge variant="secondary">
+                  {t("billing.license.trial.until", { date: format.date(end(), LICENSE_TRIAL_DATE_FORMAT) })}
+                </Badge>
+              )}
+            </Show>
+          </div>
           <ItemDescription>
             {t("billing.license.offer.description", { count: format.number(LICENSE_INCLUDED_USERS) })}
           </ItemDescription>
@@ -517,6 +534,7 @@ function LicenseOffer(props: {
         <BuyLicenseDialog
           state={props.state}
           store={props.store}
+          order={props.startOrder}
           onContactUs={props.onContactUs}
           onClose={() => setBuying(false)}
         />
@@ -532,20 +550,51 @@ function LicenseOffer(props: {
 function BuyLicenseDialog(props: {
   state: LicenseState;
   store: LicenseStore;
+  /** The pricing page order. The dialog shows it and opens Checkout at once when it fits the account. */
+  order: PricingOrder | undefined;
   onContactUs: (() => void) | undefined;
   onClose: () => void;
 }): JSX.Element {
   const { t, format } = useText();
-  const [people, setPeople] = createSignal(untrack(() => Math.max(1, props.state.used)));
-  const [interval, setInterval] = createSignal<BillingInterval>("year");
+  const start = untrack(() => props.order);
+  // 2 to 4 users cost the same as the Team minimum, so the fewest users skip them.
+  const minimum = untrack(() => Math.min(SLIDER_MAX, licenseOrderFor(Math.max(1, props.state.used)).users));
+  const [people, setPeople] = createSignal(Math.max(minimum, start?.license?.users ?? minimum));
+  const [interval, setInterval] = createSignal<BillingInterval>(start?.interval ?? "year");
   // A Stripe customer pays all its subscriptions in one currency.
-  const currency = untrack(() => props.state.currency ?? HOSTED_BILLING_CURRENCY[guessHostedCurrency()]);
+  const currency = untrack(
+    () => props.state.currency ?? start?.currency ?? HOSTED_BILLING_CURRENCY[guessHostedCurrency()],
+  );
   const contact = () => people() > LICENSE_MAX_USERS;
   const order = () => licenseOrderFor(people());
   const plan = (): LicensePlan => ({ tier: order().tier, interval: interval(), bundle: props.state.bundle ?? false });
   const list = () => licenseListMonthly(order().tier, order().users, currency);
   const monthly = () => licenseOrderMonthly(plan(), order().users, currency);
   const money = (amount: number) => formatMinorMoney(format, amount, currency);
+  const trialEnd = () => props.state.trialEnd;
+  async function confirm(): Promise<void> {
+    if (contact()) {
+      props.onContactUs?.();
+      return;
+    }
+    const request: LicenseCheckoutRequest = {
+      users: order().users,
+      currency,
+      tier: order().tier,
+      interval: interval(),
+    };
+    if (await props.store.openCheckout(request)) props.onClose();
+  }
+  // The order goes on to Checkout when it fits: the same currency, enough users, and no license of an owner.
+  onSettled(() => {
+    const license = start?.license;
+    if (!license || start.currency !== currency || license.users < minimum) return;
+    if (untrack(() => props.state.coveredBy.length) === 0) void confirm();
+  });
+  const confirmLabel = () => {
+    if (contact()) return t("billing.license.contact.action");
+    return trialEnd() ? t("billing.license.trial.confirm") : t("billing.license.buy.confirm");
+  };
   return (
     <ConfirmDialog
       open
@@ -553,7 +602,7 @@ function BuyLicenseDialog(props: {
       icon={<ShieldCheck />}
       title={t("billing.license.buy")}
       description={t("billing.license.buy.description")}
-      confirmLabel={contact() ? t("billing.license.contact.action") : t("billing.license.buy.confirm")}
+      confirmLabel={confirmLabel()}
       pendingLabel={t("billing.opening")}
       pending={props.store.state.pending === "checkout"}
       error={props.store.state.actionError ?? undefined}
@@ -561,19 +610,7 @@ function BuyLicenseDialog(props: {
         props.store.clearActionError();
         props.onClose();
       }}
-      onConfirm={async () => {
-        if (contact()) {
-          props.onContactUs?.();
-          return;
-        }
-        const request: LicenseCheckoutRequest = {
-          users: order().users,
-          currency,
-          tier: order().tier,
-          interval: interval(),
-        };
-        if (await props.store.openCheckout(request)) props.onClose();
-      }}
+      onConfirm={confirm}
     >
       <div class="billing-license-change">
         <HostedBillingSwitch
@@ -584,16 +621,16 @@ function BuyLicenseDialog(props: {
         />
         <SliderField
           label={t("billing.license.users.label")}
-          value={people()}
-          minValue={Math.min(SLIDER_MAX, Math.max(1, props.state.used))}
-          maxValue={SLIDER_MAX}
+          value={sliderPosition(people())}
+          minValue={sliderPosition(minimum)}
+          maxValue={sliderPosition(SLIDER_MAX)}
           disabled={props.store.state.pending !== null}
-          formatValue={(value) =>
-            value > LICENSE_MAX_USERS
+          formatValue={(position) =>
+            sliderUsers(position) > LICENSE_MAX_USERS
               ? t("billing.license.change.more", { count: LICENSE_MAX_USERS })
-              : format.number(value)
+              : format.number(sliderUsers(position))
           }
-          onChange={setPeople}
+          onChange={(position) => setPeople(sliderUsers(position))}
         />
         <div class="billing-license-quote">
           <Show
@@ -606,9 +643,10 @@ function BuyLicenseDialog(props: {
           >
             <dl class="billing-license-lines">
               <div>
+                {/* The slider above shows the users, so the line names the license only. */}
                 <dt>
-                  <Show when={order().tier === "team"} fallback={t("billing.order.summary.starterLicense")}>
-                    {t("billing.order.summary.license", { count: order().users })}
+                  <Show when={order().tier === "team"} fallback={t("billing.license.tier.starter.title")}>
+                    {t("billing.license.tier.team.title")}
                   </Show>
                 </dt>
                 <dd>
@@ -617,6 +655,14 @@ function BuyLicenseDialog(props: {
                   </Show>
                 </dd>
               </div>
+              <Show when={trialEnd()}>
+                {(end) => (
+                  <div>
+                    <dt>{t("billing.license.trial.until", { date: format.date(end(), LICENSE_TRIAL_DATE_FORMAT) })}</dt>
+                    <dd>{money(0)}</dd>
+                  </div>
+                )}
+              </Show>
             </dl>
             <p class="billing-license-total">
               <span class="billing-license-total-amount">{money(monthly())}</span>
@@ -670,6 +716,10 @@ function Quote(props: { plan: LicensePlan; users: number; currency: BillingCurre
 
 /** The value after the maximum means "more than 25 users". */
 const SLIDER_MAX = LICENSE_MAX_USERS + 1;
+/** The Buy slider has no positions for 2 to 4 users: position 1 is 1 user, and position 2 is the Team minimum. */
+const TEAM_SLIDER_OFFSET = LICENSE_INCLUDED_USERS - 2;
+const sliderUsers = (position: number) => (position === 1 ? 1 : position + TEAM_SLIDER_OFFSET);
+const sliderPosition = (users: number) => (users === 1 ? 1 : users - TEAM_SLIDER_OFFSET);
 
 /**
  * Changes the users of the open license. The minimum is the people who use it now. More users bill

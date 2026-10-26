@@ -27,6 +27,7 @@ import {
   LICENSE_METADATA_KIND,
   type LicenseOrder,
   licensePeriodAmount,
+  ORDER_METADATA,
   parseLicenseOrder,
 } from "@openbot/contracts/license";
 import { isDynamicRecord, isOneOf, isString } from "@openbot/contracts/runtime-values";
@@ -50,7 +51,7 @@ import {
 } from "./billing-errors";
 import { type BillingSales, type BillingSalesSynced, type PaymentReversal, paymentReversal } from "./billing-sales";
 import type { HostedFailure } from "./hosted-server-service";
-import { LicenseService, type LicenseSync, ORDER_METADATA } from "./license-service";
+import { LicenseService, type LicenseSync, ordersLicense } from "./license-service";
 import type { RemoteFailure } from "./remote-control-plane";
 import type { StripeTransportError } from "./stripe-client";
 import {
@@ -120,6 +121,8 @@ export interface BillingServiceOptions {
   database: D1Database;
   secretKey: string;
   webhookSecret: string | null;
+  /** A license bought before this time is free until then, in milliseconds since the epoch. */
+  licenseTrialEnd?: number | null;
   fetch: StripeFetch;
   now?: () => number;
   /**
@@ -226,6 +229,7 @@ export class BillingService {
       database,
       stripe,
       secretKey: options.secretKey,
+      trialEnd: options.licenseTrialEnd ?? null,
       now,
       ensureCustomer: (user) => this.ensureCustomer(user),
       analytics: this.#analytics,
@@ -330,6 +334,14 @@ export class BillingService {
       const customerId = yield* this.ensureCustomer(request.user);
       const returnUrl = checkoutReturnUrl(request.origin, request.target, request.serverId);
       const returnToken = this.#sales ? crypto.randomUUID() : null;
+      // During a promotion the license is free until its trial end, so the order pays for the server only.
+      const trialEnd = order ? this.license.trialEnd() : null;
+      const orderMetadata = order
+        ? {
+            [ORDER_METADATA.licenseTier]: order.tier,
+            [ORDER_METADATA.licenseUsers]: String(order.users),
+          }
+        : null;
       const session = yield* this.#stripeCall(() =>
         dependencies.stripe.createCheckoutSession({
           customerId,
@@ -337,15 +349,20 @@ export class BillingService {
           currency: request.currency,
           userId: request.user.id,
           serverId: request.serverId,
-          ...(order && licensePrice
+          ...(orderMetadata && trialEnd !== null
             ? {
-                extraItems: [{ priceId: licensePrice.id, quantity: order.users }],
-                sessionMetadata: {
-                  [ORDER_METADATA.licenseTier]: order.tier,
-                  [ORDER_METADATA.licenseUsers]: String(order.users),
+                metadata: {
+                  ...orderMetadata,
+                  [ORDER_METADATA.licenseInterval]: request.interval,
+                  [ORDER_METADATA.licenseTrialEnd]: String(Math.floor(trialEnd / 1_000)),
                 },
               }
-            : {}),
+            : orderMetadata && order && licensePrice
+              ? {
+                  extraItems: [{ priceId: licensePrice.id, quantity: order.users }],
+                  sessionMetadata: orderMetadata,
+                }
+              : {}),
           // Stripe puts the session ID in the URL. The desktop return page sends it with the first
           // website visit of the browser, so that the saved checkout names the account.
           successUrl:
@@ -966,7 +983,7 @@ export class BillingService {
     // the bundle price from its next renewal. A sync that stores nothing new also runs both, so a failed
     // split or price change runs again on the next webhook. Each does nothing when it is already done.
     const finish = Effect.andThen(
-      subscriptionLicenseItem(subscription) ? this.license.splitOrder(subscription, ownerId) : Effect.void,
+      ordersLicense(subscription) ? this.license.splitOrder(subscription, ownerId) : Effect.void,
       this.license.alignBundlePrice(ownerId),
     );
     if (stored.meta.changes !== 1) {

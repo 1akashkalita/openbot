@@ -21,7 +21,8 @@ export const readPricingOffer = createServerFn({ method: "GET" }).handler(async 
     const billing = requestBillingService();
     if (!billing) return { plans: LIST_PRICE_PLANS, inEu };
     const catalog = await runApiEffect(billing.catalog());
-    return { plans: catalog.plans, inEu };
+    const licenseTrialEnd = billing.license.trialEnd();
+    return { plans: catalog.plans, inEu, ...(licenseTrialEnd === null ? {} : { licenseTrialEnd }) };
   } catch (error) {
     console.warn("pricing: server prices did not load", error instanceof BillingError ? error.code : "unexpected");
     return { plans: LIST_PRICE_PLANS, inEu };

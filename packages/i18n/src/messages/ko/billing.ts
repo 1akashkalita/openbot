@@ -90,6 +90,8 @@ export const messages = {
   "billing.license.buy.description":
     "회사 업무에서 OpenBot을 사용하는 사람은 몇 명인가요? AI 에이전트는 사용자에 포함되지 않아요.",
   "billing.license.buy.confirm": "결제 계속하기",
+  "billing.license.trial.until": "{date}까지 무료",
+  "billing.license.trial.confirm": "무료 체험 시작",
   "billing.license.work.used": "사용자 {users}명 중 {used}명",
   "billing.license.tier.starter.title": "Starter 라이선스",
   "billing.license.tier.team.title": "Team 라이선스",

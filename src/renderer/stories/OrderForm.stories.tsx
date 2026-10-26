@@ -13,6 +13,7 @@ function OrderFormStory(props: {
   ownedServer?: boolean;
   used?: number;
   inEu?: boolean;
+  licenseTrialEnd?: number;
 }) {
   const action = (order: Accessor<OrderFormOrder>) => <OrderAction order={order} />;
   return (
@@ -24,6 +25,7 @@ function OrderFormStory(props: {
         ownedServer={props.ownedServer}
         used={props.used}
         inEu={props.inEu}
+        licenseTrialEnd={props.licenseTrialEnd}
         initialServer={props.withServers ? "standard" : null}
         initialLicense="team"
         action={action}
@@ -65,3 +67,8 @@ export const ThreeMembers: Story = { args: { withServers: true, currency: "eur",
 
 /** An account that pays in złoty cannot change the currency. */
 export const Pln: Story = { args: { withServers: true, currency: "pln", currencyLocked: true } };
+
+/** A promotion: a license bought now is free until 1 December. */
+export const LicenseTrial: Story = {
+  args: { withServers: true, currency: "eur", inEu: true, licenseTrialEnd: Date.UTC(2026, 11, 1) },
+};

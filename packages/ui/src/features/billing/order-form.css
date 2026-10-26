@@ -287,7 +287,8 @@
   line-height: 1.45;
 }
 
-.order-form-yearly {
+.order-form-yearly,
+.order-form-trial {
   display: inline-flex;
   align-items: center;
   min-height: 24px;
@@ -299,6 +300,10 @@
   font-weight: 600;
   white-space: nowrap;
   transition: background-color var(--openbot-duration-slow) ease;
+}
+
+.order-form-trial {
+  background: color-mix(in srgb, var(--openbot-success) 14%, var(--openbot-transparent));
 }
 
 .order-form-yearly[data-active] {

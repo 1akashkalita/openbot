@@ -91,6 +91,8 @@ export const messages = {
   "billing.license.offer.description": "Starter para 1 usuário, ou Team para {count} usuários ou mais.",
   "billing.license.buy.description": "Quantas pessoas usam o OpenBot no trabalho? Agentes de IA não são usuários.",
   "billing.license.buy.confirm": "Ir para o pagamento",
+  "billing.license.trial.until": "Grátis até {date}",
+  "billing.license.trial.confirm": "Começar teste grátis",
   "billing.license.work.used": "{used} de {users} usuários",
   "billing.license.tier.starter.title": "Licença Starter",
   "billing.license.tier.team.title": "Licença Team",

@@ -18,7 +18,7 @@ import { configureWebReports, reportNotification } from "../../error-reports";
 import { StaticI18nProvider } from "../../i18n-context";
 import type { WebWorkspace } from "./WebWorkspace";
 import { createWebAppearancePreference } from "./web-appearance-preference";
-import { WEB_APP_BILLING_PARAM, WEB_APP_START_PARAM, type WebAppStart } from "./web-billing";
+import { takeWebAppStart, WEB_APP_BILLING_PARAM, type WebAppStart } from "./web-billing";
 import type { WebRuntimeFactory } from "./web-client-context";
 import { takeHostingReturn } from "./web-hosted-servers";
 import { createWebLanguagePreference } from "./web-language-preference";
@@ -102,11 +102,9 @@ function takeBillingReturn(): BillingReturn | null {
 /** What a `/app?start=<server|license>` link from the pricing page opens. The query is removed after it is read. */
 function takeStartLink(): WebAppStart | null {
   const url = new URL(window.location.href);
-  const start = url.searchParams.get(WEB_APP_START_PARAM);
-  if (start === null) return null;
-  url.searchParams.delete(WEB_APP_START_PARAM);
-  window.history.replaceState(window.history.state, "", url);
-  return start === "server" || start === "license" ? start : null;
+  const start = takeWebAppStart(url);
+  if (url.href !== window.location.href) window.history.replaceState(window.history.state, "", url);
+  return start;
 }
 
 export function WebApp(props: { createRuntime?: WebRuntimeFactory } = {}) {

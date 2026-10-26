@@ -88,6 +88,16 @@
   transform: translateY(-50%);
 }
 
+/* The account pays in one currency, so the code is text: the same height as the select, no chevron. */
+.hosted-currency-locked {
+  display: inline-flex;
+  align-items: center;
+  height: var(--openbot-control-md);
+  padding-inline: 10px;
+  color: var(--openbot-text-secondary);
+  font-size: var(--openbot-text-sm);
+}
+
 /* With a license offer: personal or work use at the left, the currency and billing at the right. */
 .add-server-bar[data-license] {
   justify-content: flex-end;
