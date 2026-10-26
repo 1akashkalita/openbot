@@ -32,6 +32,7 @@ import {
 import { isDynamicRecord, isOneOf, isString } from "@openbot/contracts/runtime-values";
 import { sourceText } from "@openbot/i18n/source";
 import { Context, Effect, Layer } from "effect";
+import { SOLD_OUT_PLANS } from "../lib/pricing-page";
 import {
   type AccountAnalytics,
   type BillingAction,
@@ -87,9 +88,6 @@ export { BillingError } from "./billing-errors";
 
 /** Where the Stripe page sends the user back: the desktop return page or the web client. */
 export type BillingReturnTarget = "desktop" | "web";
-
-/** The plans that no new server can take. Servers that have one keep it. */
-export const SOLD_OUT_PLANS: ReadonlySet<BillingPlanId> = new Set(["starter"]);
 
 export const BILLING_UNAVAILABLE_STATE: BillingState = { available: false, hasCustomer: false, servers: [] };
 
@@ -964,11 +962,15 @@ export class BillingService {
       currency,
       latestInvoiceId: subscriptionLatestInvoiceId(subscription),
     };
-    // A paid server order moves its license to its own subscription. A sync that stores nothing new also
-    // tries again, so a failed split runs on the next webhook.
-    const split = subscriptionLicenseItem(subscription) ? this.license.splitOrder(subscription, ownerId) : Effect.void;
+    // A paid server order moves its license to its own subscription, and any server plan gives the license
+    // the bundle price from its next renewal. A sync that stores nothing new also runs both, so a failed
+    // split or price change runs again on the next webhook. Each does nothing when it is already done.
+    const finish = Effect.andThen(
+      subscriptionLicenseItem(subscription) ? this.license.splitOrder(subscription, ownerId) : Effect.void,
+      this.license.alignBundlePrice(ownerId),
+    );
     if (stored.meta.changes !== 1) {
-      yield* split;
+      yield* finish;
       return synced;
     }
     const current = { ...synced, amount, status: subscription.status, cancelAtPeriodEnd };
@@ -1008,9 +1010,7 @@ export class BillingService {
         currency,
       }).pipe(Effect.mapError((error) => (error instanceof BillingError ? error : new BillingOperationError({}))));
     }
-    yield* split;
-    // Any server plan gives the license the bundle price from its next renewal.
-    yield* this.license.alignBundlePrice(ownerId);
+    yield* finish;
     return synced;
   });
 

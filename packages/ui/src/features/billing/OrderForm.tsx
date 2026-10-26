@@ -409,8 +409,11 @@ export function OrderForm(props: OrderFormProps) {
     if (!props.inEu) return unit();
     return isYearly() ? t("billing.order.unit.monthBilledYearlyExclVat") : t("billing.order.unit.monthExclVat");
   };
-  const bestValue = (plan: HostedServerCatalogPlan) =>
-    plan.id === "standard" ? t("billing.order.server.bestValue") : undefined;
+  /** A sold-out plan says so and cannot be chosen, as in Add server. */
+  const planBadge = (plan: HostedServerCatalogPlan) => {
+    if (plan.soldOut) return t("settings.hostedServers.plan.soldOut");
+    return plan.id === "standard" ? t("billing.order.server.bestValue") : undefined;
+  };
   const pickServer = (choice: ServerChoice) => {
     setServerId(choice);
     const plan = plans().find((item) => item.id === choice);
@@ -494,8 +497,9 @@ export function OrderForm(props: OrderFormProps) {
                   <ChoiceRow
                     value={plan.id}
                     title={serverName(plan)}
-                    badge={bestValue(plan)}
+                    badge={planBadge(plan)}
                     detail={serverDetail(plan)}
+                    disabled={plan.soldOut === true}
                     price={planMonthlyPrice(plan, interval(), currency())}
                     fullPrice={planMonthlyPrice(plan, "month", currency())}
                     currency={currency()}

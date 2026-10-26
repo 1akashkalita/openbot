@@ -30,15 +30,10 @@ import { isDynamicRecord, isOneOf, isString } from "@openbot/contracts/runtime-v
 import type { RouteHostState } from "@openbot/contracts/signal-protocol/ingress-queue";
 import { sourceText } from "@openbot/i18n/source";
 import { Context, Effect, Layer, Result, Schema } from "effect";
+import { SOLD_OUT_PLANS } from "../lib/pricing-page";
 import { type AccountAnalytics, type AccountAnalyticsEvent, NO_ACCOUNT_ANALYTICS } from "./account-analytics";
 import { getServerEntitlement } from "./billing-entitlement";
-import {
-  BillingError,
-  type BillingReturnTarget,
-  type BillingService,
-  SOLD_OUT_PLANS,
-  type SubscriptionSync,
-} from "./billing-service";
+import { BillingError, type BillingReturnTarget, type BillingService, type SubscriptionSync } from "./billing-service";
 import {
   BoatApiError,
   BoatClient,

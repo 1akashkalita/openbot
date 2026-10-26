@@ -1,10 +1,13 @@
 // The /pricing page: hosted servers and the license, as one order form. No JSX here, for the same
 // reason `content-collection.ts` holds none.
 
-import { BILLING_PLANS, billingListPrices } from "@openbot/contracts/billing";
+import { BILLING_PLANS, type BillingPlanId, billingListPrices } from "@openbot/contracts/billing";
 import type { HostedServerCatalogPlan } from "@openbot/contracts/hosted-servers";
 
 export const PRICING_ROUTE = "/pricing";
+
+/** The plans that no new server can take. Servers that have one keep it. */
+export const SOLD_OUT_PLANS: ReadonlySet<BillingPlanId> = new Set(["starter"]);
 
 /** The sitemap date of the page. Change it when its text changes. */
 export const PRICING_PAGE_UPDATED_AT = "2026-10-23";
@@ -59,7 +62,7 @@ export interface PricingOffer {
 export const LIST_PRICE_PLANS: readonly HostedServerCatalogPlan[] = BILLING_PLANS.map((plan) => {
   const month = billingListPrices(plan.id, "month");
   const year = billingListPrices(plan.id, "year");
-  return {
+  const entry: HostedServerCatalogPlan = {
     id: plan.id,
     diskGb: plan.storageGb,
     memberLimit: plan.memberLimit,
@@ -70,4 +73,6 @@ export const LIST_PRICE_PLANS: readonly HostedServerCatalogPlan[] = BILLING_PLAN
       pln: { month: month.pln, year: year.pln },
     },
   };
+  if (SOLD_OUT_PLANS.has(plan.id)) entry.soldOut = true;
+  return entry;
 });
