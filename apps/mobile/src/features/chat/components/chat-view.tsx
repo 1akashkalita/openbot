@@ -838,7 +838,7 @@ export function ChatView({
   const dismissSelection = useCallback(() => setSelection(null), []);
   const focusMessage = useCallback((next: MessageFocusTarget) => {
     Keyboard.dismiss();
-    setSelection(null);
+    // A quote from Describe edits stays: Reply and Describe edits replace it, other actions keep it.
     setFocus({ target: next, chat: latestChatKey.current, lifted: false });
   }, []);
   const closeFocus = useCallback(() => setFocus(null), []);
