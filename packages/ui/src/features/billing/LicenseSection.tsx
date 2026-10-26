@@ -30,6 +30,7 @@ import {
   AlertDescription,
   AlertIcon,
   Badge,
+  BriefcaseBusiness,
   Button,
   buttonVariants,
   ConfirmDialog,
@@ -304,11 +305,13 @@ function LicenseAlerts(props: {
   );
 }
 
-function LicenseIcon(): JSX.Element {
+function LicenseIcon(props: { offer?: boolean }): JSX.Element {
   return (
     <ItemMedia>
       <span class="billing-license-icon">
-        <ShieldCheck aria-hidden="true" />
+        <Show when={props.offer} fallback={<ShieldCheck aria-hidden="true" />}>
+          <BriefcaseBusiness aria-hidden="true" />
+        </Show>
       </span>
     </ItemMedia>
   );
@@ -429,8 +432,9 @@ function ActiveLicenseRow(props: {
 }
 
 /**
- * The row of an account with no open license: personal use, an ended license, or the license of a
- * server owner that covers this account. "Buy a license" opens the license dialog.
+ * The rows of an account with no open license. The first row is what the account has now: personal
+ * use, an ended license, or the license of a server owner that covers this account. The second row
+ * sells the work license, so that "Buy a license" does not look like it buys the first row.
  */
 function LicenseOffer(props: {
   state: LicenseState;
@@ -453,7 +457,10 @@ function LicenseOffer(props: {
         <Switch>
           <Match when={owners().length > 0}>
             <ItemContent>
-              <ItemTitle>{t("billing.license.covered.title")}</ItemTitle>
+              <div class="billing-server-title">
+                <ItemTitle>{t("billing.license.covered.title")}</ItemTitle>
+                <Badge variant="outline">{t("billing.license.current")}</Badge>
+              </div>
               <ItemDescription>
                 {t("billing.license.covered.description", { owners: format.list(owners()) })}
               </ItemDescription>
@@ -463,7 +470,7 @@ function LicenseOffer(props: {
             <ItemContent>
               <div class="billing-server-title">
                 <ItemTitle>{t("billing.license.personal.title")}</ItemTitle>
-                <Show when={ended()}>
+                <Show when={ended()} fallback={<Badge variant="outline">{t("billing.license.current")}</Badge>}>
                   <Badge variant="secondary">{t("billing.license.status.ended")}</Badge>
                 </Show>
               </div>
@@ -478,6 +485,15 @@ function LicenseOffer(props: {
             </ItemContent>
           </Match>
         </Switch>
+      </Item>
+      <Item>
+        <LicenseIcon offer />
+        <ItemContent>
+          <ItemTitle>{t("billing.license.offer.title")}</ItemTitle>
+          <ItemDescription>
+            {t("billing.license.offer.description", { count: format.number(LICENSE_INCLUDED_USERS) })}
+          </ItemDescription>
+        </ItemContent>
         <ItemActions>
           <Button
             type="button"

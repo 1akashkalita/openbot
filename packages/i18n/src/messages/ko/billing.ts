@@ -82,8 +82,11 @@ export const messages = {
   "billing.license.personal.title": "개인용",
   "billing.license.personal.description": "개인 및 비상업적 용도로는 무료예요. 회사 업무에는 라이선스가 필요해요.",
   "billing.license.status.ended": "종료됨",
+  "billing.license.current": "현재",
   "billing.license.ended": "라이선스가 {date}에 종료됐어요.",
   "billing.license.buy": "라이선스 구매",
+  "billing.license.offer.title": "업무용 라이선스",
+  "billing.license.offer.description": "Starter는 사용자 1명, Team은 사용자 {count}명 이상.",
   "billing.license.buy.description":
     "회사 업무에서 OpenBot을 사용하는 사람은 몇 명인가요? AI 에이전트는 사용자에 포함되지 않아요.",
   "billing.license.buy.confirm": "결제 계속하기",

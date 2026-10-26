@@ -84,8 +84,11 @@ export const messages = {
   "billing.license.personal.description":
     "Kişisel ve ticari olmayan kullanım için ücretsizdir. Bir şirketteki iş için lisans gerekir.",
   "billing.license.status.ended": "Sona erdi",
+  "billing.license.current": "Geçerli",
   "billing.license.ended": "Lisans {date} tarihinde sona erdi.",
   "billing.license.buy": "Lisans satın al",
+  "billing.license.offer.title": "İş lisansı",
+  "billing.license.offer.description": "1 kullanıcı için Starter veya {count} ya da daha fazla kullanıcı için Team.",
   "billing.license.buy.description": "OpenBot'u işte kaç kişi kullanıyor? Yapay zeka ajanları kullanıcı sayılmaz.",
   "billing.license.buy.confirm": "Ödemeye geç",
   "billing.license.work.used": "{used} / {users} kullanıcı",

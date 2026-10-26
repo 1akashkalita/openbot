@@ -85,8 +85,11 @@ export const messages = {
   "billing.license.personal.description":
     "Gratis para uso personal y no comercial. Para trabajar en una empresa necesitas una licencia.",
   "billing.license.status.ended": "Finalizada",
+  "billing.license.current": "Actual",
   "billing.license.ended": "La licencia finalizó el {date}.",
   "billing.license.buy": "Comprar licencia",
+  "billing.license.offer.title": "Licencia de trabajo",
+  "billing.license.offer.description": "Starter para 1 usuario, o Team para {count} usuarios o más.",
   "billing.license.buy.description": "¿Cuántas personas usan OpenBot en el trabajo? Los agentes de IA no son usuarios.",
   "billing.license.buy.confirm": "Continuar al pago",
   "billing.license.work.used": "{used} de {users} usuarios",

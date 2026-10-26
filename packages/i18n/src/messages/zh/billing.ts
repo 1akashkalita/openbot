@@ -84,8 +84,11 @@ export const messages = {
   "billing.license.personal.title": "个人使用",
   "billing.license.personal.description": "个人和非商业用途免费。在公司工作需要许可证。",
   "billing.license.status.ended": "已结束",
+  "billing.license.current": "当前",
   "billing.license.ended": "许可证已于 {date} 结束。",
   "billing.license.buy": "购买许可证",
+  "billing.license.offer.title": "工作许可证",
+  "billing.license.offer.description": "入门版适用于 1 位用户，团队版适用于 {count} 位及以上用户。",
   "billing.license.buy.description": "有多少人在工作中使用 OpenBot？AI 助手不算用户。",
   "billing.license.buy.confirm": "继续付款",
   // {used} people use the license; it is paid for {users}.

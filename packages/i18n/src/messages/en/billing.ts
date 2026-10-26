@@ -86,8 +86,13 @@ export const messages = defineMessages("billing", {
   "billing.license.personal.title": "Personal use",
   "billing.license.personal.description": "Free for personal and noncommercial use. Work at a company needs a license.",
   "billing.license.status.ended": "Ended",
+  // A badge on the row of what the account has now, above the work license offer.
+  "billing.license.current": "Current",
   "billing.license.ended": "The license ended on {date}.",
   "billing.license.buy": "Buy a license",
+  // The row under the current license row that sells a license. {count} is the smallest Team license.
+  "billing.license.offer.title": "Work license",
+  "billing.license.offer.description": "Starter for 1 user, or Team for {count} or more users.",
   "billing.license.buy.description": "How many people use OpenBot at work? AI agents are not users.",
   "billing.license.buy.confirm": "Continue to payment",
   // {used} people use the license; it is paid for {users}.
