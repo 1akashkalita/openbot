@@ -31,15 +31,12 @@ function ActionButton({
   accessibilityLabel,
   accessibilityState,
   onPress,
-  selected = false,
   label = false,
   children,
 }: PropsWithChildren<{
   accessibilityLabel: string;
   accessibilityState?: AccessibilityState;
   onPress: () => void;
-  /** Drawn as a pressed HeroUI `secondary` button. */
-  selected?: boolean;
   /** An emoji, not an icon: the button takes the width of its content. */
   label?: boolean;
 }>) {
@@ -52,7 +49,7 @@ function ActionButton({
       accessibilityLabel={accessibilityLabel}
       accessibilityState={accessibilityState}
       onPress={onPress}
-      className={`h-10 items-center justify-center rounded-full active:bg-default-hover/30 ${label ? "px-2" : "w-10"} ${selected ? "bg-default" : ""}`}
+      className={`h-10 items-center justify-center rounded-full active:bg-default-hover/30 ${label ? "px-2" : "w-10"}`}
       style={({ pressed }) => (pressed ? PRESSED : undefined)}
     >
       {historyShown || label ? children : null}
