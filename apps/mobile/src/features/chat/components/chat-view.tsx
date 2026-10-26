@@ -71,9 +71,9 @@ import { voiceAccent, voicePalette } from "../model/voice-palette";
 import { rememberImageDimensions } from "./attachment-preview";
 import { asksForSecret, BrowserSecretComposer, BrowserTakeoverCard } from "./browser-secret-card";
 import { ChatAttachmentPanel } from "./chat-attachment-panel";
+import { ChatMessageFocus, type MessageFocusTarget } from "./chat-message-focus";
 import type { OutboxRowStatus } from "./chat-outbox-status";
 import { ChatQueueButton } from "./chat-queue-button";
-import { ChatSelectionBar } from "./chat-selection-bar";
 import type { ChatQueueController } from "./use-chat-queue";
 import { useVoiceMode } from "./use-voice-mode";
 import { VoiceOverlay } from "./voice-overlay";
@@ -273,8 +273,21 @@ export function ChatView({
   ]);
   const [replyTarget, setReplyTarget] = useState<ChatBubbleMessage | null>(null);
   // The message whose text the reader selects in its bubble, and the selected part of it.
-  const [selection, setSelection] = useState<{ message: ChatBubbleMessage; selected: string } | null>(null);
+  // `row` selects in the bubble of the list. `focus` came from a lifted message with Describe edits:
+  // the composer shows the quote, and the list draws no selection.
+  const [selection, setSelection] = useState<{
+    message: ChatBubbleMessage;
+    selected: string;
+    origin: "row" | "focus";
+  } | null>(null);
   const selectionQuote = selection ? selection.selected.trim() || markdownPlainText(selection.message.body) : "";
+  // The message that a touch and hold lifted out of this chat, with its actions.
+  const chatKey = `${target.serverId}:${target.kind}:${target.id}`;
+  const latestChatKey = useRef(chatKey);
+  latestChatKey.current = chatKey;
+  const [focus, setFocus] = useState<{ target: MessageFocusTarget; chat: string; lifted: boolean } | null>(null);
+  // Describe edits on a lifted message puts the caret in the composer.
+  const [editFocusVersion, setEditFocusVersion] = useState(0);
   const [replyFocusVersion, setReplyFocusVersion] = useState(0);
   const [draft, setDraft] = useState("");
   const [sendError, setSendError] = useState<{
@@ -728,12 +741,6 @@ export function ChatView({
     );
   }
 
-  /** Explain, Improve and the other selection actions send at once, as on desktop. */
-  function sendSelectionAction(instruction: string): void {
-    if (!canSend || !selection) return;
-    deliver(serializeSelectionInstruction(instruction, selectionQuote), hostMessageId(selection.message.id), []);
-  }
-
   // The messages whose text and files are in the composer. The composer draft is not saved, so the
   // outbox keeps them until it sends, and they come back stopped when the chat closes.
   const editedMessages = useRef(new Set<string>());
@@ -834,7 +841,9 @@ export function ChatView({
   // Select text starts the selection, and a second tap on it ends the selection.
   const selectText = useCallback((message: ChatBubbleMessage) => {
     Keyboard.dismiss();
-    setSelection((current) => (current?.message.id === message.id ? null : { message, selected: "" }));
+    setSelection((current) =>
+      current?.message.id === message.id && current.origin === "row" ? null : { message, selected: "", origin: "row" },
+    );
   }, []);
   const changeSelection = useCallback(
     (selected: string) =>
@@ -845,7 +854,9 @@ export function ChatView({
     (message: ChatBubbleMessage, selected: string) =>
       setSelection((current) => {
         if (selected) {
-          return current?.message.id === message.id && current.selected === selected ? current : { message, selected };
+          return current?.message.id === message.id && current.selected === selected
+            ? current
+            : { message, selected, origin: "row" };
         }
         // An empty selection ends only the selection of its own message.
         return current?.message.id === message.id ? null : current;
@@ -853,6 +864,37 @@ export function ChatView({
     [],
   );
   const dismissSelection = useCallback(() => setSelection(null), []);
+  const focusMessage = useCallback((next: MessageFocusTarget) => {
+    Keyboard.dismiss();
+    setSelection(null);
+    setFocus({ target: next, chat: latestChatKey.current, lifted: false });
+  }, []);
+  const closeFocus = useCallback(() => setFocus(null), []);
+  const liftFocus = useCallback(() => setFocus((current) => (current ? { ...current, lifted: true } : current)), []);
+  // The lift belongs to the chat on screen. Another screen or another chat ends it.
+  const focused = focus && focus.chat === chatKey && isFocused && !voiceOpen ? focus.target : null;
+  useEffect(() => {
+    if (!isFocused) setFocus(null);
+  }, [isFocused]);
+  // The list may update the reactions of the lifted message while it is lifted.
+  const focusedReactions = useMemo(() => {
+    if (!focused) return undefined;
+    const latest = messages.find((item) => item.kind === "message" && item.id === focused.message.id);
+    return latest?.kind === "message" ? latest.reactions : focused.message.reactions;
+  }, [focused, messages]);
+  // The bubble of the lifted message hides in the list while the copy covers it.
+  const liftedMessageId = focused && focus?.lifted ? focused.message.id : null;
+  /** The actions on text selected in a lifted message send at once, as the selection bar does. */
+  function sendFocusSelection(message: ChatBubbleMessage, quote: string, instruction: string): void {
+    if (!canSend) return;
+    deliver(serializeSelectionInstruction(instruction, quote), hostMessageId(message.id), []);
+  }
+  /** The composer says how to change the selected text, as Describe edits on desktop. */
+  function describeFocusEdits(message: ChatBubbleMessage, quote: string): void {
+    setReplyTarget(null);
+    setSelection({ message, selected: quote, origin: "focus" });
+    setEditFocusVersion((version) => version + 1);
+  }
   const listUpload = useMemo(
     () =>
       sendingMessage && sendingUpload && !sendsToQueue
@@ -876,7 +918,7 @@ export function ChatView({
           // the keyboard with that. The card's own backdrop absorbs the taps,
           // and its accessibilityViewIsModal hides this from VoiceOver on iOS.
           // Android has no such flag, so it keeps the one prop that is its own.
-          importantForAccessibility={attachments.menuOpen ? "no-hide-descendants" : "auto"}
+          importantForAccessibility={attachments.menuOpen || focused ? "no-hide-descendants" : "auto"}
         >
           <KeyboardGestureArea
             style={{ flex: 1 }}
@@ -949,11 +991,13 @@ export function ChatView({
               onLoadOlder={loadOlder}
               onReply={readOnly ? undefined : replyToMessage}
               onReact={canReact && !readOnly ? react : undefined}
-              selectingMessageId={selection?.message.id ?? null}
+              selectingMessageId={selection?.origin === "row" ? selection.message.id : null}
+              liftedMessageId={liftedMessageId}
               onSelectText={selectText}
               onSelectionChange={changeSelection}
               onNativeSelection={selectNatively}
               onDismissSelection={dismissSelection}
+              onFocusMessage={focusMessage}
               muted={muted}
               raised={raised}
               showStarter={
@@ -1057,14 +1101,6 @@ export function ChatView({
                   fallbackBackground={fieldBackground}
                 />
               ) : null}
-              {/* Mounted while it leaves, so its capsules can animate out. */}
-              <ChatSelectionBar
-                visible={Boolean(selection) && !voiceOpen}
-                canSend={canSend}
-                liquidGlassAvailable={liquidGlassAvailable}
-                fallbackBackground={fieldBackground}
-                onAction={sendSelectionAction}
-              />
               {notice ? (
                 // As a closed task: the chat takes no messages, and a note takes the place of the composer.
                 <Typography.Paragraph
@@ -1093,7 +1129,10 @@ export function ChatView({
                   sendRetryVersion={sendRetryVersion}
                   replyTarget={replyTarget}
                   replyFocusVersion={replyFocusVersion}
-                  focusVersion={answerFocusVersion}
+                  // Either request moves the caret into the composer: the sum changes with each one.
+                  focusVersion={answerFocusVersion + editFocusVersion}
+                  quote={selection?.origin === "focus" ? selectionQuote : null}
+                  onCancelQuote={dismissSelection}
                   handoffFocusVersion={handoffFocusVersion}
                   onCancelReply={cancelReply}
                   mentionAgents={mentionAgents}
@@ -1152,6 +1191,23 @@ export function ChatView({
             onClose={attachments.closeMenu}
             onUseSkill={mentionSkills?.length ? () => setSkillPickerVersion((version) => version + 1) : undefined}
             progress={menuProgress}
+          />
+        ) : null}
+        {focused ? (
+          <ChatMessageFocus
+            target={focused}
+            reactions={focusedReactions}
+            agents={serverAgents}
+            canSend={canSend}
+            reducedTransparency={reducedTransparency}
+            liquidGlassAvailable={liquidGlassAvailable}
+            fallbackBackground={fieldBackground}
+            onReact={canReact && !readOnly ? react : undefined}
+            onReply={readOnly ? undefined : replyToMessage}
+            onSelectionAction={sendFocusSelection}
+            onDescribeEdits={describeFocusEdits}
+            onLifted={liftFocus}
+            onClosed={closeFocus}
           />
         ) : null}
       </View>

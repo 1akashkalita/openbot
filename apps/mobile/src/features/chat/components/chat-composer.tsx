@@ -9,6 +9,7 @@ import Plus from "lucide-react-native/icons/plus";
 import Reply from "lucide-react-native/icons/reply";
 import Sparkles from "lucide-react-native/icons/sparkles";
 import Square from "lucide-react-native/icons/square";
+import TextQuote from "lucide-react-native/icons/text-quote";
 import X from "lucide-react-native/icons/x";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
@@ -167,6 +168,9 @@ interface ChatComposerProps {
   /** Focuses the field after another screen, such as Agent info > Skills, handed text to it. */
   handoffFocusVersion?: number;
   onCancelReply: () => void;
+  /** Text selected in a lifted message: the composer text says how to change it. */
+  quote?: string | null;
+  onCancelQuote?: () => void;
   /** Absent for a text-only composer: the control never dictates. */
   voice?: VoiceMode;
   /** The agent's colour for the filled voice controls, the glyph colour on it, and the glass tint. */
@@ -242,6 +246,8 @@ export const ChatComposer = memo(function ChatComposer({
   focusVersion = 0,
   handoffFocusVersion = 0,
   onCancelReply,
+  quote = null,
+  onCancelQuote,
   voice,
   voiceAccent,
 }: ChatComposerProps) {
@@ -1002,6 +1008,28 @@ export const ChatComposer = memo(function ChatComposer({
                 >
                   <X color={String(muted)} size={16} />
                 </Button>
+              </View>
+            ) : null}
+            {quote && !replyTarget && !voiceOpen ? (
+              <View className="flex-row items-center gap-2 pt-2 pl-4 pr-2">
+                <TextQuote color={String(muted)} size={16} />
+                <Typography.Paragraph numberOfLines={1} type="body-sm" className="flex-1 text-text-secondary">
+                  {quote}
+                </Typography.Paragraph>
+                {onCancelQuote ? (
+                  <Button
+                    isIconOnly
+                    size="sm"
+                    variant="ghost"
+                    accessibilityLabel={t("mobile.chat.composer.cancelQuote")}
+                    onPress={() => {
+                      void haptics.selection();
+                      onCancelQuote();
+                    }}
+                  >
+                    <X color={String(muted)} size={16} />
+                  </Button>
+                ) : null}
               </View>
             ) : null}
             <Animated.View

@@ -1,7 +1,20 @@
+import { type NativeModule, requireOptionalNativeModule } from "expo";
 import { useEffect, useRef } from "react";
-import { type ColorValue, TextInput, type TextInputInstance, useWindowDimensions } from "react-native";
+import { type ColorValue, findNodeHandle, TextInput, type TextInputInstance, useWindowDimensions } from "react-native";
 import { isIOS } from "@/shared/lib/platform";
 import { useText } from "@/shared/lib/text";
+
+declare class TextSelectionModule extends NativeModule {
+  /** Selects all text of the field with the handles and menu of Android. False for an empty field. */
+  selectAll(viewTag: number): Promise<boolean>;
+}
+
+/**
+ * `modules/text-selection`, on Android only. A range that code sets has no handles there, so the
+ * module starts the selection mode of a touch and hold. A build without it, such as Expo Go, selects
+ * the text without handles.
+ */
+const textSelection = requireOptionalNativeModule<TextSelectionModule>("OpenBotTextSelection");
 
 /** The body text: 16 points on a 28-point line, as the HeroUI `body` type. */
 const FONT_SIZE = 16;
@@ -27,6 +40,7 @@ export function ChatSelectableText({
   color,
   onHeight,
   onSelectionChange,
+  systemMenu = true,
 }: {
   text: string;
   color: ColorValue | undefined;
@@ -34,13 +48,30 @@ export function ChatSelectableText({
   onHeight: (height: number) => void;
   /** The selected part of `text`. Empty when the selection is only a cursor. */
   onSelectionChange: (selected: string) => void;
+  /**
+   * Off where the chat shows its own actions for the selection, so the system menu does not cover
+   * them. iOS only: Android cannot hide the menu and keep the selection.
+   */
+  systemMenu?: boolean;
 }) {
   const { t } = useText();
   const { fontScale } = useWindowDimensions();
   const input = useRef<TextInputInstance>(null);
+  const report = useRef(onSelectionChange);
+  report.current = onSelectionChange;
   useEffect(() => {
     input.current?.focus();
     input.current?.setSelection(0, text.length);
+    // Android takes the focus after this call and puts a cursor in place of the range, and neither
+    // platform reports a range that the code sets. So the range is set again once the field has the
+    // focus, and the chat hears of the whole text at once, to show the actions for it.
+    const frame = requestAnimationFrame(() => {
+      input.current?.setSelection(0, text.length);
+      report.current(text);
+      const tag = textSelection && input.current ? findNodeHandle(input.current) : null;
+      if (typeof tag === "number") void textSelection?.selectAll(tag).catch(() => false);
+    });
+    return () => cancelAnimationFrame(frame);
   }, [text]);
   return (
     <TextInput
@@ -54,6 +85,10 @@ export function ChatSelectableText({
       editable={!isIOS}
       showSoftInputOnFocus={false}
       caretHidden
+      selectTextOnFocus
+      // Android hides the menu by refusing its action mode, and that also ends the selection, so
+      // Android keeps its menu.
+      contextMenuHidden={!systemMenu && isIOS}
       onContentSizeChange={({ nativeEvent }) => onHeight(nativeEvent.contentSize.height)}
       onSelectionChange={({ nativeEvent }) =>
         onSelectionChange(text.slice(nativeEvent.selection.start, nativeEvent.selection.end))
