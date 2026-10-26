@@ -92,7 +92,7 @@ export const messages = {
   "server.add.use.work": "업무",
   "server.add.license.people": "업무 사용 인원",
   "server.add.license.bundle": "묶음 −{price}",
-  "server.add.license.summary": "서버 및 {license}",
+  "server.add.license.included": "{license} 포함",
   "server.add.billedMonthly": "매월 결제",
   "server.add.billedYearly": "연 {price} 결제",
   // {amount} is a formatted amount, such as "€120". It follows the yearly price.

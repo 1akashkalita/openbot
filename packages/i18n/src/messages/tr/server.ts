@@ -93,7 +93,7 @@ export const messages = {
   "server.add.use.work": "İş",
   "server.add.license.people": "İşteki kişiler",
   "server.add.license.bundle": "Paket −{price}",
-  "server.add.license.summary": "Sunucu ve {license}",
+  "server.add.license.included": "Dahil: {license}",
   "server.add.billedMonthly": "Aylık faturalandırılır",
   "server.add.billedYearly": "Yıllık {price} faturalandırılır",
   // {amount} "€120" gibi biçimlendirilmiş bir tutardır. Yıllık fiyatın ardından gelir.

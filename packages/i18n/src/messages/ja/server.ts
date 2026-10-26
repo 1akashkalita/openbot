@@ -92,7 +92,7 @@ export const messages = {
   "server.add.use.work": "業務",
   "server.add.license.people": "業務で使う人数",
   "server.add.license.bundle": "セット −{price}",
-  "server.add.license.summary": "サーバーと {license}",
+  "server.add.license.included": "{license}付き",
   "server.add.billedMonthly": "毎月請求",
   "server.add.billedYearly": "年額 {price} を請求",
   "server.add.yearlySaving": "{amount} お得",

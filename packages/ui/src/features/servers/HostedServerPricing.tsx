@@ -439,9 +439,11 @@ export function HostedServerPlans(props: HostedServerPlansProps) {
                   </p>
                 )}
               </Show>
-              <p class="hosted-plan-summary">
+              {/* For work, the summary says that the price includes the license. */}
+              <p class="hosted-plan-summary" data-license={work() ? "" : undefined}>
                 <Show when={work()} fallback={t(PLAN_TEXT[plan.id].summary)}>
-                  {t("server.add.license.summary", { license: licenseLine() })}
+                  <ShieldCheck aria-hidden="true" />
+                  {t("server.add.license.included", { license: licenseLine() })}
                 </Show>
               </p>
               <Button
@@ -472,20 +474,23 @@ export function HostedServerPlans(props: HostedServerPlansProps) {
                   <HardDrive aria-hidden="true" />
                   {t("settings.hostedServers.plan.disk", { count: plan.diskGb })}
                 </li>
-                <li>
-                  <ShieldCheck aria-hidden="true" />
-                  {/* A server too small for the Team license sells the Starter license, at the bundle price. */}
-                  <Show
-                    when={plan.memberLimit < LICENSE_INCLUDED_USERS}
-                    fallback={t("settings.hostedServers.plan.license.team")}
-                  >
-                    {t("settings.hostedServers.plan.license.starter", {
-                      price: price(
-                        LICENSE_PLAN_PRICES.starter_bundle_month[HOSTED_BILLING_CURRENCY[props.currency]].base / 100,
-                      ),
-                    })}
-                  </Show>
-                </li>
+                {/* For work, the summary already names the license of the order. */}
+                <Show when={!work()}>
+                  <li>
+                    <ShieldCheck aria-hidden="true" />
+                    {/* A server too small for the Team license sells the Starter license, at the bundle price. */}
+                    <Show
+                      when={plan.memberLimit < LICENSE_INCLUDED_USERS}
+                      fallback={t("settings.hostedServers.plan.license.team")}
+                    >
+                      {t("settings.hostedServers.plan.license.starter", {
+                        price: price(
+                          LICENSE_PLAN_PRICES.starter_bundle_month[HOSTED_BILLING_CURRENCY[props.currency]].base / 100,
+                        ),
+                      })}
+                    </Show>
+                  </li>
+                </Show>
                 <li>
                   <Gauge aria-hidden="true" />
                   {plan.relativeSpeed === 1
