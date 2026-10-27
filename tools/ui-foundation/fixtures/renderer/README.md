@@ -33,3 +33,7 @@ here — the violation would account for the failure either way — so it goes i
 
 `stories/Play.stories.tsx` is input for `no-story-play.grit`, not for `ui-foundation-check.ts`. Each
 line that the rule must reject ends in `// flag`.
+
+`../site` stands in for the public site stylesheets (`apps/auth-api/src`, `apps/status/src`), which
+have their own budgets. `site.css` holds one literal of each budgeted kind and one undeclared token;
+`site-clean.css` holds the same rules on tokens and on a `--site-` scale, and must report nothing.

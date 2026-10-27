@@ -14,10 +14,12 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { checkUiFoundation } from "./ui-foundation-check";
+import { checkUiFoundation, type StyleDebt } from "./ui-foundation-check";
 
 const fixtureRenderer = resolve(import.meta.dirname, "../tools/ui-foundation/fixtures/renderer");
 const cleanRenderer = resolve(import.meta.dirname, "../tools/ui-foundation/fixtures/renderer-clean");
+const fixtureSite = resolve(import.meta.dirname, "../tools/ui-foundation/fixtures/site");
+const brandTokens = resolve(import.meta.dirname, "../packages/brand/src/tokens.css");
 
 function budget(label: string, actual: number, maximum = 0): string {
   return `${label}: ${actual} (migration budget: ${maximum}; the count may only go down)`;
@@ -256,4 +258,52 @@ it("flags hardcoded interface text on each line its fixture marks, and not on tr
   expect(
     pluginDiagnostics("no-hardcoded-ui-text.grit", resolve(cleanRenderer, "components/TranslatedText.tsx"), "tsx"),
   ).toEqual([]);
+});
+
+describe("public web budgets", () => {
+  const debts: readonly StyleDebt[] = [
+    "colour literals outside the palette",
+    "untokenized font-size",
+    "untokenized font-weight",
+    "pixel line-height",
+    "untokenized letter-spacing",
+    "icon size outside the icon scale",
+    "untokenized border-radius",
+    "untokenized transition durations",
+  ];
+  const site = (sheet: string, budget: number) => ({
+    sheets: [resolve(fixtureSite, sheet)],
+    budgets: Object.fromEntries(debts.map((debt) => [debt, budget])),
+  });
+
+  it("reports each kind of literal above its budget, and an undeclared token", () => {
+    // site.css holds one literal of each kind, so a budget of 0 reports each once.
+    const { failures } = checkUiFoundation(cleanRenderer, fixtureSite, undefined, undefined, [], site("site.css", 0));
+
+    expect([...failures].sort()).toEqual(
+      [
+        ...debts.map((debt) => budget(`public web ${debt}`, 1)),
+        "site.css: var(--openbot-site-missing) is not declared by any stylesheet",
+      ].sort(),
+    );
+  });
+
+  it("allows the literals that the budget holds", () => {
+    const { failures } = checkUiFoundation(cleanRenderer, fixtureSite, undefined, undefined, [], site("site.css", 1));
+
+    expect(failures).toEqual(["site.css: var(--openbot-site-missing) is not declared by any stylesheet"]);
+  });
+
+  it("reports nothing for site rules on tokens and on a site scale", () => {
+    const { failures } = checkUiFoundation(
+      cleanRenderer,
+      fixtureSite,
+      undefined,
+      undefined,
+      [brandTokens],
+      site("site-clean.css", 0),
+    );
+
+    expect(failures).toEqual([]);
+  });
 });
