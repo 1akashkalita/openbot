@@ -1,0 +1,52 @@
+/* Story-only. An approximation of X's large link card, to check the social cards
+   against the title label X draws over them. */
+
+.story-social-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 516px), 1fr));
+  gap: 32px;
+  padding: 32px;
+  background: #000000;
+}
+
+.story-x-card {
+  margin: 0;
+}
+
+.story-x-card-media {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid #2f3336;
+  border-radius: 16px;
+}
+
+.story-x-card-media img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.story-x-card-title {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  max-width: calc(100% - 24px);
+  padding: 0 4px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.77);
+  color: #ffffff;
+  font:
+    13px / 20px system-ui,
+    sans-serif;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.story-x-card-domain {
+  margin-top: 4px;
+  color: #71767b;
+  font:
+    13px / 16px system-ui,
+    sans-serif;
+}
