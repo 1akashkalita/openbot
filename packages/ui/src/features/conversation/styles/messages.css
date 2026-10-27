@@ -85,11 +85,6 @@
   overflow-wrap: anywhere;
 }
 
-/* An agent's text has no bubble padding, so its name starts on the same line as the text. */
-.message-entry-agent .message-author-name {
-  padding-inline: 0;
-}
-
 .message-author-name-button {
   height: auto;
   min-width: 0;
@@ -1012,14 +1007,6 @@ button.chat-action-target:active,
 
 .message-entry-agent .ui-bubble {
   max-width: min(720px, 100%);
-}
-
-/* An agent's text sits on the canvas, flush with its name, as a document does. Only the people in
-   the conversation keep a bubble, so a reader finds their own turns at a glance. */
-.message-entry-agent .ui-bubble-variant-muted > .ui-bubble-content {
-  border-radius: 0;
-  background: transparent;
-  padding-inline: 0;
 }
 
 .message-entry-agent .ui-bubble:has(.choice-card) {

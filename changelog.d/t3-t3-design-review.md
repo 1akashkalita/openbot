@@ -9,8 +9,6 @@
 - Direct messages use the same text size as channels. In the sidebar, the time and the message
   preview of an agent now have the same size and colour.
 - Icons use one stroke width and the standard icon sizes in all of the app.
-- An agent's reply sits on the page without a bubble, aligned with the agent's name. Your own
-  messages keep their bubble.
 - Text uses the optical sizes of Inter: small text is more open and large titles are tighter.
 - Copy and Expand on a code block show when you point at the block or move to it with the keyboard.
 - The failed-task tray uses neutral colours, a warning icon and a secondary Continue button.
