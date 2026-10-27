@@ -21,6 +21,8 @@
 - Labels in Mermaid diagrams sit on the diagram background, not on a separate box.
 - Settings pages have a Back button before the title, as the usage page has. Escape now also closes
   the usage and schedule pages.
+- The website and the status page use the same type sizes, weights, letter spacing and corner
+  radii as the app. Website text uses the optical sizes of Inter, so long titles take fewer lines.
 
 ### Fixed
 
