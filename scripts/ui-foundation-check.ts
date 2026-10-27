@@ -108,6 +108,7 @@ export function checkUiFoundation(
   labelRoot: string,
   reachableRoots: readonly string[] = [rendererRoot],
   uiRoot = resolve(rendererRoot, "components/ui"),
+  tokenSheets: readonly string[] = [],
 ): UiFoundationReport {
   const sourceFiles = [...new Set([...filesUnder(rendererRoot), ...filesUnder(uiRoot)])];
   // Compared with a separator appended, or components/ui-kit and components/uiLegacy read
@@ -216,6 +217,24 @@ export function checkUiFoundation(
       failures.push(`${relative(labelRoot, path)}: .${name} is not reachable from any markup; delete the rule`);
     }
   }
+  // A token that no stylesheet declares resolves to nothing, and the property silently falls
+  // back to its initial value: `--openbot-text-xs` sized three rules that way. A reference with a
+  // fallback, `var(--name, value)`, is optional by intent and is not reported.
+  const declaredTokens = new Set(
+    [...styleSheets, ...tokenSheets].flatMap((path) =>
+      [...readFileSync(path, "utf8").matchAll(/(--openbot-[\w-]+)\s*:/gu)].map(([, name]) => name),
+    ),
+  );
+  for (const path of styleSheets) {
+    const referenced = new Set(
+      [...readFileSync(path, "utf8").matchAll(/var\(\s*(--openbot-[\w-]+)\s*\)/gu)].map(([, name]) => name),
+    );
+    for (const name of [...referenced].sort()) {
+      if (name !== undefined && !declaredTokens.has(name)) {
+        failures.push(`${relative(labelRoot, path)}: var(${name}) is not declared by any stylesheet`);
+      }
+    }
+  }
   const colorLiteralCount =
     matches(legacyStyles, /#[\da-f]{3,8}|rgba?\([^)]*\)|hsla?\([^)]*\)/giu) +
     matches(legacyStyles, /(?<![-\w])(?:white|black|red|blue|green|yellow|purple|orange|gray|grey|pink)(?![-\w])/giu);
@@ -227,6 +246,9 @@ export function checkUiFoundation(
     ["data-testid hooks in renderer markup", matches(testHookSource, /data-testid\s*=/gu), 0],
     ["colour literals outside the palette", colorLiteralCount, 0],
     ["untokenized font-size", matches(legacyStyles, /font-size:(?!\s*(?:var\(|inherit\b))\s*[^;]+/gu), 0],
+    ["untokenized font-weight", matches(legacyStyles, /font-weight:(?!\s*(?:var\(|inherit\b))\s*[^;]+/gu), 0],
+    // A unitless line-height scales with its font and stays allowed; a pixel one is a leading token.
+    ["pixel line-height", matches(legacyStyles, /line-height:\s*[\d.]+px\b/gu), 0],
     [
       "untokenized border-radius",
       matches(legacyStyles, /border-radius:(?!\s*(?:var\(|0(?:\s|;)|inherit\b))\s*[^;]+/gu),
@@ -255,6 +277,7 @@ if (import.meta.main) {
     projectRoot,
     [resolve(projectRoot, "src"), resolve(projectRoot, "apps"), resolve(projectRoot, "packages/ui/src")],
     resolve(projectRoot, "packages/ui/src"),
+    filesUnder(resolve(projectRoot, "packages/brand/src")).filter((path) => path.endsWith(".css")),
   );
 
   if (failures.length > 0) {

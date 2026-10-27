@@ -1,7 +1,17 @@
-/* A stylesheet in the widened scan's reach that spends none of the budget. */
+/* A stylesheet in the widened scan's reach that spends none of the budget, and declares
+   every token it reads. */
+:root {
+  --openbot-text: inherit;
+  --openbot-text-sm: 12px;
+  --openbot-font-medium: 500;
+  --openbot-leading-sm: 16px;
+}
+
 .panel {
   color: var(--openbot-text);
   font-size: var(--openbot-text-sm);
+  font-weight: var(--openbot-font-medium);
+  line-height: var(--openbot-leading-sm);
   border-radius: 0;
   transition: none;
 }

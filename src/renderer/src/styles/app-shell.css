@@ -692,7 +692,7 @@
   background: var(--openbot-bg-surface);
   color: var(--openbot-text-secondary);
   font-size: var(--openbot-text-sm);
-  font-weight: 740;
+  font-weight: var(--openbot-weight-bold);
   letter-spacing: -0.02em;
 }
 
@@ -736,7 +736,7 @@
   background: transparent;
   color: var(--openbot-accent-text);
   font-size: var(--openbot-text-2xl);
-  font-weight: 400;
+  font-weight: var(--openbot-weight-regular);
 }
 
 .server-rail-action svg {
@@ -1305,8 +1305,8 @@ textarea {
 }
 
 .sidebar-toggle-icon {
-  width: 17px;
-  height: 17px;
+  width: var(--openbot-icon-md);
+  height: var(--openbot-icon-md);
   fill: none;
   stroke: currentcolor;
   stroke-linecap: round;
@@ -1314,8 +1314,8 @@ textarea {
 }
 
 .sidebar-marketplace-button > svg {
-  width: 18px;
-  height: 18px;
+  width: var(--openbot-icon-md);
+  height: var(--openbot-icon-md);
   stroke-width: var(--openbot-icon-stroke);
 }
 
@@ -1340,8 +1340,8 @@ textarea {
 }
 
 .sidebar-update-button > svg {
-  width: 18px;
-  height: 18px;
+  width: var(--openbot-icon-md);
+  height: var(--openbot-icon-md);
   stroke-width: var(--openbot-icon-stroke);
 }
 
@@ -1356,7 +1356,7 @@ textarea {
   justify-content: flex-start;
   font-size: var(--openbot-text-md);
   font-weight: var(--openbot-weight-regular);
-  line-height: 18px;
+  line-height: var(--openbot-leading-md);
   cursor: pointer;
 }
 
@@ -1438,7 +1438,7 @@ textarea {
   box-shadow: none;
   color: var(--openbot-text-primary);
   font-size: var(--openbot-text-md);
-  line-height: 18px;
+  line-height: var(--openbot-leading-md);
 }
 
 .search-field input::placeholder {
@@ -1629,8 +1629,8 @@ textarea {
   min-width: 0;
   overflow: hidden;
   font-size: var(--openbot-text-sm);
-  font-weight: 400;
-  line-height: 16px;
+  font-weight: var(--openbot-weight-regular);
+  line-height: var(--openbot-leading-sm);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1692,8 +1692,8 @@ textarea {
   padding: 0 7px;
   color: var(--openbot-text-readable);
   font-size: var(--openbot-text-sm);
-  font-weight: 400;
-  line-height: 16px;
+  font-weight: var(--openbot-weight-regular);
+  line-height: var(--openbot-leading-sm);
   white-space: nowrap;
 }
 
@@ -1707,7 +1707,7 @@ textarea {
   padding: 0 4px;
   color: var(--openbot-bg-sidebar);
   font-size: var(--openbot-text-sm);
-  font-weight: 650;
+  font-weight: var(--openbot-weight-semibold);
 }
 
 .sidebar-hidden-group-count {
@@ -1889,7 +1889,7 @@ textarea {
   background: transparent;
   color: var(--openbot-text-muted);
   font-size: var(--openbot-text-sm);
-  line-height: 20px;
+  line-height: var(--openbot-leading-lg);
   list-style: none;
   transition:
     border-color var(--openbot-duration-fast) ease-out,
@@ -1980,8 +1980,8 @@ textarea {
   overflow: hidden;
   color: var(--openbot-text-primary);
   font-size: var(--openbot-text-sm);
-  font-weight: 450;
-  line-height: 16px;
+  font-weight: var(--openbot-weight-regular);
+  line-height: var(--openbot-leading-sm);
   text-align: center;
   text-overflow: ellipsis;
   text-wrap: pretty;
@@ -1999,7 +1999,7 @@ textarea {
   background: var(--openbot-hover);
   padding: 0 var(--openbot-space-1);
   color: var(--openbot-text-readable);
-  font-weight: 400;
+  font-weight: var(--openbot-weight-regular);
 }
 
 .sidebar-pinned-title > span {
@@ -2045,7 +2045,7 @@ textarea {
   border-radius: var(--openbot-radius-md);
   color: var(--openbot-success);
   font-size: var(--openbot-text-sm);
-  font-weight: 680;
+  font-weight: var(--openbot-weight-semibold);
   letter-spacing: 0.02em;
 }
 
@@ -2088,7 +2088,7 @@ textarea {
   padding: 0 3px;
   color: var(--openbot-bg-sidebar);
   font-size: var(--openbot-text-sm);
-  font-weight: 680;
+  font-weight: var(--openbot-weight-semibold);
 }
 
 .agent-row {
@@ -2217,8 +2217,8 @@ textarea {
   padding: 0 3px;
   color: var(--openbot-bg-sidebar);
   font-size: var(--openbot-text-sm);
-  font-weight: 650;
-  line-height: 12px;
+  font-weight: var(--openbot-weight-semibold);
+  line-height: 1;
 }
 
 .agent-row-agent-status-routine,
@@ -2267,7 +2267,7 @@ textarea {
   color: var(--openbot-warning-text);
   font-size: var(--openbot-text-sm);
   font-weight: var(--openbot-weight-semibold);
-  line-height: 16px;
+  line-height: var(--openbot-leading-sm);
   white-space: nowrap;
 }
 
@@ -2517,7 +2517,7 @@ textarea {
   padding: 7px 10px 3px 13px;
   color: var(--openbot-text-secondary);
   font-size: var(--openbot-text-sm);
-  font-weight: 590;
+  font-weight: var(--openbot-weight-medium);
   letter-spacing: 0.02em;
   text-transform: uppercase;
 }
@@ -2540,7 +2540,7 @@ textarea {
   padding: 0 9px;
   color: var(--openbot-text-secondary);
   font-size: var(--openbot-text-sm);
-  font-weight: 540;
+  font-weight: var(--openbot-weight-medium);
   transition-property: scale, background-color, color;
   transition-duration: var(--openbot-duration-normal), var(--openbot-duration-hover), var(--openbot-duration-hover);
   transition-timing-function: ease-out;
@@ -2608,8 +2608,8 @@ textarea {
 }
 
 .avatar-image-upload-preview > svg {
-  width: 19px;
-  height: 19px;
+  width: var(--openbot-icon-lg);
+  height: var(--openbot-icon-lg);
   fill: none;
   stroke: currentColor;
   stroke-linecap: round;
@@ -2631,13 +2631,13 @@ textarea {
 .avatar-image-upload strong {
   margin-bottom: 3px;
   font-size: var(--openbot-text-sm);
-  font-weight: 580;
+  font-weight: var(--openbot-weight-medium);
 }
 
 .avatar-image-upload small {
   color: var(--openbot-text-muted);
   font-size: var(--openbot-text-sm);
-  line-height: 14px;
+  line-height: var(--openbot-leading-sm);
 }
 
 .avatar-editor-actions button:active,
@@ -2722,7 +2722,7 @@ textarea {
   box-shadow: none;
   color: var(--openbot-text-secondary);
   font-size: var(--openbot-text-sm);
-  font-weight: 650;
+  font-weight: var(--openbot-weight-semibold);
 }
 
 .conversation-title .agent-avatar {
@@ -2793,8 +2793,8 @@ textarea {
   overflow: hidden;
   color: var(--openbot-text-primary);
   font-size: var(--openbot-text-lg);
-  line-height: 20px;
-  font-weight: 500;
+  line-height: var(--openbot-leading-lg);
+  font-weight: var(--openbot-weight-medium);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -2813,8 +2813,8 @@ textarea {
   padding: 2px 4px;
   color: var(--openbot-text-readable);
   font-size: var(--openbot-text-sm);
-  font-weight: 400;
-  line-height: 16px;
+  font-weight: var(--openbot-weight-regular);
+  line-height: var(--openbot-leading-sm);
   white-space: nowrap;
 }
 
@@ -2830,9 +2830,9 @@ textarea {
 .channel-row .agent-row-time {
   min-width: 0;
   flex: 0 0 auto;
-  color: var(--openbot-text-readable);
+  color: var(--openbot-text-muted);
   font-size: var(--openbot-text-sm);
-  line-height: 16px;
+  line-height: var(--openbot-leading-sm);
   white-space: nowrap;
 }
 
@@ -2864,8 +2864,8 @@ textarea {
   margin-top: 0;
   overflow: hidden;
   color: var(--openbot-text-muted);
-  font-size: var(--openbot-text-md);
-  line-height: 18px;
+  font-size: var(--openbot-text-sm);
+  line-height: var(--openbot-leading-sm);
   text-overflow: ellipsis;
   white-space: nowrap;
 }

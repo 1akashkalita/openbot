@@ -162,8 +162,8 @@
 }
 
 .storage-message-icon {
-  width: 18px;
-  height: 18px;
+  width: var(--openbot-icon-lg);
+  height: var(--openbot-icon-lg);
   flex: 0 0 auto;
   margin-top: 1px;
   color: var(--openbot-text-muted);

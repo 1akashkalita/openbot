@@ -22,7 +22,7 @@
   height: 22px;
   padding: 0 var(--openbot-space-2);
   font-size: var(--openbot-text-sm);
-  line-height: 16px;
+  line-height: var(--openbot-leading-sm);
 }
 
 .message-preview-switch .ui-sliding-tabs-pill {
@@ -91,7 +91,8 @@
   padding: var(--openbot-space-2) var(--openbot-space-3);
   border-bottom: 1px solid var(--openbot-border);
   color: var(--openbot-text-muted);
-  font-size: var(--openbot-text-xs);
+  font-size: var(--openbot-text-sm);
+  line-height: var(--openbot-leading-sm);
 }
 
 /* Mermaid points at the error with a caret line, which lines up only in a monospace font. */
@@ -115,7 +116,7 @@
   flex-direction: column;
   overflow: hidden;
   outline: 0;
-  border-radius: var(--openbot-radius-xl);
+  border-radius: var(--openbot-radius-dialog);
   background: var(--openbot-bg-control);
   color: var(--openbot-text-primary);
   /* The dialog grows from the block that opened it: the block's corner is the fixed point. */

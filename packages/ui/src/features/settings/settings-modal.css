@@ -310,7 +310,7 @@
   width: min(920px, calc(100vw - 48px));
   height: min(640px, calc(100dvh - 48px));
   grid-template-columns: 196px minmax(0, 1fr);
-  border-radius: var(--openbot-radius-card);
+  border-radius: var(--openbot-radius-dialog);
   box-shadow:
     var(--openbot-shadow-raised),
     0 0 0 1px var(--openbot-dialog-ring);
@@ -364,11 +364,6 @@
 
 :is(.app-settings-modal-shell, .server-settings-modal-shell) .ui-settings-section-header {
   padding-inline: 0;
-}
-
-:is(.app-settings-modal-shell, .server-settings-modal-shell) .ui-settings-section-heading {
-  font-size: var(--openbot-text-md);
-  line-height: var(--openbot-leading-md);
 }
 
 .provider-picker-embedded {

@@ -88,8 +88,8 @@
   display: block;
   color: var(--openbot-text-muted);
   font-size: var(--openbot-text-sm);
-  font-weight: 550;
-  line-height: 14px;
+  font-weight: var(--openbot-weight-medium);
+  line-height: var(--openbot-leading-sm);
 }
 
 .composer-reply-preview .message-reply-quote {
@@ -581,7 +581,7 @@
   color: var(--openbot-text-primary);
   cursor: text;
   font-size: var(--openbot-text-lg);
-  line-height: 20px;
+  line-height: var(--openbot-leading-lg);
   white-space: pre-wrap;
   word-break: break-word;
   user-select: text;
@@ -659,7 +659,7 @@
   left: 4px;
   color: var(--openbot-text-muted);
   font-size: var(--openbot-text-lg);
-  line-height: 20px;
+  line-height: var(--openbot-leading-lg);
   pointer-events: none;
   user-select: none;
 }
@@ -824,8 +824,8 @@
 }
 
 .mention-picker-skill-icon > svg {
-  width: 15px;
-  height: 15px;
+  width: var(--openbot-icon-md);
+  height: var(--openbot-icon-md);
 }
 
 .mention-picker-option > strong {
@@ -833,8 +833,8 @@
   flex: 0 1 auto;
   overflow: hidden;
   font-size: var(--openbot-text-lg);
-  font-weight: 500;
-  line-height: 20px;
+  font-weight: var(--openbot-weight-medium);
+  line-height: var(--openbot-leading-lg);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -845,7 +845,7 @@
   overflow: hidden;
   color: var(--openbot-queue-action);
   font-size: var(--openbot-text-md);
-  line-height: 18px;
+  line-height: var(--openbot-leading-md);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -855,7 +855,7 @@
   flex: 0 0 auto;
   color: var(--openbot-queue-action);
   font-size: var(--openbot-text-md);
-  line-height: 18px;
+  line-height: var(--openbot-leading-md);
   white-space: nowrap;
 }
 
@@ -868,7 +868,7 @@
   padding: 0 calc(var(--mention-picker-gutter) + 8px);
   color: var(--openbot-queue-action);
   font-size: var(--openbot-text-md);
-  line-height: 18px;
+  line-height: var(--openbot-leading-md);
 }
 
 .mention-picker-badge {
@@ -934,14 +934,14 @@
 .composer-attachment-copy strong {
   color: var(--openbot-text-primary);
   font-size: var(--openbot-text-sm);
-  font-weight: 500;
-  line-height: 16px;
+  font-weight: var(--openbot-weight-medium);
+  line-height: var(--openbot-leading-sm);
 }
 
 .composer-attachment-copy small {
   color: var(--openbot-text-muted);
   font-size: var(--openbot-text-sm);
-  line-height: 14px;
+  line-height: var(--openbot-leading-sm);
 }
 
 .composer-attachment-preview {
@@ -955,7 +955,7 @@
   background: var(--file-reference-soft, var(--openbot-hover));
   color: var(--file-reference-color, var(--openbot-text-muted));
   font-size: var(--openbot-text-sm);
-  font-weight: 700;
+  font-weight: var(--openbot-weight-bold);
   line-height: 1;
 }
 

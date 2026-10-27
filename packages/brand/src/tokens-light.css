@@ -62,7 +62,7 @@
   --openbot-text-secondary: #3a3a3c;
   --openbot-text-muted: #6b6b70;
   --openbot-text-dim: #8e8e93;
-  --openbot-text-placeholder: #5c5c61;
+  --openbot-text-placeholder: var(--openbot-text-muted);
   --openbot-text-readable: rgba(20, 20, 20, 0.6);
   --openbot-settings-text-muted: rgba(20, 20, 20, 0.6);
 

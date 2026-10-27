@@ -478,6 +478,12 @@
   color: var(--openbot-accent-text);
 }
 
+/* Every lucide icon draws the token stroke, not lucide's default 2. The selector has no
+ * specificity, so a rule that sets a stroke for one icon still wins. */
+:where(svg.lucide[stroke-width="2"]) {
+  stroke-width: var(--openbot-icon-stroke);
+}
+
 /* The hand-drawn SVGs, which are on a 20-unit viewBox where lucide's is 24. Feeding them
  * --openbot-icon-stroke raw would paint them 20% heavier than every lucide icon beside
  * them, so it is scaled to the smaller grid instead. These carried 1.35 to 1.6 by hand
@@ -1432,10 +1438,6 @@
   gap: var(--openbot-space-1);
 }
 
-.ui-settings-section-heading {
-  font-weight: var(--openbot-weight-regular);
-}
-
 .ui-settings-section-description {
   display: block;
 }
@@ -1752,7 +1754,7 @@
 
 .ui-error-reference-code {
   font-family: var(--openbot-font-mono);
-  font-size: var(--openbot-text-xs);
+  font-size: var(--openbot-text-sm);
   line-height: var(--openbot-leading-sm);
   user-select: text;
   overflow-wrap: anywhere;
@@ -2099,7 +2101,7 @@
 
 .ui-dialog-content {
   border: 0;
-  border-radius: var(--openbot-radius-card);
+  border-radius: var(--openbot-radius-dialog);
   box-shadow: 0 0 0 1px var(--openbot-dialog-ring);
 }
 
@@ -2137,7 +2139,7 @@
   flex-direction: column;
   overflow: hidden;
   outline: 0;
-  border-radius: var(--openbot-radius-xl);
+  border-radius: var(--openbot-radius-dialog);
   background: var(--openbot-bg-sidebar);
   color: var(--openbot-text-primary);
   border: 1px solid var(--openbot-dialog-ring);
@@ -2555,7 +2557,7 @@ button.ui-bubble-content {
   padding: 0 var(--openbot-space-1);
   color: var(--openbot-text-muted);
   font-size: var(--openbot-text-sm);
-  line-height: 16px;
+  line-height: var(--openbot-leading-sm);
 }
 
 .ui-message[data-align="end"] .ui-message-footer {

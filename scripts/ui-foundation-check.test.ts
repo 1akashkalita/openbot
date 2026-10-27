@@ -65,6 +65,10 @@ describe("ui foundation check", () => {
         // neither - the template
         // literal that would cover it is an id, so a prefix taken outside a class-building
         // region would silently spare every identifier-* rule in the tree.
+        // One line per undeclared name. tokens.css reads four tokens it declares itself and one
+        // with a fallback; count a fallback reference, or stop reading declarations, and lines
+        // appear for that file too.
+        "styles/legacy.css: var(--openbot-brand-only) is not declared by any stylesheet",
         "styles/unreachable.css: .identifier-panel is not reachable from any markup; delete the rule",
         "styles/unreachable.css: .unreachable-panel is not reachable from any markup; delete the rule",
         budget("hand-rolled composite ARIA roles", 9),
@@ -77,6 +81,8 @@ describe("ui foundation check", () => {
         // reads 7 and the word boundaries have gone.
         budget("colour literals outside the palette", 6),
         budget("untokenized font-size", 1),
+        budget("untokenized font-weight", 1),
+        budget("pixel line-height", 1),
         budget("untokenized border-radius", 1),
         budget("untokenized transition durations", 2),
         // Six: five in branches/TestHooks.tsx and the sixth in components/ui/Button.tsx. That
@@ -110,6 +116,15 @@ describe("ui foundation check", () => {
 
     expect(failures).toEqual([]);
     expect(manualCompositeCount).toBe(0);
+  });
+
+  it("reads token declarations from the sheets outside the walked tree", () => {
+    // The CLI passes packages/brand/src, where almost every token is declared. Ignore the
+    // sheets it is given and the repository reports every token it reads.
+    const brandSheet = resolve(import.meta.dirname, "../tools/ui-foundation/fixtures/brand/tokens.css");
+    const { failures } = checkUiFoundation(fixtureRenderer, fixtureRenderer, undefined, undefined, [brandSheet]);
+
+    expect(failures).not.toContain("styles/legacy.css: var(--openbot-brand-only) is not declared by any stylesheet");
   });
 
   it("reads markup outside the walked tree for reachability", () => {

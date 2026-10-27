@@ -89,8 +89,9 @@
   --openbot-queue-border: var(--openbot-border-strong);
   --openbot-queue-text: var(--openbot-text-primary);
   --openbot-queue-action: var(--openbot-text-muted);
-  --openbot-border: rgba(255, 255, 255, 0.035);
-  --openbot-border-strong: rgba(255, 255, 255, 0.045);
+  /* Lines must be visible on the canvas: the same alpha steps as the light palette. */
+  --openbot-border: rgba(255, 255, 255, 0.07);
+  --openbot-border-strong: rgba(255, 255, 255, 0.1);
   --openbot-image-outline: rgba(255, 255, 255, 0.1);
   /* Focus is neutral: a grey border or a thin grey ring, never blue and never a halo. */
   --openbot-border-focus: var(--openbot-text-muted);
@@ -128,7 +129,8 @@
   --openbot-onboarding-window: #f3f5f8;
   --openbot-text-secondary: #dcdcdc;
   --openbot-text-muted: #979797;
-  --openbot-text-dim: #6a6a6a;
+  /* Contrast on the canvas: muted 6:1, dim 4.6:1. Dim is the quietest text that stays readable. */
+  --openbot-text-dim: #838383;
   --openbot-text-readable: rgba(255, 255, 255, 0.52);
   --openbot-text-muted-on-light: rgba(20, 20, 20, 0.52);
   --openbot-text-dim-on-light: rgba(20, 20, 20, 0.36);
@@ -136,7 +138,8 @@
   --openbot-download-card-chip: rgba(20, 20, 20, 0.1);
   --openbot-download-card-border: rgba(20, 20, 20, 0.16);
   --openbot-download-card-focus: rgba(242, 242, 242, 0.86);
-  --openbot-text-placeholder: #bfbfbf;
+  /* A placeholder is a hint, not a value: it uses the muted step, as the composer does. */
+  --openbot-text-placeholder: var(--openbot-text-muted);
   --openbot-text-on-accent: #ffffff;
   --openbot-text-on-status: #07130c;
   /* Hue 210, sampled from the reference UIs rather than picked: their status dot is
@@ -317,10 +320,14 @@
   --openbot-radius-sm: 6px;
   --openbot-radius-md: 8px;
   --openbot-radius-lg: 12px;
-  --openbot-radius-card: 14px;
+  /* One radius scale: 4, 6, 8, 12, 16, 20. Card is a name for a step on it. A dialog is 16px, which
+     nests an 8px close target held 8px in from its corner. */
+  --openbot-radius-card: var(--openbot-radius-lg);
+  --openbot-radius-dialog: 16px;
   --openbot-radius-xl: 20px;
-  --openbot-radius-bubble: 22px;
+  --openbot-radius-bubble: var(--openbot-radius-xl);
   --openbot-radius-bubble-inset: calc(var(--openbot-radius-bubble) - var(--openbot-space-3) - 1px);
+  /* Large stage surfaces on the website. Desktop dialogs use the dialog radius. */
   --openbot-radius-modal: 30px;
   --openbot-radius-media-preview: calc(var(--openbot-radius-lg) - 1px);
   --openbot-radius-pill: 999px;

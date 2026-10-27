@@ -5,7 +5,7 @@
 .message-copy {
   margin: 0;
   font-size: var(--openbot-text-lg);
-  line-height: 20px;
+  line-height: var(--openbot-leading-lg);
   overflow-wrap: anywhere;
   white-space: pre-line;
   user-select: text;
@@ -311,8 +311,8 @@
   padding: 0 10px 0 11px;
   color: var(--openbot-text-primary);
   font-size: var(--openbot-text-sm);
-  font-weight: 400;
-  line-height: 28px;
+  font-weight: var(--openbot-weight-regular);
+  line-height: var(--openbot-control-sm);
   outline: 0;
 }
 
@@ -408,7 +408,7 @@
   padding: 0 9px;
   color: var(--openbot-text-secondary);
   font-size: var(--openbot-text-sm);
-  font-weight: 430;
+  font-weight: var(--openbot-weight-regular);
   white-space: nowrap;
 }
 
@@ -502,7 +502,7 @@
   padding: 6px 8px;
   color: var(--openbot-text-secondary);
   font-size: var(--openbot-text-sm);
-  line-height: 17px;
+  line-height: var(--openbot-leading-sm);
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
@@ -665,7 +665,7 @@
   color: var(--openbot-text-readable);
   font-size: var(--openbot-text-sm);
   font-weight: var(--openbot-weight-medium);
-  line-height: 16px;
+  line-height: var(--openbot-leading-sm);
 }
 
 .message-code-language:only-child {
@@ -681,7 +681,7 @@
   padding-inline: 7px;
   color: var(--openbot-text-muted);
   font-size: var(--openbot-text-sm);
-  line-height: 16px;
+  line-height: var(--openbot-leading-sm);
 }
 
 @media (hover: hover) and (pointer: fine) {
@@ -753,7 +753,7 @@
   font-family: var(--openbot-font-mono);
   font-size: var(--openbot-text-sm);
   font-variant-numeric: tabular-nums;
-  line-height: 19px;
+  line-height: var(--openbot-leading-sm);
   /* Only the inline axis: Chromium stops a vertical wheel at a contained block even when the block
      cannot scroll, so the chat would not scroll under the pointer. */
   overscroll-behavior-x: contain;
@@ -885,7 +885,7 @@
 
 .message-data-table thead {
   color: var(--openbot-data-table-header-text);
-  font-weight: 500;
+  font-weight: var(--openbot-weight-medium);
 }
 
 .message-data-table tbody {
@@ -944,7 +944,7 @@
 .message-link {
   border-radius: var(--openbot-radius-xs);
   color: inherit;
-  font-weight: 560;
+  font-weight: var(--openbot-weight-medium);
   text-decoration-color: var(--openbot-text-muted);
   text-decoration-line: underline;
   text-decoration-thickness: 1px;
@@ -1011,7 +1011,7 @@
   padding: 0;
   color: var(--openbot-text-secondary);
   font-size: var(--openbot-text-sm);
-  font-weight: 600;
+  font-weight: var(--openbot-weight-semibold);
   line-height: 1;
   text-decoration: none;
   vertical-align: 4px;
@@ -1043,8 +1043,8 @@
   padding: 6px 8px;
   color: var(--openbot-text-primary);
   font-size: var(--openbot-text-sm);
-  font-weight: 500;
-  line-height: 15px;
+  font-weight: var(--openbot-weight-medium);
+  line-height: var(--openbot-leading-sm);
   overflow-wrap: anywhere;
   pointer-events: none;
   text-align: left;
@@ -1094,8 +1094,8 @@
   gap: 6px;
   color: var(--openbot-text-muted);
   font-size: var(--openbot-text-sm);
-  font-weight: 425;
-  line-height: 18px;
+  font-weight: var(--openbot-weight-regular);
+  line-height: var(--openbot-leading-md);
   text-decoration: none;
 }
 
@@ -1107,7 +1107,7 @@
 .message-citation-ref-label {
   overflow: hidden;
   color: var(--openbot-text-primary);
-  font-weight: 550;
+  font-weight: var(--openbot-weight-medium);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1201,8 +1201,8 @@
   display: block;
   margin-bottom: 1px;
   font-size: var(--openbot-text-sm);
-  font-weight: 550;
-  line-height: 14px;
+  font-weight: var(--openbot-weight-medium);
+  line-height: var(--openbot-leading-sm);
 }
 
 /*
@@ -1210,10 +1210,10 @@
  * the cut, so an open code fence or a long heading cannot spill into the message under it.
  */
 .message-reply-quote {
-  max-height: 60px;
+  max-height: calc(var(--openbot-leading-sm) * 4);
   overflow: hidden;
   font-size: var(--openbot-text-sm);
-  line-height: 15px;
+  line-height: var(--openbot-leading-sm);
   overflow-wrap: anywhere;
 }
 
@@ -1222,7 +1222,11 @@
  * translucent, so the mask uses an opaque token.
  */
 .message-reply-quote[data-clipped] {
-  mask-image: linear-gradient(to bottom, var(--openbot-text-primary) 45px, transparent 60px);
+  mask-image: linear-gradient(
+    to bottom,
+    var(--openbot-text-primary) calc(var(--openbot-leading-sm) * 3),
+    transparent calc(var(--openbot-leading-sm) * 4)
+  );
 }
 
 .message-reply-quote blockquote > :not(:first-child) {
@@ -1308,12 +1312,12 @@
   gap: var(--openbot-space-1);
   margin: -1px 0 7px;
   font-size: var(--openbot-text-sm);
-  line-height: 15px;
+  line-height: var(--openbot-leading-sm);
 }
 
 .message-reply-unavailable-icon {
-  width: 13px;
-  height: 13px;
+  width: var(--openbot-icon-sm);
+  height: var(--openbot-icon-sm);
   flex: none;
 }
 
@@ -1345,7 +1349,7 @@
   padding: 0 6px;
   color: var(--openbot-text-muted);
   font: inherit;
-  line-height: 20px;
+  line-height: var(--openbot-leading-lg);
   vertical-align: middle;
   white-space: nowrap;
 }
@@ -1374,8 +1378,8 @@
   padding: 1px 6px 1px 3px;
   color: var(--file-reference-color);
   font: inherit;
-  font-weight: 550;
-  line-height: 20px;
+  font-weight: var(--openbot-weight-medium);
+  line-height: var(--openbot-leading-lg);
   vertical-align: middle;
   white-space: nowrap;
   transition:
@@ -1518,7 +1522,7 @@
 
 .attachment-reference-visual > span {
   font-size: var(--openbot-glyph-sm);
-  font-weight: 750;
+  font-weight: var(--openbot-weight-bold);
   letter-spacing: -0.2px;
   line-height: 1;
 }
