@@ -231,15 +231,23 @@ const Turns = createSimpleContext({
       },
     );
 
-    async function answerPrompt(answers: Record<string, string[]>, options?: PromptAnswerOptions): Promise<boolean> {
+    /** Answers the prompt of the agent's chat, or of its side thread `threadId`. */
+    async function answerPrompt(
+      answers: Record<string, string[]>,
+      options?: PromptAnswerOptions,
+      threadId?: string,
+    ): Promise<boolean> {
       const agent = activeAgent();
-      const prompt = agent ? pendingPrompts()[attentionKey(agent.id, agent.threadId)] : undefined;
+      const prompt = agent ? pendingPrompts()[attentionKey(agent.id, threadId ?? agent.threadId)] : undefined;
       if (!agent || prompt?.type !== "prompt") return false;
-      return submitPromptAnswers(agent.id, prompt, answers, options);
+      // A side thread marks its answer by its own key: the agent id marks the agent's own chat.
+      const mark = threadId === undefined ? agent.id : attentionKey(agent.id, threadId);
+      return submitPromptAnswers(agent.id, mark, prompt, answers, options);
     }
 
     async function submitPromptAnswers(
       agentId: string,
+      mark: string,
       prompt: PromptEvent,
       answers: Record<string, string[]>,
       options?: PromptAnswerOptions,
@@ -248,7 +256,7 @@ const Turns = createSimpleContext({
       const analytics = desktopAnalytics.scope();
       setSubmittedPromptRequests((current) => ({
         ...current,
-        [agentId]: promptRequestKey(prompt.turnId, prompt.requestId) ?? undefined,
+        [mark]: promptRequestKey(prompt.turnId, prompt.requestId) ?? undefined,
       }));
       try {
         await turnsPort().agent.respondToPrompt({
@@ -262,7 +270,7 @@ const Turns = createSimpleContext({
         });
         return true;
       } catch (error) {
-        setSubmittedPromptRequests((current) => ({ ...current, [agentId]: undefined }));
+        setSubmittedPromptRequests((current) => ({ ...current, [mark]: undefined }));
         analytics.track("agent_input_action", {
           kind: "prompt",
           decision: "answered",

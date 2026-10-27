@@ -1338,11 +1338,6 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
       Effect.runPromise(clearAgentContext(hostRequest(), agent.id).pipe(Effect.mapError((error) => error.cause)));
   });
   const offlineUpsell = createHostedUpsellOffline(() => workspace.state.hostOffline);
-  const view = createWebConversationView({
-    workspace,
-    remoteAgentAdmin,
-    hidden: () => creating() || channelOpen(),
-  });
   /** The side threads of the connected host. Each host has its own, with its own tabs. */
   const agentThreads = createMemo(() => {
     const hostId = workspace.state.host?.hostId;
@@ -1382,6 +1377,17 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
     const open = threads()?.open;
     const threadId = open === undefined ? agent.threadId : open?.threadId;
     return workspace.state.takeovers.find((request) => request.agentId === agent.id && request.threadId === threadId);
+  });
+  const view = createWebConversationView({
+    workspace,
+    remoteAgentAdmin,
+    hidden: () => creating() || channelOpen(),
+    // A new thread draft, or a side thread that has not loaded, asks nothing.
+    thread: () => {
+      const current = threads();
+      if (current?.open === undefined) return undefined;
+      return current.open ? (current.conversation ?? null) : null;
+    },
   });
   // A routine that an agent makes leaves a marker in its turn. The offer of a hosted server waits until that turn ends.
   // The marker does not tell whether the routine is paused; an agent makes an active routine unless told otherwise.
