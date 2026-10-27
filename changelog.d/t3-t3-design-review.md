@@ -17,6 +17,8 @@
 - Agent names in channel activity and the usage ring use neutral text colours.
 - Secondary buttons have a visible background. Composer buttons have the same hover colour.
 - Labels in Mermaid diagrams sit on the diagram background, not on a separate box.
+- Settings pages have a Back button before the title, as the usage page has. Escape now also closes
+  the usage and schedule pages.
 
 ### Fixed
 
