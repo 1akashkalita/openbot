@@ -1686,7 +1686,7 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                         calls={marketplaceCalls}
                         connectors={connectors}
                         server={server()}
-                        agents={workspace.state.agents}
+                        agents={workspace.shownAgents()}
                         activeAgentId={workspace.state.selectedId ?? ""}
                         composerAvailable={status().phase === "ready" && !agentFormOpen()}
                         onOpenAgent={(agentId) => {
