@@ -72,9 +72,9 @@ async function renderContentImage(job: ContentImageJob): Promise<string> {
     context.drawImage(mount.canvasElement, 0, 0, job.width, job.height);
     if (job.title && job.withTitle) {
       drawScrim(context, job);
-      if (job.lockup) drawLockup(context, job, job.lockup);
-      else if (job.markRow) drawMarkRow(context, job, job.markRow);
-      drawTitle(context, job);
+      const plateTop = drawTitle(context, job);
+      if (job.lockup) drawLockup(context, job, job.lockup, plateTop);
+      else if (job.markRow) drawMarkRow(context, job, job.markRow, plateTop);
     }
 
     return job.fileName.endsWith(".webp")
@@ -99,50 +99,64 @@ async function waitForCanvas(canvas: HTMLCanvasElement): Promise<void> {
 }
 
 /**
- * A scrim only over the lower half. The gradient stays readable as artwork and
- * the text keeps its contrast whatever colours the title happened to draw.
+ * A scrim only over the upper part, behind the title. The gradient stays readable
+ * as artwork and the text keeps its contrast whatever colours the title happened
+ * to draw.
  */
 function drawScrim(context: CanvasRenderingContext2D, job: ContentImageJob): void {
-  const scrim = context.createLinearGradient(0, job.height * 0.3, 0, job.height);
-  scrim.addColorStop(0, `rgba(${SCRIM_COLOR}, 0)`);
-  scrim.addColorStop(1, `rgba(${SCRIM_COLOR}, 0.88)`);
+  const scrim = context.createLinearGradient(0, 0, 0, job.height * 0.7);
+  scrim.addColorStop(0, `rgba(${SCRIM_COLOR}, 0.88)`);
+  scrim.addColorStop(1, `rgba(${SCRIM_COLOR}, 0)`);
   context.fillStyle = scrim;
   context.fillRect(0, 0, job.width, job.height);
 }
 
-function drawTitle(context: CanvasRenderingContext2D, job: ContentImageJob): void {
-  const { width, height } = job;
+/**
+ * The eyebrow and the title, at the top. X draws its own title over the bottom
+ * left of a large card, so that corner stays free of text. Returns where a plate
+ * under the title can start.
+ */
+function drawTitle(context: CanvasRenderingContext2D, job: ContentImageJob): number {
+  const { width } = job;
   const padding = Math.round(width * 0.06);
   const titleSize = Math.round(width * 0.052);
   const lineHeight = Math.round(titleSize * 1.14);
+  const eyebrowSize = Math.round(width * 0.017);
 
   context.textBaseline = "alphabetic";
   context.font = `600 ${titleSize}px ${FONT_FAMILY}`;
   const maxLines = job.lockup || job.markRow ? TITLE_MAX_LINES_WITH_LOCKUP : TITLE_MAX_LINES;
   const lines = wrapText(context, job.title, width - padding * 2, maxLines);
 
-  // The block is anchored to the bottom, so a one-line and a three-line title
-  // both sit on the same baseline and the set reads as one series.
-  const lastBaseline = height - padding;
-  const firstBaseline = lastBaseline - (lines.length - 1) * lineHeight;
+  // The block is anchored to the top, so a one-line and a three-line title
+  // both start on the same baseline and the set reads as one series.
+  const eyebrowBaseline = padding + eyebrowSize;
+  const firstBaseline = eyebrowBaseline + lineHeight;
 
   context.fillStyle = "#ffffff";
   lines.forEach((line, index) => {
     context.fillText(line, padding, firstBaseline + index * lineHeight);
   });
 
-  const eyebrowSize = Math.round(width * 0.017);
   context.font = `600 ${eyebrowSize}px ${FONT_FAMILY}`;
   context.fillStyle = "rgba(255, 255, 255, 0.62)";
-  context.fillText(job.eyebrow, padding, firstBaseline - lineHeight);
+  context.fillText(job.eyebrow, padding, eyebrowBaseline);
+
+  const lastBaseline = firstBaseline + (lines.length - 1) * lineHeight;
+  return lastBaseline + Math.round(width * 0.04);
 }
 
 /**
  * The lockup from the top of a comparison page: one frosted plate with both marks,
- * split by a hairline with "vs" on it. It sits at the top left, over the title,
- * on the same left edge.
+ * split by a hairline with "vs" on it. It sits under the title, on the same left
+ * edge.
  */
-function drawLockup(context: CanvasRenderingContext2D, job: ContentImageJob, lockup: ContentImageLockup): void {
+function drawLockup(
+  context: CanvasRenderingContext2D,
+  job: ContentImageJob,
+  lockup: ContentImageLockup,
+  y: number,
+): void {
   const unit = job.width / 1200;
   const logoSize = 128 * unit;
   const column = 180 * unit;
@@ -155,7 +169,6 @@ function drawLockup(context: CanvasRenderingContext2D, job: ContentImageJob, loc
   const plateWidth = padX * 2 + column * 2 + vsMargin * 2 + vsWidth;
   const plateHeight = padY * 2 + logoSize + nameGap + nameSize * 1.2;
   const x = Math.round(job.width * 0.06);
-  const y = 64 * unit;
   drawPlate(context, job, x, y, plateWidth, plateHeight);
 
   const logoTop = y + padY;
@@ -197,12 +210,12 @@ function drawMarkRow(
   context: CanvasRenderingContext2D,
   job: ContentImageJob,
   marks: readonly ContentImageMark[],
+  y: number,
 ): void {
   const unit = job.width / 1200;
   const pad = 32 * unit;
   const gap = 20 * unit;
   const x = Math.round(job.width * 0.06);
-  const y = 64 * unit;
   // As large as fits in the width of the title, and no larger than the lockup's marks.
   const available = job.width - x * 2 - pad * 2 - gap * (marks.length - 1);
   const size = Math.min(128 * unit, available / marks.length);

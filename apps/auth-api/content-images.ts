@@ -29,7 +29,7 @@ export const CONTENT_ART_DIRECTORY = path.join(appRoot, "content-art");
 export const CONTENT_ART_MANIFEST = path.join(CONTENT_ART_DIRECTORY, "manifest.json");
 
 /** Change this when the drawing changes but the article does not, so every image is drawn again. */
-const GENERATOR_VERSION = 1;
+const GENERATOR_VERSION = 2;
 
 /** The social card. Fixed by Open Graph, which crops anything else. */
 const OG_WIDTH = 1200;
@@ -54,9 +54,9 @@ export interface ContentImageJob {
   height: number;
   /** Draw the title into the image. False for the card, which has live text over it. */
   withTitle: boolean;
-  /** The two marks side by side, over the title. Only on the social card of a comparison. */
+  /** The two marks side by side, under the title. Only on the social card of a comparison. */
   lockup?: ContentImageLockup | undefined;
-  /** The mark of each app, in one row over the title. Only on the social card of a roundup. */
+  /** The mark of each app, in one row under the title. Only on the social card of a roundup. */
   markRow?: readonly ContentImageMark[] | undefined;
 }
 
