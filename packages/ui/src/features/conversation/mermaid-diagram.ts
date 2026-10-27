@@ -27,13 +27,24 @@ function initializeMermaid(api: Mermaid, scheme: DocumentColorScheme): void {
     securityLevel: "strict",
     // `neutral` is gray, as the light palette is; `default` draws lavender boxes.
     theme: scheme === "light" ? "neutral" : "dark",
-    // The app has no drop shadows; on the light palette Mermaid's shows under each box.
-    themeVariables: { dropShadow: "none" },
+    // The app has no drop shadows; on the light palette Mermaid's shows under each box. An edge
+    // label takes the preview's own background, so it covers the line without a grey box.
+    themeVariables: { dropShadow: "none", edgeLabelBackground: previewBackground() },
     fontFamily: CHAT_MERMAID_FONT_FAMILY,
     // HTML labels write a line break as an unclosed `<br>`, and an image of that SVG does not load.
     htmlLabels: false,
     suppressErrorRendering: true,
   });
+}
+
+/** The preview's background as an `rgb()` colour, which Mermaid can parse; it cannot read a token. */
+function previewBackground(): string {
+  const probe = document.createElement("span");
+  probe.style.background = "var(--openbot-bg-sidebar)";
+  document.body.append(probe);
+  const color = getComputedStyle(probe).backgroundColor;
+  probe.remove();
+  return color;
 }
 
 /** A drawn diagram, or why Mermaid could not draw it. */

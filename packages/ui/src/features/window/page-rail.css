@@ -144,8 +144,9 @@
   opacity: 0.15;
 }
 
+/* A ring is neutral while there is room. Colour appears only when a limit is near, so it means something. */
 .window-rail-usage-arc {
-  stroke: var(--openbot-success);
+  stroke: var(--openbot-text-readable);
 }
 
 .window-rail-usage-arc[data-usage-tone="warning"] {

@@ -211,8 +211,8 @@
 }
 
 .voice-player-toggle svg {
-  width: 12px;
-  height: 12px;
+  width: var(--openbot-icon-xs);
+  height: var(--openbot-icon-xs);
   fill: currentColor;
 }
 

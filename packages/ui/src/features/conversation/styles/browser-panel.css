@@ -143,8 +143,8 @@
 .browser-profile-status svg,
 .browser-recording-status svg,
 .browser-diagnostic-status svg {
-  width: 12px;
-  height: 12px;
+  width: var(--openbot-icon-xs);
+  height: var(--openbot-icon-xs);
 }
 
 .browser-surface {

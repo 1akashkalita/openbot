@@ -155,8 +155,8 @@
 
 .agent-routine-status-icon-active > svg,
 .agent-routine-status-icon-paused > svg {
-  width: 14px;
-  height: 14px;
+  width: var(--openbot-icon-sm);
+  height: var(--openbot-icon-sm);
   stroke-width: var(--openbot-icon-stroke);
 }
 
@@ -515,8 +515,8 @@
 }
 
 .agent-routine-run-icon > svg {
-  width: 16px;
-  height: 16px;
+  width: var(--openbot-icon-md);
+  height: var(--openbot-icon-md);
   stroke-width: var(--openbot-icon-stroke);
 }
 
@@ -956,7 +956,7 @@
   color: var(--openbot-text-primary);
   font-size: var(--openbot-text-3xl);
   font-weight: var(--openbot-weight-semibold);
-  letter-spacing: -0.01em;
+  letter-spacing: var(--openbot-tracking-title);
   line-height: 1.2;
 }
 
@@ -1141,8 +1141,8 @@
 }
 
 .agent-skill-icon svg {
-  width: 20px;
-  height: 20px;
+  width: var(--openbot-icon-lg);
+  height: var(--openbot-icon-lg);
 }
 
 .agent-skill-copy {

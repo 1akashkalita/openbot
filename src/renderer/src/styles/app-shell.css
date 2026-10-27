@@ -693,7 +693,7 @@
   color: var(--openbot-text-secondary);
   font-size: var(--openbot-text-sm);
   font-weight: var(--openbot-weight-bold);
-  letter-spacing: -0.02em;
+  letter-spacing: var(--openbot-tracking-title);
 }
 
 .server-rail-logo {
@@ -740,8 +740,8 @@
 }
 
 .server-rail-action svg {
-  width: 20px;
-  height: 20px;
+  width: var(--openbot-icon-lg);
+  height: var(--openbot-icon-lg);
   fill: none;
   stroke: currentColor;
   stroke-width: var(--openbot-icon-stroke);
@@ -2046,7 +2046,7 @@ textarea {
   color: var(--openbot-success);
   font-size: var(--openbot-text-sm);
   font-weight: var(--openbot-weight-semibold);
-  letter-spacing: 0.02em;
+  letter-spacing: var(--openbot-tracking-wide);
 }
 
 .person-avatar > img,
@@ -2200,8 +2200,8 @@ textarea {
 }
 
 .agent-row-agent-status-responded svg {
-  width: 10px;
-  height: 10px;
+  width: var(--openbot-icon-xs);
+  height: var(--openbot-icon-xs);
   fill: none;
   stroke: currentColor;
   stroke-width: var(--openbot-icon-stroke);
@@ -2232,8 +2232,8 @@ textarea {
 
 .agent-row-agent-status-routine svg,
 .agent-row-agent-status-limited svg {
-  width: 10px;
-  height: 10px;
+  width: var(--openbot-icon-xs);
+  height: var(--openbot-icon-xs);
 }
 
 .agent-row-agent-status-routine-failed {
@@ -2251,8 +2251,8 @@ textarea {
 }
 
 .agent-row-agent-status-waiting svg {
-  width: 11px;
-  height: 11px;
+  width: var(--openbot-icon-xs);
+  height: var(--openbot-icon-xs);
 }
 
 /* The action chip takes the time slot: the time does not matter while the agent waits. */
@@ -2272,8 +2272,8 @@ textarea {
 }
 
 .agent-row-wait-chip svg {
-  width: 11px;
-  height: 11px;
+  width: var(--openbot-icon-xs);
+  height: var(--openbot-icon-xs);
 }
 
 /* The tooltip anchors to this wrapper, so it needs a box of its own. */
@@ -2306,8 +2306,8 @@ textarea {
 }
 
 .sidebar-wait-tooltip-title svg {
-  width: 14px;
-  height: 14px;
+  width: var(--openbot-icon-sm);
+  height: var(--openbot-icon-sm);
 }
 
 .sidebar-wait-tooltip-detail {
@@ -2518,7 +2518,7 @@ textarea {
   color: var(--openbot-text-secondary);
   font-size: var(--openbot-text-sm);
   font-weight: var(--openbot-weight-medium);
-  letter-spacing: 0.02em;
+  letter-spacing: var(--openbot-tracking-wide);
   text-transform: uppercase;
 }
 
@@ -2758,15 +2758,6 @@ textarea {
   overflow: hidden;
 }
 
-.agent-row-title:has(.agent-role-badge) {
-  --agent-role-badge-collapsed-width: calc(2ch + 9px);
-
-  display: grid;
-  grid-template-columns:
-    fit-content(calc(100% - var(--agent-role-badge-collapsed-width) - 5px))
-    minmax(var(--agent-role-badge-collapsed-width), 1fr);
-}
-
 .agent-row-name {
   display: flex;
   min-width: 0;
@@ -2782,8 +2773,8 @@ textarea {
 }
 
 .agent-row-access svg {
-  width: 12px;
-  height: 12px;
+  width: var(--openbot-icon-xs);
+  height: var(--openbot-icon-xs);
 }
 
 .agent-row-title strong,
@@ -2795,32 +2786,6 @@ textarea {
   font-size: var(--openbot-text-lg);
   line-height: var(--openbot-leading-lg);
   font-weight: var(--openbot-weight-medium);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.agent-role-badge {
-  min-width: 0;
-  max-width: 100%;
-  height: 18px;
-  min-height: 18px;
-  overflow: hidden;
-  flex: 0 1 auto;
-  justify-self: start;
-  border: 0.5px solid var(--openbot-border);
-  border-radius: var(--openbot-radius-xs);
-  background: var(--openbot-hover);
-  padding: 2px 4px;
-  color: var(--openbot-text-readable);
-  font-size: var(--openbot-text-sm);
-  font-weight: var(--openbot-weight-regular);
-  line-height: var(--openbot-leading-sm);
-  white-space: nowrap;
-}
-
-.agent-role-badge > span {
-  min-width: 0;
-  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

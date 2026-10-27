@@ -235,6 +235,18 @@ export function checkUiFoundation(
       }
     }
   }
+  // An icon takes its size from the icon scale. A drawing above 24px keeps its own size.
+  let iconSizeLiteralCount = 0;
+  for (const [, selector = "", body = ""] of legacyStyles
+    .replace(/\/\*[\s\S]*?\*\//gu, "")
+    .matchAll(/([^{}]*)\{([^{}]*)\}/gu)) {
+    if (!/(?:^|[\s>+~,(])svg\b|\.lucide\b/u.test(selector)) continue;
+    for (const [, size = ""] of body.matchAll(
+      /(?<![-\w])(?:width|height|inline-size|block-size):\s*(\d+(?:\.\d+)?)px/gu,
+    )) {
+      if (Number(size) <= 24) iconSizeLiteralCount += 1;
+    }
+  }
   const colorLiteralCount =
     matches(legacyStyles, /#[\da-f]{3,8}|rgba?\([^)]*\)|hsla?\([^)]*\)/giu) +
     matches(legacyStyles, /(?<![-\w])(?:white|black|red|blue|green|yellow|purple|orange|gray|grey|pink)(?![-\w])/giu);
@@ -249,6 +261,12 @@ export function checkUiFoundation(
     ["untokenized font-weight", matches(legacyStyles, /font-weight:(?!\s*(?:var\(|inherit\b))\s*[^;]+/gu), 0],
     // A unitless line-height scales with its font and stays allowed; a pixel one is a leading token.
     ["pixel line-height", matches(legacyStyles, /line-height:\s*[\d.]+px\b/gu), 0],
+    [
+      "untokenized letter-spacing",
+      matches(legacyStyles, /letter-spacing:(?!\s*(?:var\(|0(?:\s|;)|inherit\b|normal\b))\s*[^;]+/gu),
+      0,
+    ],
+    ["icon size outside the icon scale", iconSizeLiteralCount, 0],
     [
       "untokenized border-radius",
       matches(legacyStyles, /border-radius:(?!\s*(?:var\(|0(?:\s|;)|inherit\b))\s*[^;]+/gu),

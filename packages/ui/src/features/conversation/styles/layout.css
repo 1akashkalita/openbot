@@ -159,8 +159,8 @@
 }
 
 .direct-private-label svg {
-  width: 12px;
-  height: 12px;
+  width: var(--openbot-icon-xs);
+  height: var(--openbot-icon-xs);
   fill: none;
   stroke: currentColor;
   stroke-linecap: round;

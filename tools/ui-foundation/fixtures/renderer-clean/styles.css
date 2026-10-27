@@ -5,6 +5,8 @@
   --openbot-text-sm: 12px;
   --openbot-font-medium: 500;
   --openbot-leading-sm: 16px;
+  --openbot-tracking-title: -0.015em;
+  --openbot-icon-sm: 14px;
 }
 
 .panel {
@@ -12,6 +14,13 @@
   font-size: var(--openbot-text-sm);
   font-weight: var(--openbot-font-medium);
   line-height: var(--openbot-leading-sm);
+  letter-spacing: var(--openbot-tracking-title);
   border-radius: 0;
   transition: none;
+}
+
+.panel svg {
+  width: var(--openbot-icon-sm);
+  height: var(--openbot-icon-sm);
+  letter-spacing: 0;
 }

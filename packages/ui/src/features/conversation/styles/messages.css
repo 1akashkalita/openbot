@@ -78,10 +78,16 @@
   grid-row: 1;
   padding-inline: var(--openbot-space-3);
   min-width: 0;
-  color: var(--message-author-color, var(--openbot-text-muted));
-  font-weight: var(--openbot-weight-regular);
+  /* The face beside the name carries the agent's colour; the name is metadata, one quiet step. */
+  color: var(--openbot-text-muted);
+  font-weight: var(--openbot-weight-medium);
   /* A long name with no space wraps instead of widening the row. */
   overflow-wrap: anywhere;
+}
+
+/* An agent's text has no bubble padding, so its name starts on the same line as the text. */
+.message-entry-agent .message-author-name {
+  padding-inline: 0;
 }
 
 .message-author-name-button {
@@ -190,11 +196,11 @@
   order: -1;
 }
 
-/* Their bubble takes a tint of their name colour, so it does not read as the reader's own. */
+/* Their bubble takes a light tint of their face colour, so it does not read as the reader's own. */
 .ui-bubble.message-bubble-member > .ui-bubble-content {
   background: color-mix(
     in srgb,
-    var(--message-author-color, var(--openbot-accent)) 22%,
+    var(--message-author-color, var(--openbot-accent)) 12%,
     var(--openbot-bg-surface-raised)
   );
 }
@@ -1001,11 +1007,19 @@ button.chat-action-target:active,
 }
 
 .message-entry .ui-bubble {
-  letter-spacing: -0.15px;
+  letter-spacing: var(--openbot-tracking-tight);
 }
 
 .message-entry-agent .ui-bubble {
   max-width: min(720px, 100%);
+}
+
+/* An agent's text sits on the canvas, flush with its name, as a document does. Only the people in
+   the conversation keep a bubble, so a reader finds their own turns at a glance. */
+.message-entry-agent .ui-bubble-variant-muted > .ui-bubble-content {
+  border-radius: 0;
+  background: transparent;
+  padding-inline: 0;
 }
 
 .message-entry-agent .ui-bubble:has(.choice-card) {

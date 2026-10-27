@@ -83,6 +83,8 @@ describe("ui foundation check", () => {
         budget("untokenized font-size", 1),
         budget("untokenized font-weight", 1),
         budget("pixel line-height", 1),
+        budget("untokenized letter-spacing", 1),
+        budget("icon size outside the icon scale", 2),
         budget("untokenized border-radius", 1),
         budget("untokenized transition durations", 2),
         // Six: five in branches/TestHooks.tsx and the sixth in components/ui/Button.tsx. That

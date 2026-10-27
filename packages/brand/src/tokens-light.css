@@ -55,6 +55,7 @@
   --openbot-border-strong: rgba(20, 20, 20, 0.1);
   --openbot-image-outline: rgba(20, 20, 20, 0.1);
   --openbot-hover: rgba(20, 20, 20, 0.05);
+  --openbot-hover-strong: rgba(20, 20, 20, 0.08);
 
   /* Contrast on the canvas: primary 17:1, secondary 10:1, muted 4.9:1. Dim is for
      marks and disabled text, as in the dark palette. */

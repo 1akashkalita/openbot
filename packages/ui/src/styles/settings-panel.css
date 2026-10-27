@@ -77,8 +77,8 @@
 }
 
 .settings-panel-nav-button > svg {
-  width: 16px;
-  height: 16px;
+  width: var(--openbot-icon-md);
+  height: var(--openbot-icon-md);
   /* The weight is left to .ui-glyph-20 on the icons themselves, as in .message-action-button. */
 }
 
@@ -286,12 +286,13 @@
   gap: var(--openbot-space-1-5);
 }
 
+/* A group title is above the rows it holds, as a settings section heading is: 16/22, not a small label. */
 .settings-link-section-title {
   margin: 0 0 0 var(--openbot-space-1);
-  color: var(--openbot-text-muted);
-  font-size: var(--openbot-text-sm);
-  font-weight: var(--openbot-weight-medium);
-  line-height: var(--openbot-leading-sm);
+  color: var(--openbot-text-primary);
+  font-size: var(--openbot-text-xl);
+  font-weight: var(--openbot-weight-semibold);
+  line-height: var(--openbot-leading-xl);
 }
 
 .settings-link-group-inset {

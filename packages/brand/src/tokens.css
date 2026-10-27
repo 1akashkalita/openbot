@@ -266,6 +266,8 @@
   --openbot-shadow-ring: rgba(228, 228, 228, 0.04);
   --openbot-border-on-light: rgba(20, 20, 20, 0.14);
   --openbot-hover: rgba(255, 255, 255, 0.06);
+  /* A filled secondary control: translucent, so it is one step above any surface it sits on. */
+  --openbot-hover-strong: rgba(255, 255, 255, 0.1);
   --openbot-font-sans: "Inter Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --openbot-font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, monospace;
   /* Six steps, one line-height each, named for the step it pairs with. The scale had
@@ -307,6 +309,12 @@
   --openbot-tracking-tight: -0.1px;
   --openbot-tracking-normal: 0;
   --openbot-tracking-wide: 0.02em;
+  /* Inter tightens as it grows: about -0.015em for 16-24px headings and -0.022em at display
+     size. Small capitals open up instead. A file-extension glyph is set tight to fit its chip. */
+  --openbot-tracking-title: -0.015em;
+  --openbot-tracking-display: -0.022em;
+  --openbot-tracking-caps: 0.08em;
+  --openbot-tracking-glyph: -0.05em;
   --openbot-space-0-5: 2px;
   --openbot-space-1: 4px;
   --openbot-space-1-5: 6px;

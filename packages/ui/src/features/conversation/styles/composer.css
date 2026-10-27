@@ -175,8 +175,10 @@
     transform var(--openbot-duration-fast) var(--openbot-ease-out);
 }
 
+/* Attach and the microphone are one kind of button: the same fill at rest and the same step on
+   hover. The microphone's rest fill is the goo bar under it, so its hover adds one hover step. */
 .composer-button:hover {
-  background: var(--openbot-border);
+  background: var(--openbot-hover-strong);
   color: var(--openbot-text-primary);
 }
 
@@ -425,8 +427,8 @@
 
 .voice-recording-cancel svg,
 .voice-recording-finish svg {
-  width: 14px;
-  height: 14px;
+  width: var(--openbot-icon-sm);
+  height: var(--openbot-icon-sm);
 }
 
 .voice-recording-finish svg {
@@ -449,15 +451,15 @@
 }
 
 .dictation-button:hover:not(:disabled) {
-  background: var(--openbot-border);
+  background: var(--openbot-hover);
   color: var(--openbot-text-primary);
 }
 
 .composer-button svg,
 .dictation-button svg,
 .voice-button svg {
-  width: 16px;
-  height: 16px;
+  width: var(--openbot-icon-md);
+  height: var(--openbot-icon-md);
 }
 
 .composer-spinner {
