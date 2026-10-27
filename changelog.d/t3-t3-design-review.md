@@ -7,7 +7,9 @@
   bright than the text that you type.
 - Dialogs, menus and cards use one set of corner radii. All dialogs now have the same corners.
 - Direct messages use the same text size as channels. In the sidebar, the time and the message
-  preview of an agent now have the same size and colour.
+  preview of an agent now have the same size, weight and colour, lighter than the name.
+- All search fields have the same corners as other fields.
+- A switch that is off has a grey thumb, so it no longer looks on in the light theme.
 - Icons use one stroke width and the standard icon sizes in all of the app.
 - Text uses the optical sizes of Inter: small text is more open and large titles are tighter.
 - Copy and Expand on a code block show when you point at the block or move to it with the keyboard.

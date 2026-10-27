@@ -525,10 +525,10 @@
   outline: none;
 }
 
-/* A capsule search field */
+/* The search field has the corners of every other field, as the sidebar search has. */
 .settings-page-search {
   flex: none;
-  border-radius: var(--openbot-radius-pill);
+  border-radius: var(--openbot-radius-md);
   padding: 0 var(--openbot-space-3);
 }
 
