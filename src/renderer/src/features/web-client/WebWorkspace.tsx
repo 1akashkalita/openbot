@@ -152,7 +152,11 @@ import { Conversation, createConversationController } from "../conversation/Conv
 import { clearStoredQueueEdit } from "../conversation/composer-draft";
 import { ConversationControllerProvider } from "../conversation/conversation-controller-context";
 import { composerDraftKey } from "../conversation/conversation-keys";
-import type { AgentSettingsRequest, ConversationThreads } from "../conversation/conversation-types";
+import type {
+  AgentSettingsRequest,
+  ConversationThreads,
+  PromptAnswerOptions,
+} from "../conversation/conversation-types";
 import { webEventRoutinesApi } from "../conversation/routine-webhooks-api";
 import type { FilesPort } from "../files/files-port";
 import { hostSetupProviderProps } from "../onboarding/host-setup-provider-props";
@@ -244,6 +248,21 @@ const QUEUE_EDIT_ACCOUNT_KEY = "openbot.web.queue-edit-account";
 function newAgentAvatar(): Pick<FirstAgentDraft, "avatarSeed" | "avatarHue"> {
   const { avatarSeed, avatarHue } = createFirstAgentDraft();
   return { avatarSeed, avatarHue };
+}
+
+/**
+ * Sends a side thread's approval. A failure goes to the card's `onError`, so the thread shows it; with no
+ * `onError`, the card's own error handling gets it.
+ */
+async function reportedFailure(send: () => Promise<unknown>, options: PromptAnswerOptions | undefined) {
+  try {
+    await send();
+    return true;
+  } catch (error) {
+    if (!options?.onError) throw error;
+    options.onError(error);
+    return false;
+  }
 }
 
 /** The pages of the connected host that cover the conversation. */
@@ -1361,11 +1380,11 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
       tasks: current.tasks,
       tabs: current.tabs,
       approvals: workspace.state.approvals,
+      prompts: workspace.state.prompts,
+      takeovers: workspace.state.takeovers,
       newThreadTitle: t("conversation.threads.new"),
-      onRespondApproval: async (item, decision) => {
-        await workspace.approve({ requestId: item.requestId, decision });
-        return true;
-      },
+      onRespondApproval: (item, decision, options) =>
+        reportedFailure(() => workspace.approve({ requestId: item.requestId, decision }), options),
     });
   });
   /** The thread that the conversation shows: the open side thread, or the agent's own chat. */
@@ -2495,7 +2514,9 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
                 remoteTaskLimitLoaded={remoteAgentAdmin.taskLimit() !== undefined}
                 onUpdateAgentPermissions={remoteAgentAdmin.settings() ? remoteAgentAdmin.update : undefined}
                 onClearAgentContext={clearSelectedAgentContext()}
-                onRespondToBrowserTakeover={(decision) => workspace.respondToBrowserTakeover(decision, openThreadId())}
+                onRespondToBrowserTakeover={(decision, options) =>
+                  workspace.respondToBrowserTakeover(decision, openThreadId(), options)
+                }
                 onCancelQueuedMessage={workspace.cancelQueued}
                 onSteerQueuedMessage={workspace.steerQueued}
                 onUpdateQueuedMessage={workspace.updateQueued}

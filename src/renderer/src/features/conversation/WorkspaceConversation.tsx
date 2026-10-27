@@ -351,9 +351,13 @@ export function WorkspaceConversation(props: { account: () => CentralAuthUser })
       tasks: agentTasks,
       tabs: agentThreads,
       approvals: approvals(),
+      prompts: Object.values(pendingPrompts()).filter((event) => event?.type === "prompt"),
+      takeovers: Object.values(pendingPrompts()).flatMap((event) =>
+        event?.type === "browser-takeover-requested" ? [event.request] : [],
+      ),
       newThreadTitle: t("conversation.threads.new"),
-      onRespondApproval: (approval, decision) =>
-        respondToApprovalRequest(approval.agentId, approval.requestId, decision),
+      onRespondApproval: (approval, decision, options) =>
+        respondToApprovalRequest(approval.agentId, approval.requestId, decision, options),
       contextStates: threadContextStates,
       onCompactContext: compactTaskContext(),
     });
@@ -613,7 +617,7 @@ export function WorkspaceConversation(props: { account: () => CentralAuthUser })
         agentMemoryLimit={generalSettings().agentMemoryLimit}
         onClearAgentContext={clearActiveAgentContext()}
         onCompactAgentContext={compactActiveAgentContext()}
-        onRespondToBrowserTakeover={(decision) => respondToBrowserTakeover(decision, openThreadId())}
+        onRespondToBrowserTakeover={(decision, options) => respondToBrowserTakeover(decision, openThreadId(), options)}
         onCancelQueuedMessage={cancelQueuedMessage}
         waits={activeWaits()}
         threads={threads()}

@@ -15,6 +15,7 @@ import { AGENT_MEMORY_LIMIT_CAPABILITY } from "./agent-memory-limit-v1";
 import { AGENT_PUBLISH_CAPABILITY } from "./agent-publish-v1";
 import { AGENT_SESSION_SETTINGS_CAPABILITY } from "./agent-session-settings-v1";
 import { AGENT_TASK_LIMIT_CAPABILITY } from "./agent-task-limit-v1";
+import { AGENT_TASK_UI_BLOCKS_CAPABILITY } from "./agent-task-ui-blocks-v1";
 import { AGENT_TASKS_CAPABILITY } from "./agent-tasks-v1";
 import { AGENT_THREADS_CAPABILITY } from "./agent-threads-v1";
 import { AGENT_UPDATE_CAPABILITY } from "./agent-update-v1";
@@ -138,6 +139,7 @@ export {
   AGENT_PUBLISH_CAPABILITY,
   AGENT_SESSION_SETTINGS_CAPABILITY,
   AGENT_TASK_LIMIT_CAPABILITY,
+  AGENT_TASK_UI_BLOCKS_CAPABILITY,
   AGENT_TASKS_CAPABILITY,
   AGENT_THREADS_CAPABILITY,
   AGENT_UPDATE_CAPABILITY,
@@ -320,6 +322,7 @@ export const TEAM_CURRENT_CAPABILITIES = [
   BROWSER_SECRET_VAULT_CAPABILITY,
   VAULT_IMPORT_CAPABILITY,
   VAULT_V2_CAPABILITY,
+  AGENT_TASK_UI_BLOCKS_CAPABILITY,
 ] as const;
 
 export type TeamCurrentCapability = (typeof TEAM_CURRENT_CAPABILITIES)[number];
@@ -444,7 +447,8 @@ export const TEAM_BOOTSTRAP_CAPABILITIES = TEAM_CURRENT_CAPABILITIES.filter(
     capability !== VAULT_CAPABILITY &&
     capability !== BROWSER_SECRET_VAULT_CAPABILITY &&
     capability !== VAULT_IMPORT_CAPABILITY &&
-    capability !== VAULT_V2_CAPABILITY,
+    capability !== VAULT_V2_CAPABILITY &&
+    capability !== AGENT_TASK_UI_BLOCKS_CAPABILITY,
 );
 // A v7 host does not know the v8 markers, so a client sends them only after it negotiates protocol 8.
 const TEAM_PROTOCOL_V7_CURRENT_CAPABILITIES = TEAM_CURRENT_CAPABILITIES.filter(
@@ -512,6 +516,7 @@ export function legacyTeamCapabilities(capabilities: readonly string[]): string[
       capability !== VAULT_CAPABILITY &&
       capability !== BROWSER_SECRET_VAULT_CAPABILITY &&
       capability !== VAULT_IMPORT_CAPABILITY &&
-      capability !== VAULT_V2_CAPABILITY,
+      capability !== VAULT_V2_CAPABILITY &&
+      capability !== AGENT_TASK_UI_BLOCKS_CAPABILITY,
   );
 }
