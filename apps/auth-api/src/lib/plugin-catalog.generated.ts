@@ -61,6 +61,12 @@ export const PLUGIN_CATALOG_INDEX: PluginCatalogIndex = {
       detailSha256: "5ead5bab31fb150bf62410b0f4f59106c1e0aa6b00c8449bd8a0d0557cfd48c5",
     },
     {
+      slug: "trello",
+      version: "1.0.0",
+      featured: false,
+      detailSha256: "f85666d6f360a29f8cb29be4c7fd992e1c0d018b5b1a0f5c59cadddefa6883b8",
+    },
+    {
       slug: "cobrain",
       version: "1.0.0",
       featured: false,
@@ -485,6 +491,40 @@ export const PLUGIN_CATALOG_DETAILS: Record<string, PluginCatalogDetail> = {
     websiteUrl: "https://www.todoist.com",
     privacyPolicyUrl: "https://www.todoist.com/privacy",
     termsUrl: "https://www.todoist.com/terms-of-service",
+    skills: [],
+  },
+  trello: {
+    slug: "trello",
+    name: "Trello",
+    tagline: "Boards, lists and cards",
+    description:
+      "Trello lets agents search and read boards, lists, cards, checklists and comments, create boards and cards, move lists and cards, mark cards done, and add checklists, comments and labels. Agents can also read and add cards in the user's Trello Inbox, and read Planner events, which can come from a connected Google or Outlook calendar. Each user signs in to their own Trello account through the browser and chooses the workspaces on a consent screen. Agents get the same permissions as the user in those workspaces. They can archive cards and lists, but the server cannot delete anything permanently.",
+    category: "productivity",
+    creatorName: "Atlassian",
+    iconUrl: "https://trello.com/favicon.ico",
+    version: "1.0.0",
+    prompts: [
+      { id: "prompt-my-cards", text: "Which Trello cards are assigned to me?" },
+      { id: "prompt-board", text: "Summarize what is in progress on my Trello board." },
+      { id: "prompt-new-cards", text: "Add these action items as cards to my Trello board." },
+    ],
+    apps: [
+      {
+        id: "app-trello-mcp",
+        name: "Trello",
+        description: "Boards, lists, and cards, over Trello's MCP server with browser sign-in.",
+        iconUrl: "https://trello.com/favicon.ico",
+        server: {
+          name: "trello",
+          transport: "http",
+          url: "https://mcp.trello.com/v1",
+          auth: [{ id: "trello-oauth", kind: "link", label: "Sign in" }],
+        },
+      },
+    ],
+    websiteUrl: "https://trello.com",
+    privacyPolicyUrl: "https://www.atlassian.com/legal/privacy-policy",
+    termsUrl: "https://www.atlassian.com/legal/atlassian-customer-agreement",
     skills: [],
   },
   cobrain: {
