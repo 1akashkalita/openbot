@@ -1415,6 +1415,22 @@ export class MailboxStore {
     );
   }
 
+  /**
+   * A queued message from another agent that can steer its recipient's running chat turn. Channel,
+   * messaging and task work runs outside that turn. The answers to a request that went to several
+   * teammates start together in one turn (`#isHeldReply`), so none of them goes into it alone.
+   */
+  steersChatTurn(deliveryId: string): boolean {
+    const delivery = this.#state.deliveries.find((candidate) => candidate.id === deliveryId);
+    if (delivery?.status !== "queued") return false;
+    const message = this.#requireMessage(delivery.messageId);
+    if (message.channelId || message.messaging || message.taskId) return false;
+    return (
+      !isAnswer(message) ||
+      this.#state.deliveries.filter((candidate) => candidate.messageId === message.replyToMessageId).length < 2
+    );
+  }
+
   queuedDeliveryIds(agentId: string): string[] {
     return this.#state.deliveries
       .filter((delivery) => delivery.recipientAgentId === agentId && delivery.status === "queued")
