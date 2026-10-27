@@ -210,6 +210,8 @@ import { localRoutineFeedDocument } from "./local-routine-calendar";
 import { createLoginItem } from "./login-item";
 import { LogoColorService } from "./logo-color-service";
 import type { MacHapticFeedback } from "./mac-haptic-feedback";
+import { MACHINE_ALERTS_PREFERENCE_FILE, MachineAlertMonitor, MachineAlertPreferenceStore } from "./machine-alerts";
+import { MachineMetricsSampler } from "./machine-metrics";
 import {
   computerUseCoveringWindowIds,
   computerUseDesktopPoint,
@@ -408,6 +410,7 @@ const TEARDOWN_ORDER = {
   computerUseHighlight: 18,
   computerUsePermissionHelp: 19,
   dynamicIsland: 20,
+  machineAlerts: 21,
   // Before the browser, so no sign-in opens a tab while it stops.
   providerAccountsHost: 27,
   providerHostSignIns: 28,
@@ -596,6 +599,7 @@ export interface ApplicationServices {
   analytics: HostAnalytics;
   trace: TraceFile;
   resourceMonitor: ResourceMonitor;
+  machineAlerts: MachineAlertMonitor;
   teamStore: TeamStore;
   /**
    * The account state this function read part-way through, and bound the local host to. The
@@ -2040,6 +2044,22 @@ export async function createApplicationServices({
   );
   await runCauseEffect(teamStore.initialize());
   performance.mark("openbot:services.team");
+  const machineAlertStore = new MachineAlertPreferenceStore(
+    join(app.getPath("userData"), MACHINE_ALERTS_PREFERENCE_FILE),
+  );
+  await runCauseEffect(machineAlertStore.load());
+  // The same disk as the sidebar storage card: the one that holds the data folder.
+  const machineMetrics = new MachineMetricsSampler(storageSources.roots.data);
+  // Its own sampler, so a Storage panel that reads in between does not shorten its one-minute CPU window.
+  const machineAlertMetrics = new MachineMetricsSampler(storageSources.roots.data);
+  const machineAlerts = new MachineAlertMonitor({
+    read: () => machineAlertMetrics.read(),
+    display: () => machineMetrics.read(),
+    store: machineAlertStore,
+    members: () => teamStore.listMembers(),
+    onError: (message, error) => logger.warn(message, toLogValue(error)),
+  });
+  teardown.push(TEARDOWN_ORDER.machineAlerts, "the machine alert check", () => machineAlerts.close());
   ingressHostId = () => teamStore.getIdentity()?.serverId ?? null;
   signalIngress.reconnect();
   const webhookRelay = new WebhookRelay({
@@ -2283,6 +2303,8 @@ export async function createApplicationServices({
     providerUsageResets: service,
     // Present, so the host advertises `storage-v1`. Members read; only admins delete or clear.
     storage: storageUsage,
+    // Present, so the host advertises `machine-resources-v1`. The routes are admin-only.
+    machine: machineAlerts,
     // Present, so the host advertises `hosted-sites-v1`. Members list; only admins delete.
     hostedSites,
     // Present, so the host advertises `agent-import-v1`. Any member can import.
@@ -3107,6 +3129,7 @@ export async function createApplicationServices({
     analytics,
     trace,
     resourceMonitor,
+    machineAlerts,
     teamStore,
     appliedAccount: signedInState,
     centralAuthInitialization,
