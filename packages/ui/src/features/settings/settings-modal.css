@@ -96,11 +96,12 @@
   padding: var(--openbot-space-6) var(--openbot-space-6) var(--openbot-space-4);
 }
 
+/* The page title is two steps above the 16px section headings, so the two do not read as one level. */
 .settings-modal-title {
   margin: 0;
-  font-size: var(--openbot-text-2xl);
+  font-size: var(--openbot-text-3xl);
   font-weight: var(--openbot-weight-semibold);
-  line-height: var(--openbot-leading-2xl);
+  line-height: var(--openbot-leading-3xl);
   letter-spacing: var(--openbot-tracking-tight);
 }
 

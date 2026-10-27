@@ -1,7 +1,7 @@
 ### Changed
 
-- Settings section titles are now larger and bolder than the rows below them, so each section is
-  easy to find.
+- Settings pages have three clear text levels: a larger page title, bold section titles, and the
+  rows below them. Before, section titles were smaller than their rows.
 - Lines and dim text in the dark theme have more contrast. Placeholder text in fields is now less
   bright than the text that you type.
 - Dialogs, menus and cards use one set of corner radii. All dialogs now have the same corners.
