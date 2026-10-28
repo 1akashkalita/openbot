@@ -29,6 +29,11 @@
 - Reassign in the failed-task tray is a button like Continue.
 - The rail shows the current page in the light theme. Usage rings in the rail have the icon stroke.
 - A switch that is off has a visible track on a card in both themes.
+- The selected side panel tab has a fill in the light theme too.
+- In agent settings and other forms, the Model field has the same up and down arrows as the selects
+  beside it.
+- The buttons in the failed-task tray have the same text size as the tray message.
+- The selected agent colour and face have no shadow.
 - Settings pages have a Back button before the title, as the usage page has. Escape now also closes
   the usage and schedule pages.
 
