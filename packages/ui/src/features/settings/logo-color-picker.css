@@ -33,9 +33,7 @@
 
 .logo-color-choice-selected {
   background: var(--openbot-border);
-  box-shadow:
-    inset 0 0 0 1px var(--openbot-text-muted),
-    0 1px 3px var(--openbot-shadow-popover-ambient);
+  box-shadow: inset 0 0 0 1px var(--openbot-text-muted);
 }
 
 .logo-color-swatch {
@@ -43,5 +41,6 @@
   width: 18px;
   height: 18px;
   border-radius: var(--openbot-radius-pill);
-  box-shadow: inset 0 0 0 1px var(--openbot-border-strong);
+  /* Stronger than a divider, so the lightest swatch keeps an edge on a light card. */
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--openbot-text-primary) 20%, var(--openbot-transparent));
 }

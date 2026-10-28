@@ -478,13 +478,10 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* One width for every select on a settings page, so the controls make one column. It fits
+   "Default browser (Firefox)"; a longer browser name ends in an ellipsis. */
 .app-settings-modal-shell .settings-modal-select {
-  width: 168px;
-}
-
-/* "Open external links in": browser names are longer than the other choices. */
-.app-settings-modal-shell .settings-modal-link-select {
-  width: 220px;
+  width: 208px;
 }
 
 /* A line between the two fixed places and the browsers. */
