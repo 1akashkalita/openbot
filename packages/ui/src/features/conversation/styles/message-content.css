@@ -1384,7 +1384,7 @@
   border: 0;
   border-radius: var(--openbot-radius-sm);
   background: transparent;
-  padding: 1px 6px 1px 3px;
+  padding: 1px 3px;
   color: var(--file-reference-color);
   font: inherit;
   font-weight: var(--openbot-weight-medium);

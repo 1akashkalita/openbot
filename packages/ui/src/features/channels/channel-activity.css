@@ -94,16 +94,3 @@
   gap: var(--openbot-space-2);
   align-items: center;
 }
-/* The second action of the tray. A ghost button is muted by default, which read as disabled
-   beside Continue; both actions here are live. */
-.channel-paused-task-reassign {
-  color: var(--openbot-text-secondary);
-}
-.channel-paused-task-reassign[aria-expanded="true"] {
-  color: var(--openbot-text-primary);
-}
-@media (hover: hover) and (pointer: fine) {
-  .channel-paused-task-reassign:hover {
-    color: var(--openbot-text-primary);
-  }
-}

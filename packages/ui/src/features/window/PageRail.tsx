@@ -58,8 +58,9 @@ function RailButton(props: {
   );
 }
 
-/** Two tracks in a 34px box, with 4.5px between their centers. */
-const RING = { size: 34, stroke: 2.25, spacing: 4.5 };
+/** Two tracks in a 34px box, with 4.5px between their centers. The stroke is the icon stroke, so the
+ * rings do not look heavier than the rail icons. */
+const RING = { size: 34, stroke: 1.75, spacing: 4.5 };
 
 /**
  * The limits of one provider as concentric rings: the outer ring is the longest window, the inner

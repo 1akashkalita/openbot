@@ -25,6 +25,10 @@
   the current server.
 - All selects on a settings page have the same width, so the controls make one column.
 - The white logo colour has a visible edge in the light theme. The selected colour has no shadow.
+- In a code preview, the Preview and Code switch stands beside the language label.
+- Reassign in the failed-task tray is a button like Continue.
+- The rail shows the current page in the light theme. Usage rings in the rail have the icon stroke.
+- A switch that is off has a visible track on a card in both themes.
 - Settings pages have a Back button before the title, as the usage page has. Escape now also closes
   the usage and schedule pages.
 
@@ -32,5 +36,6 @@
 
 - Notifications show below the window header, so they no longer cover the header buttons.
 - Reassign in the failed-task tray no longer looks disabled.
+- A file in a message no longer shows a stray "@" before it, or a wide gap after it.
 - Small code labels in code previews and in chat visuals used the default text size because their
   size token was missing. They now use the small text size.

@@ -13,7 +13,10 @@
 }
 
 /* The Preview and Code switch, sized to the header's buttons. */
+/* The switch stands beside the language label. Copy and Expand show on hover at the far end, so at
+   rest the switch does not float in the middle of the header. */
 .ui-sliding-tabs.message-preview-switch {
+  margin-inline-end: auto;
   gap: var(--openbot-space-0-5);
   padding: var(--openbot-space-0-5);
 }
