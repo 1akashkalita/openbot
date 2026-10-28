@@ -62,6 +62,9 @@
   overflow: auto;
   padding: var(--openbot-space-3);
   overscroll-behavior-x: contain;
+  /* A thin bar in the edge tone, so the frame does not get a second, heavier edge. */
+  scrollbar-color: var(--openbot-border-strong) transparent;
+  scrollbar-width: thin;
 }
 
 /* The frame takes the page height that the app measures, up to the height of a code block. The

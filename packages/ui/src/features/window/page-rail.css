@@ -120,8 +120,8 @@
   transform-origin: var(--kb-tooltip-content-transform-origin);
 }
 
-/* Usage rings: the provider logo inside one ring per limit window. The hover fill is a circle around
- * the rings. */
+/* Usage rings: the provider logo inside one ring, for the window that stops work first. The hover fill
+ * is a circle around the ring. */
 .window-rail-button.window-rail-usage {
   border-radius: var(--openbot-radius-pill);
 }
@@ -135,8 +135,8 @@
 }
 
 .window-rail-button .window-rail-usage-logo {
-  width: var(--openbot-icon-xs);
-  height: var(--openbot-icon-xs);
+  width: var(--openbot-icon-sm);
+  height: var(--openbot-icon-sm);
   overflow: visible;
   fill: var(--openbot-provider-current);
 }
