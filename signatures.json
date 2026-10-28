@@ -279,6 +279,16 @@
       "method": "comment",
       "url": "https://github.com/nightly-labs/openbot/pull/3552#issuecomment-6458071567",
       "text": "I have read the OpenBot Contributor Assignment Agreement 1.0 and I agree to it."
+    },
+    {
+      "login": "zszz3",
+      "userId": 91608029,
+      "version": "1.0",
+      "signedAt": "2026-10-28T04:07:40Z",
+      "pullRequest": 3565,
+      "method": "checkbox",
+      "url": "https://github.com/nightly-labs/openbot/pull/3565",
+      "text": "- [x] I have read the [OpenBot Contributor Assignment Agreement](https://github.com/nightly-labs/openbot/blob/main/CLA.md) 1.0 and I agree to it."
     }
   ]
 }
