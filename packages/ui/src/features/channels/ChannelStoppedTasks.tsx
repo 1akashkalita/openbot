@@ -29,7 +29,7 @@ export function ChannelStoppedTasks(props: {
                 </Button>
                 <DropdownMenu.Root placement="top-start">
                   <DropdownMenu.Trigger
-                    class={buttonVariants({ variant: "ghost", size: "xs", class: "channel-paused-task-reassign" })}
+                    class={buttonVariants({ variant: "secondary", size: "xs" })}
                     aria-label={t("channel.stoppedTask.reassignLabel", { name: props.name(task.ownerAgentId) })}
                   >
                     {t("channel.stoppedTask.reassign")}

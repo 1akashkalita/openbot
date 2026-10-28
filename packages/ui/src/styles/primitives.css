@@ -925,7 +925,8 @@
   border: 0;
   border-radius: var(--openbot-radius-pill);
   outline: none;
-  background: var(--openbot-bg-control);
+  /* A tint, not the control fill: the control fill is close to a card, so an off track was lost on one. */
+  background: var(--openbot-hover-strong);
   box-shadow:
     inset 0 0 0 1px var(--openbot-border-strong),
     0 1px 2px var(--openbot-shadow-ring);
