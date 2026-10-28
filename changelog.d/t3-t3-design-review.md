@@ -41,6 +41,7 @@
 - In agent settings and other forms, field labels and group titles start at the edge of their fields
   and cards, and field labels are medium weight.
 - A file name in a message has one link colour. The badge before it shows the file type colour.
+  LOG and TXT files have a text badge, as other file types do.
 - Fields, selects and colour swatches have a stronger edge, so they are easier to see in the light
   theme.
 - The selected agent colour and face have no shadow.
@@ -54,6 +55,7 @@
 - Notifications show below the window header, so they no longer cover the header buttons.
 - Reassign in the failed-task tray no longer looks disabled.
 - A file in a message no longer shows a stray "@" before it, or a wide gap after it.
+- Punctuation after a file name in a message no longer has a gap before it.
 - An agent name in a message no longer makes its line taller than the lines around it.
 - Small code labels in code previews and in chat visuals used the default text size because their
   size token was missing. They now use the small text size.
