@@ -67,6 +67,7 @@ import {
   DEFAULT_DYNAMIC_ISLAND_PREFERENCE,
   DEFAULT_EXTERNAL_LINK_PREFERENCE,
   DEFAULT_MACHINE_ALERT_SETTINGS,
+  DEFAULT_MEMORY_REVIEW_INTERVAL,
   DEFAULT_PROMPT_CACHE_TTL,
   DEFAULT_PROVIDER_ACCOUNT_ID,
   DEFAULT_PROVIDER_DETECTION_SETTINGS,
@@ -86,12 +87,15 @@ import {
   type HostedSiteSummary,
   type HostStatus,
   hostAgentMemoryLimit,
+  hostMemoryReview,
   isAgentMemoryLimit,
   isAgentSummary,
+  isMemoryReviewInterval,
   isPromptCacheTtl,
   isReleasedRoutineSchedule,
   type MachineAlertSettings,
   type MacPermissionId,
+  type MemoryReviewPreference,
   nextBrowserProfileHue,
   normalizeMcpConfig,
   type OpenAttachmentInput,
@@ -404,6 +408,7 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
   let busyMessageMode: BusyMessageModePreference = { mode: DEFAULT_BUSY_MESSAGE_MODE };
   let agentDefaults: AgentDefaults = { ...DEFAULT_AGENT_DEFAULTS };
   let agentMemoryLimit: AgentMemoryLimitPreference = { limit: DEFAULT_AGENT_MEMORY_LIMIT };
+  let memoryReview: MemoryReviewPreference = { interval: DEFAULT_MEMORY_REVIEW_INTERVAL };
   // The disk level is below the preview disk use (82%), so Storage shows a passed level.
   let machineAlerts: MachineAlertSettings = { ...DEFAULT_MACHINE_ALERT_SETTINGS, diskPercent: 80 };
   let promptCacheTtl: PromptCacheTtlSetting = { ...DEFAULT_PROMPT_CACHE_TTL };
@@ -2808,6 +2813,12 @@ export function createMockOpenBot(options: MockOpenBotOptions = {}): MockOpenBot
         agentMemoryLimit = { limit };
         for (const listener of agentMemoryLimitListeners) listener(clone(agentMemoryLimit));
         return hostAgentMemoryLimit(agentMemoryLimit);
+      },
+      getMemoryReview: async () => hostMemoryReview(memoryReview),
+      setMemoryReview: async (interval) => {
+        if (!isMemoryReviewInterval(interval)) throw new Error("Memory review interval is required.");
+        memoryReview = { interval };
+        return hostMemoryReview(memoryReview);
       },
       // Preview has one host, so every server shares one set of machine alerts.
       getMachineAlerts: async () => clone(machineAlerts),

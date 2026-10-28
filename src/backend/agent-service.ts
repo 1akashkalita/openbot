@@ -162,6 +162,7 @@ import { MailboxSync } from "./agent/mailbox-sync";
 import { type GitHubConnectorSource, McpGateway, type TestMcpServerOptions } from "./agent/mcp-gateway";
 import { mcpServersFromGateway } from "./agent/mcp-tools";
 import { MemoryHold } from "./agent/memory-hold";
+import { MEMORY_REVIEW_MESSAGES, MemoryReview } from "./agent/memory-review";
 import {
   creationModel,
   developmentDefaultsApply,
@@ -203,7 +204,7 @@ import {
 import { ThreadLifecycle } from "./agent/thread-lifecycle";
 import { toToolOperationFailed } from "./agent/tool-operation";
 import { type AgentBrowserHost, TurnLifecycle } from "./agent/turn-lifecycle";
-import { workflowUsageObserver } from "./agent/usage-collection";
+import { memoryReviewUsageObserver, workflowUsageObserver } from "./agent/usage-collection";
 import { toUsageReadFailed, UsageLimitGate, type UsageLimitKey } from "./agent/usage-limit-gate";
 import { WarmGenerations } from "./agent/warm-generations";
 import type { WebhookRoutineWriter } from "./agent/webhook-routine-tool";
@@ -280,6 +281,8 @@ export interface AgentServiceOptions {
    * compaction runs ten times as long. Tests make it short.
    */
   contextCompactionTimeoutMs?: number;
+  /** The pause with no turn before a conversation's memory review runs early. Tests make it short. */
+  memoryReviewIdleMs?: number;
   preferredProvider?: AgentProvider;
   /** The model chosen beside `preferredProvider`, or `null` for that provider's own default. */
   preferredModel?: AgentModelId | null;
@@ -327,6 +330,11 @@ export interface AgentServiceOptions {
    * default cap, which was the only cap before the setting existed.
    */
   agentMemoryLimit?: () => number;
+  /**
+   * The completed turns between two background memory reviews; `0` is off. The main process owns
+   * the preference. Omitted, every 20 turns.
+   */
+  memoryReviewInterval?: () => number;
   /**
    * The server timezone, for a routine an agent creates without a zone from the tool call or the
    * sender. The main process owns the preference. Omitted, the host system zone.
@@ -412,6 +420,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
   readonly #browser: AgentBrowserHost;
   readonly #reader: ConversationReader;
   readonly #memories: AgentMemories;
+  readonly #memoryReview: MemoryReview;
   readonly #waits: AgentWaits;
   readonly #tasks: AgentTasks;
   readonly #tables: AgentTables | null;
@@ -555,6 +564,46 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       emit: (event) => this.#emit(event),
       emitError: (code, error, agentId) => this.#emitError(code, error, agentId),
       ...(options.agentMemoryLimit ? { limit: options.agentMemoryLimit } : {}),
+    });
+    this.#memoryReview = new MemoryReview({
+      memories: this.#memories,
+      profileClients: this.#profileClients,
+      listAgents: () => this.listAgents(),
+      models: (agent) =>
+        this.#providers.ensureProvider(agent.provider).pipe(Effect.map(() => this.#endpoints.available())),
+      createProfileClient: (agent) => this.#providers.createProfileClient(agent.provider, agent.providerAccountId),
+      usageObserver: (agent, model) =>
+        memoryReviewUsageObserver(this.#store.database.usage, agent.id, agent.provider, model.id),
+      chat: (agentId, sideThreadId) => {
+        const loaded = sideThreadId
+          ? this.#conversation.loadedExecutionSnapshot(sideThreadId)
+          : this.#conversation.loadedSnapshot(agentId);
+        // The next turn can start before the review reads: it reads that turn after it ends.
+        if (loaded)
+          return loaded.activeTurnId
+            ? loaded.messages.filter((message) => message.turnId !== loaded.activeTurnId)
+            : loaded.messages;
+        const threadId = sideThreadId ?? this.#store.list().find((agent) => agent.id === agentId)?.threadId;
+        return threadId
+          ? this.#store.database.readConversationPage(agentId, threadId, { type: "latest" }, MEMORY_REVIEW_MESSAGES)
+              .messages
+          : [];
+      },
+      turnActive: (agentId, sideThreadId) =>
+        Boolean(
+          (sideThreadId
+            ? this.#conversation.loadedExecutionSnapshot(sideThreadId)
+            : this.#conversation.loadedSnapshot(agentId)
+          )?.activeTurnId,
+        ),
+      appendSystemMessage: (agentId, sideThreadId, message) =>
+        sideThreadId
+          ? this.#appendSideThreadSystemMessage(agentId, sideThreadId, message, "thread.memory-reviewed")
+          : this.#appendSystemMessage(agentId, message, "thread.memory-reviewed"),
+      redact: (text) => this.#mcp.redact(text),
+      stopping: () => this.#stopping,
+      ...(options.memoryReviewIdleMs === undefined ? {} : { idleMs: options.memoryReviewIdleMs }),
+      ...(options.memoryReviewInterval ? { interval: options.memoryReviewInterval } : {}),
     });
     // One timer for every routine owner. The sources are read lazily because `channels` and its
     // scheduler are built further down, and because an owner's earliest routine changes constantly.
@@ -1315,6 +1364,8 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
         quietRoutineDelivery: (deliveryId) => this.#routines.quietRunForDelivery(deliveryId),
         takeRoutinePreview: (deliveryId) => this.#routines.takePreviewBeforeRun(deliveryId),
         closeRoutineSession: (externalThreadId) => this.#threads.closeRoutineThread(externalThreadId),
+        conversationTurnEnded: (agentId, sideThreadId, counts, memoryCommitted) =>
+          this.#memoryReview.turnEnded(agentId, sideThreadId, counts, memoryCommitted),
         routineAnswered: (agentId, deliveryId, answer) => {
           const agent = this.#store.list().find((item) => item.id === agentId);
           const run = this.#routines.runForDelivery(deliveryId);
@@ -1366,6 +1417,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
             for (const threadId of threadIds) yield* this.#forgetExecutionThread(threadId);
             yield* lifecycleStep("delete agent tasks", () => this.#tasks.deleteForAgent(agentId));
           }).pipe(Effect.mapError((failure) => new AgentRemovalFailed({ cause: failure.cause }))),
+        cancelMemoryReview: (agentId) => this.#memoryReview.cancel(agentId),
         stopAgentProcess: (agentId) =>
           this.#providers
             .stopAgentProcess(agentId)
@@ -3034,6 +3086,45 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       );
   });
 
+  /** Appends a system line to the agent's own chat, outside any turn. */
+  #appendSystemMessage(agentId: string, message: ConversationMessage, eventType: string): void {
+    const database = this.#store.database;
+    this.#conversation.withConversationTransaction(agentId, ({ threadId, snapshot }) => {
+      snapshot.messages.push(message);
+      sortConversationMessages(snapshot.messages);
+      snapshot.revision = database.appendConversationMessage({
+        agentId,
+        threadId,
+        activeTurnId: snapshot.activeTurnId,
+        message,
+        eventType,
+      });
+      return { result: undefined, snapshot };
+    });
+  }
+
+  /** Appends a system line to one side thread of the agent, outside any turn. */
+  #appendSideThreadSystemMessage(
+    agentId: string,
+    threadId: string,
+    message: ConversationMessage,
+    eventType: string,
+  ): void {
+    const database = this.#store.database;
+    this.#conversation.withThreadTransaction(agentId, threadId, ({ threadId: transactionThreadId, snapshot }) => {
+      snapshot.messages.push(message);
+      sortConversationMessages(snapshot.messages);
+      snapshot.revision = database.persistConversationChanges({
+        agentId,
+        threadId: transactionThreadId,
+        activeTurnId: snapshot.activeTurnId,
+        changedMessages: [message],
+        eventType,
+      });
+      return { result: undefined, snapshot };
+    });
+  }
+
   /**
    * A note in the agent's chat that it left its model for a usage limit or a provider error, or went back to it. Each
    * channel whose work waits for the agent gets the same note.
@@ -3043,15 +3134,15 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       this.#endpoints.available().find((option) => option.provider === agent.provider && option.id === agent.model)
         ?.name ?? agent.model;
     const text = sourceText(MODEL_SWITCH_TEXT[reason], { model });
-    const database = this.#store.database;
     try {
       this.channels.noteModelSwitch(agent.id, text, MODEL_SWITCH_ITEM_TYPES[reason]);
     } catch (error) {
       this.#emitError("model_switch_marker_failed", error, agent.id);
     }
     try {
-      this.#conversation.withConversationTransaction(agent.id, ({ threadId, snapshot }) => {
-        const message: ConversationMessage = {
+      this.#appendSystemMessage(
+        agent.id,
+        {
           id: `model-switch-${randomUUID()}`,
           author: "system",
           source: "system",
@@ -3059,18 +3150,9 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
           createdAt: new Date().toISOString(),
           status: "completed",
           itemType: MODEL_SWITCH_ITEM_TYPES[reason],
-        };
-        snapshot.messages.push(message);
-        sortConversationMessages(snapshot.messages);
-        snapshot.revision = database.appendConversationMessage({
-          agentId: agent.id,
-          threadId,
-          activeTurnId: snapshot.activeTurnId,
-          message,
-          eventType: "thread.model-switched",
-        });
-        return { result: undefined, snapshot };
-      });
+        },
+        "thread.model-switched",
+      );
     } catch (error) {
       // The switch is stored; only its note is lost.
       this.#emitError("model_switch_marker_failed", error, agent.id);
@@ -3142,6 +3224,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       return threadId;
     });
     yield* this.#threads.endThreadContext(threadId);
+    yield* this.#memoryReview.chatCleared(agentId);
   }, Effect.uninterruptible).bind(this);
 
   /**
@@ -3841,6 +3924,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
 
   readonly stop = Effect.fn("AgentService.stop")(function* (this: AgentService) {
     this.#stopping = true;
+    yield* this.#memoryReview.dispose();
     const channelStop = yield* Effect.forkChild(
       this.channels
         .stop()
@@ -4187,6 +4271,7 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       return found;
     });
     this.#tasks.close(task);
+    yield* this.#memoryReview.threadClosed(task.agentId, task.threadId);
     // A task lane that waited for a free task can start now.
     this.#drain.scheduleDrain(task.agentId);
   }).bind(this);
@@ -4241,6 +4326,8 @@ export class AgentService extends EventEmitter<AgentServiceEvents> {
       if (wasOpen) this.#tasks.close(found);
       return { task: found, wasOpen };
     });
+    // A deleted thread is not reviewed: the person discarded it.
+    yield* this.#memoryReview.forgetThread(task.agentId, task.threadId);
     yield* this.#returnTaskAnswers(task);
     for (const message of this.#mailbox.queuedTaskMessages(task.agentId, task.taskId))
       yield* this.cancelQueuedMessage(task.agentId, message.deliveryId);

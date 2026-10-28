@@ -566,7 +566,15 @@ Saved agent memories, their inclusion settings, and their full-text search index
 SQLite database. Essential memories enter the agent's provider instructions within a fixed size
 limit. Other saved memories reach the provider only when the agent retrieves them with a memory
 tool. Search runs locally and does not use an external search or embedding service. Memory content
-is not included in analytics; provider output uses the application's secret redaction.
+is not included in analytics; provider output uses the application's secret redaction. After every
+20 turns of an agent's chat or side thread, after 15 minutes with no new turn, when the user clears
+the chat, and when the user closes a side thread, OpenBot sends the agent's profile, its essential
+memories, the saved memories that relate most to the conversation, and the new part of the
+conversation, with secrets redacted, to the agent's own provider, on the agent's model or on the
+provider's lower-priced default model, which proposes memory changes. Nothing else receives them.
+Server settings > General > Memory review sets the number of turns (10, 20 or 40) for the agents of
+the server, or turns these reviews off; off, no review sends anything. An owner or admin of a joined
+server can change it.
 
 - `~/OpenBot/Agents` contains one workspace per agent. A profile written by a release before the
   bot-to-agent rename holds them under `~/OpenBot/Bots`; the application moves them on first launch.
