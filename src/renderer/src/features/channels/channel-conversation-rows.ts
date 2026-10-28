@@ -126,11 +126,13 @@ export function firstUnreadChannelMessageId(
  * The lead's routing turn moves no task out of `queued` and writes no message of its own. Without
  * it the transcript stands still while the coordinator thinks, which reads as a dropped request.
  * Only `queued` and `waiting`: routing that ends without an owner leaves the task `paused` with the
- * coordinator's reason above the composer, and that notice is the indicator from then on.
+ * coordinator's reason above the composer, and that notice is the indicator from then on. A hidden
+ * lead routes nothing, so it is not shown as working; `hiddenLeadWaiting` explains the wait.
  */
 export function channelWorkers(
   page: ChannelPage,
   agents: readonly AgentProfile[],
+  hidden: ReadonlySet<string>,
   fallbackName: string,
 ): ChannelWorker[] {
   const ids = new Set<string>();
@@ -138,13 +140,26 @@ export function channelWorkers(
   for (const entry of page.messages)
     if (entry.message.status === "streaming" && entry.author.kind !== "member") ids.add(entry.author.id);
   const lead = page.channel.leadAgentId;
-  if (lead && page.tasks.some((task) => !task.ownerAgentId && (task.state === "queued" || task.state === "waiting")))
-    ids.add(lead);
+  if (lead && !hidden.has(lead) && waitsForRouting(page)) ids.add(lead);
   return [...ids].map((id) => {
     const agent = agents.find((candidate) => candidate.id === id);
     const authored = page.messages.find((entry) => entry.author.id === id);
     return { id, name: agent?.name ?? authored?.author.name ?? fallbackName, ...(agent ? { agent } : {}) };
   });
+}
+
+/** A request with no owner yet: the lead must choose one. */
+function waitsForRouting(page: ChannelPage): boolean {
+  return page.tasks.some((task) => !task.ownerAgentId && (task.state === "queued" || task.state === "waiting"));
+}
+
+/**
+ * The hidden lead that a request waits for. The host keeps the request queued and routes it when the
+ * user restores the lead, so nothing else on the screen tells the reader why no one works.
+ */
+export function hiddenLeadWaiting(page: ChannelPage, hidden: ReadonlySet<string>): string | null {
+  const lead = page.channel.leadAgentId;
+  return lead && hidden.has(lead) && !page.channel.archived && waitsForRouting(page) ? lead : null;
 }
 
 /**

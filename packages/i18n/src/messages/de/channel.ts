@@ -9,6 +9,8 @@ export const messages = {
   "channel.stoppedTask.reassignLabel": "Gestoppte Aufgabe von {name} neu zuweisen",
   "channel.stoppedTask.reassign": "Neu zuweisen",
   "channel.conversation.noMembers": "Füge in den Kanaleinstellungen Agenten hinzu, um mit der Arbeit zu beginnen.",
+  "channel.conversation.leadHidden":
+    "{name} leitet diesen Kanal und ist ausgeblendet. Stelle {name} wieder her, um diese Arbeit zu starten.",
   "channel.conversation.archivedNotice": "Gelöschter Kanal. Nur Vorschau.",
   "channel.composer.label": "Nachricht an den Kanal",
   "channel.composer.placeholder": "Nachricht an {name}",

@@ -28,7 +28,7 @@ export function ChannelsControllerProvider(props: ParentProps<{ controller: Chan
 /** The desktop channels domain: preload is the runtime, and the app's contexts are the environment. */
 export function ChannelsProvider(props: ParentProps) {
   const { activeServer, activeServerId, activeServerSupportsCapability } = useServers();
-  const { agentList, setAgentSetupOpen } = useAgents();
+  const { agentList, setAgentSetupOpen, userHiddenAgentIds } = useAgents();
   const { clearDirectSelection, setDirectTyping } = useDirectMessages();
   const windowPage = useWindowPage();
   const { centralAuth } = useAuth();
@@ -40,6 +40,7 @@ export function ChannelsProvider(props: ParentProps) {
   const controller = createChannelsController({
     port: channelsPort,
     agents: agentList,
+    hiddenAgentIds: userHiddenAgentIds,
     scopeKey: accountKey,
     readSelection: (account) =>
       account === "loading" || account === "error"

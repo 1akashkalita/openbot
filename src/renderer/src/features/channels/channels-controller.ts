@@ -43,6 +43,8 @@ export interface ChannelsEnvironment {
   /** Read on each call, so a test can replace the runtime per case. */
   port: () => ChannelsPort;
   agents: () => AgentProfile[];
+  /** The agents that the user hid on this host. They take no new channel work until restored. */
+  hiddenAgentIds: () => ReadonlySet<string>;
   /** Who reads. A change drops the list, the selection, and every command still pending. */
   scopeKey: () => string;
   /** The channel this reader had open, if they are known and had one. */
@@ -437,6 +439,7 @@ export function createChannelsController(env: ChannelsEnvironment) {
     hasUnread: () => state.channels.some((channel) => channel.unreadCount > 0),
     markAllRead,
     agents: env.agents,
+    hiddenAgentIds: env.hiddenAgentIds,
     supported,
     deletionSupported: () => supported() && env.deletionSupported(),
     refresh,

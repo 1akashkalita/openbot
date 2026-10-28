@@ -1094,9 +1094,11 @@ function WebWorkspaceFrame(props: WebWorkspaceProps) {
   const canMarkRead = () => document.hasFocus() && mobilePane() === "conversation" && !pageCovered() && !routinesView();
   /** The channel list before the newest one, for the reader it was read for. A reply notifies once. */
   let channelBaseline: { scope: string; channels: ChannelSummary[] } | null = null;
+  const hiddenAgentIds = createMemo(() => new Set(workspace.state.userHiddenAgents.map((agent) => agent.agentId)));
   const channels = createChannelsController({
     port: () => channelsPort,
     agents: workspace.profiles,
+    hiddenAgentIds,
     // A host switch and a revoked session start the list again. A dropped connection does not: the
     // open channel and its draft stay, and the controller reads the list again when the host is back.
     scopeKey: () => `${workspace.state.host?.hostId ?? ""}:${workspace.state.revocationRevision}`,

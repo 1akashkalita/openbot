@@ -9,6 +9,7 @@ export const messages = {
   "channel.stoppedTask.reassignLabel": "Réattribuer la tâche arrêtée de {name}",
   "channel.stoppedTask.reassign": "Réattribuer",
   "channel.conversation.noMembers": "Ajoutez des agents dans les réglages du canal pour commencer le travail.",
+  "channel.conversation.leadHidden": "{name} dirige ce canal et est masqué. Restaurez {name} pour lancer ce travail.",
   "channel.conversation.archivedNotice": "Canal supprimé. Aperçu uniquement.",
   "channel.composer.label": "Message au canal",
   "channel.composer.placeholder": "Message à {name}",

@@ -228,7 +228,9 @@ export function createChannelConversation(env: ChannelConversationEnvironment) {
     },
     workers: () => {
       const current = page();
-      return current ? channelWorkers(current, channels.agents(), t("chat.activity.agentFallback")) : [];
+      return current
+        ? channelWorkers(current, channels.agents(), channels.hiddenAgentIds(), t("chat.activity.agentFallback"))
+        : [];
     },
     workingTurns,
     interactionAgentName: () => {

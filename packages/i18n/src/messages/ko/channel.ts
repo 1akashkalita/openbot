@@ -9,6 +9,8 @@ export const messages = {
   "channel.stoppedTask.reassignLabel": "{name}의 중단된 작업 다시 배정",
   "channel.stoppedTask.reassign": "다시 배정",
   "channel.conversation.noMembers": "채널 설정에서 에이전트를 추가하면 작업을 시작할 수 있어요.",
+  "channel.conversation.leadHidden":
+    "{name}은(는) 이 채널의 리더이며 숨겨져 있어요. 이 작업을 시작하려면 {name}을(를) 복원하세요.",
   "channel.conversation.archivedNotice": "삭제된 채널이에요. 미리보기만 가능해요.",
   "channel.composer.label": "채널에 메시지 보내기",
   "channel.composer.placeholder": "{name}에 메시지 보내기",

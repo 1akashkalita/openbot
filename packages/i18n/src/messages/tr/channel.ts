@@ -9,6 +9,8 @@ export const messages = {
   "channel.stoppedTask.reassignLabel": "{name} ajanının durdurulan görevini yeniden ata",
   "channel.stoppedTask.reassign": "Yeniden ata",
   "channel.conversation.noMembers": "Çalışmayı başlatmak için kanal ayarlarından ajan ekleyin.",
+  "channel.conversation.leadHidden":
+    "{name} bu kanalı yönetiyor ve gizli. Bu işi başlatmak için {name} öğesini geri yükleyin.",
   "channel.conversation.archivedNotice": "Silinmiş kanal. Yalnızca önizleme.",
   "channel.composer.label": "Kanala mesaj",
   "channel.composer.placeholder": "{name} kanalına mesaj gönder",

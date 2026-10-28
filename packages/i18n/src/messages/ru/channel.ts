@@ -9,6 +9,7 @@ export const messages = {
   "channel.stoppedTask.reassignLabel": "Переназначить остановленную задачу {name}",
   "channel.stoppedTask.reassign": "Переназначить",
   "channel.conversation.noMembers": "Добавьте агентов в настройках канала, чтобы начать работу.",
+  "channel.conversation.leadHidden": "{name} ведёт этот канал и скрыт. Восстановите {name}, чтобы начать эту работу.",
   "channel.conversation.archivedNotice": "Канал удалён. Только просмотр.",
   "channel.composer.label": "Сообщение в канал",
   "channel.composer.placeholder": "Сообщение: {name}",

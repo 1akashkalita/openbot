@@ -9,6 +9,8 @@ export const messages = {
   "channel.stoppedTask.reassignLabel": "Przydziel ponownie zatrzymane zadanie: {name}",
   "channel.stoppedTask.reassign": "Przekaż",
   "channel.conversation.noMembers": "Dodaj agentów w ustawieniach kanału, aby rozpocząć pracę.",
+  "channel.conversation.leadHidden":
+    "{name} prowadzi ten kanał i jest ukryty. Przywróć {name}, aby rozpocząć tę pracę.",
   "channel.conversation.archivedNotice": "Usunięty kanał. Tylko podgląd.",
   "channel.composer.label": "Wiadomość do kanału",
   "channel.composer.placeholder": "Wiadomość do: {name}",

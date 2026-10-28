@@ -9,6 +9,7 @@ export const messages = {
   "channel.stoppedTask.reassignLabel": "重新分配 {name} 被停止的任务",
   "channel.stoppedTask.reassign": "重新分配",
   "channel.conversation.noMembers": "请在频道设置中添加助手以开始工作。",
+  "channel.conversation.leadHidden": "{name} 是此频道的负责人，目前已隐藏。恢复 {name} 即可开始这项工作。",
   "channel.conversation.archivedNotice": "已删除的频道，仅供预览。",
   "channel.composer.label": "发消息到频道",
   "channel.composer.placeholder": "发消息给 {name}",
