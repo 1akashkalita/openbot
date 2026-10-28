@@ -105,16 +105,17 @@
 
 .settings-field > span {
   display: block;
-  margin: 0 0 6px 8px;
+  margin: 0 0 6px;
   color: var(--openbot-text-secondary);
   font-size: var(--openbot-text-md);
+  font-weight: var(--openbot-weight-medium);
   line-height: var(--openbot-leading-md);
 }
 
 /* The count and error under a field, after its control rather than above it like the label. */
 .settings-field > .ui-field-limit {
   display: grid;
-  margin: var(--openbot-space-1-5) 0 0 var(--openbot-space-2);
+  margin: var(--openbot-space-1-5) 0 0;
 }
 
 .settings-field input,
@@ -122,7 +123,7 @@
 .settings-field select {
   display: block;
   width: 100%;
-  border: 1px solid var(--openbot-border-strong);
+  border: 1px solid var(--openbot-border-control);
   border-radius: var(--openbot-radius-md);
   outline: 0;
   background: var(--openbot-shadow-popover-ambient);
@@ -286,9 +287,10 @@
   gap: var(--openbot-space-1-5);
 }
 
-/* A group title is above the rows it holds, as a settings section heading is: 16/22, not a small label. */
+/* A group title is above the rows it holds, as a settings section heading is: 16/22, not a small label.
+   It starts at the card edge, as field labels and settings section titles do. */
 .settings-link-section-title {
-  margin: 0 0 0 var(--openbot-space-1);
+  margin: 0;
   color: var(--openbot-text-primary);
   font-size: var(--openbot-text-xl);
   font-weight: var(--openbot-weight-semibold);

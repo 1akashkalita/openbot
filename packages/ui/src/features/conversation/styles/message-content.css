@@ -1370,6 +1370,8 @@
   height: 16px;
 }
 
+/* A file name has the one link colour, so a line with several files does not show several colours.
+   The badge before it shows the type colour. */
 .message-file-reference,
 .composer-file-reference {
   --file-reference-color: var(--openbot-file-default);
@@ -1385,7 +1387,7 @@
   border-radius: var(--openbot-radius-sm);
   background: transparent;
   padding: 1px 3px;
-  color: var(--file-reference-color);
+  color: var(--openbot-file-default);
   font: inherit;
   font-weight: var(--openbot-weight-medium);
   line-height: var(--openbot-leading-lg);
@@ -1513,7 +1515,7 @@
 
 .ui-button.message-file-reference:focus-visible,
 .composer-file-reference:focus-visible {
-  outline: 2px solid var(--file-reference-color);
+  outline: 1px solid var(--openbot-border-focus);
   outline-offset: 2px;
   box-shadow: none;
 }
@@ -1566,14 +1568,14 @@
 }
 
 [data-slot="bubble"][data-author="user"] .message-file-reference {
-  color: var(--file-reference-color);
+  color: var(--openbot-file-default);
 }
 
 @media (hover: hover) and (pointer: fine) {
   .ui-button.message-file-reference:hover:not(:disabled),
   .composer-file-reference:hover {
-    background-color: var(--file-reference-soft);
-    color: var(--file-reference-color);
+    background-color: var(--openbot-hover);
+    color: var(--openbot-file-default);
   }
 }
 

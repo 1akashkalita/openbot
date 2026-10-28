@@ -42,5 +42,5 @@
   height: 18px;
   border-radius: var(--openbot-radius-pill);
   /* Stronger than a divider, so the lightest swatch keeps an edge on a light card. */
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--openbot-text-primary) 20%, var(--openbot-transparent));
+  box-shadow: inset 0 0 0 1px var(--openbot-swatch-edge);
 }

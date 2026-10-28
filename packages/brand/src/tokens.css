@@ -92,6 +92,9 @@
   /* Lines must be visible on the canvas: the same alpha steps as the light palette. */
   --openbot-border: rgba(255, 255, 255, 0.07);
   --openbot-border-strong: rgba(255, 255, 255, 0.1);
+  /* The edge of a field, a select or a colour swatch marks the control itself, so it is stronger than a divider. */
+  --openbot-border-control: rgba(255, 255, 255, 0.12);
+  --openbot-swatch-edge: rgba(255, 255, 255, 0.2);
   --openbot-image-outline: rgba(255, 255, 255, 0.1);
   /* Focus is neutral: a grey border or a thin grey ring, never blue and never a halo. */
   --openbot-border-focus: var(--openbot-text-muted);

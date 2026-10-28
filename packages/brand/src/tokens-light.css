@@ -53,6 +53,9 @@
 
   --openbot-border: rgba(20, 20, 20, 0.07);
   --openbot-border-strong: rgba(20, 20, 20, 0.1);
+  /* The edge of a field, a select or a colour swatch marks the control itself, so it is stronger than a divider. */
+  --openbot-border-control: rgba(20, 20, 20, 0.18);
+  --openbot-swatch-edge: rgba(20, 20, 20, 0.3);
   --openbot-image-outline: rgba(20, 20, 20, 0.1);
   --openbot-hover: rgba(20, 20, 20, 0.05);
   --openbot-hover-strong: rgba(20, 20, 20, 0.08);

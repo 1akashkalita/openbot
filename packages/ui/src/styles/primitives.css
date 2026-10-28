@@ -559,7 +559,7 @@
 :where(.ui-input, .ui-textarea, .ui-native-select) {
   width: 100%;
   min-width: 0;
-  border: 1px solid var(--openbot-border-strong);
+  border: 1px solid var(--openbot-border-control);
   border-radius: var(--openbot-radius-md);
   outline: 0;
   background: var(--openbot-bg-control);
@@ -640,7 +640,7 @@
   justify-content: space-between;
   gap: var(--openbot-space-1-5);
   cursor: pointer;
-  border: 1px solid var(--openbot-border-strong);
+  border: 1px solid var(--openbot-border-control);
   border-radius: var(--openbot-radius-md);
   outline: 0;
   background: transparent;
@@ -667,7 +667,7 @@
 }
 
 .ui-select-trigger[data-expanded] {
-  border-color: var(--openbot-border-strong);
+  border-color: var(--openbot-border-control);
   background: var(--openbot-hover);
 }
 

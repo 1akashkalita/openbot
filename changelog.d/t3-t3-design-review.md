@@ -38,6 +38,11 @@
   "Mon 26 Oct 12:55". The year shows only for an earlier year.
 - File type badges such as MD, CSV and XLSX have larger letters.
 - A provider update notification shows its close button at all times, beside Update.
+- In agent settings and other forms, field labels and group titles start at the edge of their fields
+  and cards, and field labels are medium weight.
+- A file name in a message has one link colour. The badge before it shows the file type colour.
+- Fields, selects and colour swatches have a stronger edge, so they are easier to see in the light
+  theme.
 - The selected agent colour and face have no shadow.
 - Settings pages have a Back button before the title, as the usage page has. Escape now also closes
   the usage and schedule pages.
