@@ -28,8 +28,18 @@ function initializeMermaid(api: Mermaid, scheme: DocumentColorScheme): void {
     // `neutral` is gray, as the light palette is; `default` draws lavender boxes.
     theme: scheme === "light" ? "neutral" : "dark",
     // The app has no drop shadows; on the light palette Mermaid's shows under each box. An edge
-    // label takes the preview's own background, so it covers the line without a grey box.
-    themeVariables: { dropShadow: "none", edgeLabelBackground: previewBackground() },
+    // label takes the preview's own background, so it covers the line without a grey box. A box is
+    // a raised surface with a muted edge: a diagram is drawn smaller than its source, and a
+    // dimmer 1px line fades on the light palette.
+    themeVariables: {
+      dropShadow: "none",
+      edgeLabelBackground: tokenColor("--openbot-bg-sidebar"),
+      mainBkg: tokenColor("--openbot-bg-surface-raised"),
+      nodeBorder: tokenColor("--openbot-text-muted"),
+      lineColor: tokenColor("--openbot-text-muted"),
+    },
+    // Boxes take the card corner radius of the app; a diamond or a circle keeps its shape.
+    themeCSS: ".node rect { rx: 8px; ry: 8px; }",
     fontFamily: CHAT_MERMAID_FONT_FAMILY,
     // HTML labels write a line break as an unclosed `<br>`, and an image of that SVG does not load.
     htmlLabels: false,
@@ -37,10 +47,10 @@ function initializeMermaid(api: Mermaid, scheme: DocumentColorScheme): void {
   });
 }
 
-/** The preview's background as an `rgb()` colour, which Mermaid can parse; it cannot read a token. */
-function previewBackground(): string {
+/** A colour token as an `rgb()` colour, which Mermaid can parse; it cannot read a token. */
+function tokenColor(token: string): string {
   const probe = document.createElement("span");
-  probe.style.background = "var(--openbot-bg-sidebar)";
+  probe.style.background = `var(${token})`;
   document.body.append(probe);
   const color = getComputedStyle(probe).backgroundColor;
   probe.remove();

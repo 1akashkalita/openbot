@@ -1137,8 +1137,8 @@ textarea {
 .server-menu-mark {
   position: relative;
   display: grid;
-  width: 20px;
-  height: 20px;
+  width: var(--openbot-icon-md);
+  height: var(--openbot-icon-md);
   flex: 0 0 auto;
   overflow: hidden;
   place-items: center;
@@ -1164,6 +1164,11 @@ textarea {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.server-menu-current {
+  flex: 0 0 auto;
+  color: var(--openbot-text-primary);
 }
 
 .server-menu-muted {
