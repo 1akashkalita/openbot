@@ -65,6 +65,12 @@ await Promise.all([
   access(resolve(resourcesPath, "remote-desktop-runtime/sources/moonlight-web-stream-v2.10.0-openbot-source.tar.gz")),
   access(resolve(resourcesPath, "remote-desktop-runtime/sources/moonlight-web-stream-v2.10.0-openbot.patch")),
   access(resolve(resourcesPath, "remote-desktop-runtime/win32/x64/sunshine.exe")),
+  access(
+    resolve(
+      resourcesPath,
+      "remote-desktop-runtime/win32/x64/assets/shaders/directx/convert_yuv420_packed_uv_type0_ps.hlsl",
+    ),
+  ),
   access(resolve(resourcesPath, "remote-desktop-runtime/win32/x64/web-server.exe")),
   access(resolve(resourcesPath, "remote-desktop-runtime/win32/x64/streamer.exe")),
   access(resolve(resourcesPath, "remote-desktop-runtime/win32/x64/static/stream.html")),

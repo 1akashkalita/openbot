@@ -94,6 +94,14 @@ try {
   } else {
     await cp(sunshineBinary, join(outputRoot, `sunshine${executableSuffix}`));
   }
+  // The Windows Sunshine compiles its DirectX shaders at start from `assets/shaders/directx`,
+  // relative to its working directory, and does not start without them. Its build directory only
+  // links to them; `cmake --install` copies them.
+  if (platform === "win32") {
+    await cp(join(sunshineSource, "src_assets/windows/assets/shaders"), join(outputRoot, "assets/shaders"), {
+      recursive: true,
+    });
+  }
   await cp(
     join(moonlightSource, "target/release", `web-server${executableSuffix}`),
     join(outputRoot, `web-server${executableSuffix}`),
