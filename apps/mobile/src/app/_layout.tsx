@@ -33,6 +33,9 @@ import { loadMotionPreferences } from "@/features/settings/model/motion-storage"
 import { loadPushNotificationPreference } from "@/features/settings/model/push-notifications";
 import { resetShareExtension } from "@/features/share/model/share-extension";
 import { installSupportLog } from "@/features/support/model/support-log-capture";
+import { parakeetModel } from "@/features/voice/model/parakeet-model";
+import { supertonicModel } from "@/features/voice/model/supertonic-model";
+import { loadVoiceSettings } from "@/features/voice/model/voice-settings";
 import { AppLoadingOverlayProvider, useAppLoadingOverlay } from "@/shared/components/app-loading-overlay";
 import { BloubStage } from "@/shared/components/bloub-stage/bloub-stage";
 import { BloubStageProvider, useBloubStageRequest } from "@/shared/components/bloub-stage/bloub-stage-context";
@@ -205,6 +208,9 @@ export default function RootLayout() {
       void loadPushNotificationPreference().catch(() => undefined);
       void loadMotionPreferences().catch(() => undefined);
       void loadDictationLanguage().catch(() => undefined);
+      void loadVoiceSettings().catch(() => undefined);
+      supertonicModel.check();
+      parakeetModel.check();
       void loadAppLanguage().catch(() => undefined);
       void loadOnboardingProgress().catch(() => undefined);
     });
