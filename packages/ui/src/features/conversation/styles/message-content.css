@@ -668,13 +668,13 @@
   line-height: var(--openbot-leading-sm);
 }
 
-/* Alone, the language is the block's title, not a tag: plain text in the code face, so it does not
-   look like a button beside the Preview and Code switch. */
+/* Alone, the language is the block's title, not a tag: plain text in the interface face, so the
+   heading has one face beside the Preview and Code switch. */
 .message-code-language:only-child {
   background: transparent;
   padding-inline: var(--openbot-space-0-5);
   color: var(--openbot-text-muted);
-  font-family: var(--openbot-font-mono);
+  font-family: var(--openbot-font-sans);
   font-weight: var(--openbot-weight-regular);
 }
 

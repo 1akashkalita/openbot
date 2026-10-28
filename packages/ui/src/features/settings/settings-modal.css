@@ -253,22 +253,17 @@
   line-height: var(--openbot-leading-lg);
 }
 
+/* Descriptions are one step below the 14px row title, so a row reads as title, then detail. */
 .settings-modal :where(.ui-item-description, .ui-switch-description),
 .settings-modal :where(.ui-text)[data-variant="caption"] {
-  font-size: var(--openbot-text-md);
-  line-height: var(--openbot-leading-md);
+  font-size: var(--openbot-text-sm);
+  line-height: var(--openbot-leading-sm);
 }
 
 .settings-modal .ui-item-description {
   overflow: visible;
   text-overflow: clip;
   white-space: normal;
-}
-
-/* A note after the description, such as what a development build does, is one step quieter than the description. */
-.settings-modal .ui-item-description.settings-item-note {
-  font-size: var(--openbot-text-sm);
-  line-height: var(--openbot-leading-sm);
 }
 
 .settings-modal :where(.ui-item-content, .ui-switch-copy) {

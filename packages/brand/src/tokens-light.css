@@ -65,8 +65,9 @@
   --openbot-text-primary: #141414;
   --openbot-text-secondary: #3a3a3c;
   --openbot-text-muted: #6b6b70;
-  /* A dark off thumb read as on beside the dark checked track, so the light theme keeps it muted. */
-  --openbot-switch-thumb-off: var(--openbot-text-muted);
+  /* Off is a white thumb on the grey track; on is the same thumb on the dark track. Only the track
+     changes, so a grey thumb is not read as on. */
+  --openbot-switch-thumb-off: var(--openbot-bg-surface);
   --openbot-text-dim: #8e8e93;
   --openbot-text-placeholder: var(--openbot-text-muted);
   --openbot-text-readable: rgba(20, 20, 20, 0.6);

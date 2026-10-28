@@ -112,7 +112,7 @@ export function SettingsGeneralTab(props: SettingsGeneralTabProps) {
               <ItemTitle>{i18n.t("settings.logoColor.title")}</ItemTitle>
               <ItemDescription>{i18n.t("settings.logoColor.description")}</ItemDescription>
               <Show when={props.variant !== "production"}>
-                <ItemDescription class="settings-item-note">{i18n.t("settings.logoColor.buildNote")}</ItemDescription>
+                <ItemDescription>{i18n.t("settings.logoColor.buildNote")}</ItemDescription>
               </Show>
             </ItemContent>
             <LogoColorPicker value={logoColor.color()} onChange={logoColor.changeColor} />
