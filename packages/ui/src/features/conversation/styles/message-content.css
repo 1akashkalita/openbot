@@ -1382,11 +1382,13 @@
   max-width: min(240px, calc(100% - 8px));
   align-items: center;
   gap: 4px;
-  margin: 0 1px;
+  /* The negative end margin cancels the end padding, so punctuation after the name sits as it does
+     after a word. The hover fill still clears the last letter. */
+  margin: 0 calc(-1 * var(--openbot-space-0-5)) 0 0;
   border: 0;
   border-radius: var(--openbot-radius-sm);
   background: transparent;
-  padding: 1px 3px;
+  padding: 1px var(--openbot-space-0-5);
   color: var(--openbot-file-default);
   font: inherit;
   font-weight: var(--openbot-weight-medium);
