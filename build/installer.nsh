@@ -23,13 +23,40 @@
   Pop $0
 !macroend
 
-; This replaces the check after the earlier version is removed, so it keeps that check first.
+; The installer runs this check before it removes the earlier version, and the uninstaller before it
+; removes the files. It keeps the default check, which asks to close OpenBot and stops the processes
+; that run from the folder. Then `installer-release-files.ps1` stops the other processes that hold a
+; file there, because the earlier uninstaller stops the update when it cannot move one. Without
+; PowerShell, only the default check runs.
+!macro customCheckAppRunning
+  !insertmacro IS_POWERSHELL_AVAILABLE
+  !insertmacro _CHECK_APP_RUNNING
+  ${if} $IsPowerShellAvailable == 0
+  ${andIf} ${FileExists} "$INSTDIR\*.*"
+    InitPluginsDir
+    File "/oname=$PLUGINSDIR\installer-release-files.ps1" "${BUILD_RESOURCES_DIR}\installer-release-files.ps1"
+    nsExec::Exec `"$PowerShellPath" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\installer-release-files.ps1" -InstallDir "$INSTDIR" -LogFile "$APPDATA\${PRODUCT_NAME}\logs\update\installer.log"`
+    Pop $0
+  ${endIf}
+!macroend
+
+; electron-builder includes these for the default check only, and that check needs them.
+!include "getProcessInfo.nsh"
+Var pid
+
+; This replaces the check after the earlier version is removed, so it keeps that check first. The
+; earlier uninstaller puts its files back when it fails. An update closed OpenBot and runs with no
+; window, so open the earlier version again: otherwise OpenBot looks as if it does not start.
 !macro customUnInstallCheck
   ${if} ${Errors}
     DetailPrint `Uninstall was not successful. Not able to launch uninstaller!`
   ${elseIf} $R0 != 0
     MessageBox MB_OK|MB_ICONEXCLAMATION "$(uninstallFailed): $R0"
     DetailPrint `Uninstall was not successful. Uninstaller error code: $R0.`
+    ${if} ${isUpdated}
+    ${andIf} ${FileExists} "$appExe"
+      Exec '"$appExe"'
+    ${endIf}
     SetErrorLevel 2
     Quit
   ${endIf}
