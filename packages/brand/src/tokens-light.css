@@ -65,6 +65,8 @@
   --openbot-text-primary: #141414;
   --openbot-text-secondary: #3a3a3c;
   --openbot-text-muted: #6b6b70;
+  /* A dark off thumb read as on beside the dark checked track, so the light theme keeps it muted. */
+  --openbot-switch-thumb-off: var(--openbot-text-muted);
   --openbot-text-dim: #8e8e93;
   --openbot-text-placeholder: var(--openbot-text-muted);
   --openbot-text-readable: rgba(20, 20, 20, 0.6);
