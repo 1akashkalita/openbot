@@ -1366,6 +1366,15 @@ body,
   color: var(--openbot-text-primary);
 }
 
+.settings-field input,
+.settings-field textarea,
+.settings-field select,
+.setup-remote-form input,
+.setup-remote-form textarea,
+.account-login-form input {
+  border-color: var(--openbot-border-control);
+}
+
 .search-field:focus-within,
 .composer:focus-within,
 .direct-composer:focus-within,
