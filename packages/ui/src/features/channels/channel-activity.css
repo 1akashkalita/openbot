@@ -94,7 +94,3 @@
   gap: var(--openbot-space-2);
   align-items: center;
 }
-/* The labels take the size of the reason, so the small buttons do not read louder than it. */
-.channel-paused-task-actions .ui-button {
-  font-size: var(--openbot-text-md);
-}

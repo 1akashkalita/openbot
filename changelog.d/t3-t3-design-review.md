@@ -32,7 +32,12 @@
 - The selected side panel tab has a fill in the light theme too.
 - In agent settings and other forms, the Model field has the same up and down arrows as the selects
   beside it.
-- The buttons in the failed-task tray have the same text size as the tray message.
+- Small buttons use the body text size. Before, every button size used the larger 14px text.
+- A wide Mermaid diagram scrolls sideways in a narrow column, so its labels stay readable.
+- Times in a conversation use one form, as the day separators do: "Yesterday 11:55" or
+  "Mon 26 Oct 12:55". The year shows only for an earlier year.
+- File type badges such as MD, CSV and XLSX have larger letters.
+- A provider update notification shows its close button at all times, beside Update.
 - The selected agent colour and face have no shadow.
 - Settings pages have a Back button before the title, as the usage page has. Escape now also closes
   the usage and schedule pages.
@@ -44,5 +49,6 @@
 - Notifications show below the window header, so they no longer cover the header buttons.
 - Reassign in the failed-task tray no longer looks disabled.
 - A file in a message no longer shows a stray "@" before it, or a wide gap after it.
+- An agent name in a message no longer makes its line taller than the lines around it.
 - Small code labels in code previews and in chat visuals used the default text size because their
   size token was missing. They now use the small text size.
