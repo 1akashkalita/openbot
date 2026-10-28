@@ -299,8 +299,8 @@
   /* Glyphs, not copy: a file-extension string inside a fixed 16-24px chip. Below the
    * scale's floor because the container is fixed, not because the text is small. Outside
    * the text-* namespace so text-* means exactly the six steps above. */
-  --openbot-glyph-xs: 7px;
-  --openbot-glyph-sm: 8px;
+  --openbot-glyph-xs: 8px;
+  --openbot-glyph-sm: 9px;
 
   --openbot-weight-regular: 400;
   --openbot-weight-medium: 500;

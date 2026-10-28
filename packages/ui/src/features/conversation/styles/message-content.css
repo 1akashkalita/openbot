@@ -1408,6 +1408,14 @@
   user-select: text;
 }
 
+/* In the text, a chip fills the height of the line, so a line with a chip is as high as the lines around
+   it. `middle` sets it by the x-height and pushed the line 1px lower. */
+.reference-chip.message-reference-chip {
+  height: auto;
+  padding-block: var(--openbot-space-0-5);
+  vertical-align: top;
+}
+
 /* A table measures its columns before it knows their widths, so the percentage cap above does not
    apply there, and a long path makes its column as wide as the path. A fixed cap keeps it short. */
 :is(.message-data-table, .message-markdown-table) .message-file-reference {
@@ -1521,12 +1529,17 @@
   color: var(--file-reference-color);
 }
 
+/* Each badge leaves at least 2px each side of its extension. */
+.attachment-reference-visual[data-badge-length="2"] {
+  width: 18px;
+}
+
 .attachment-reference-visual[data-badge-length="3"] {
-  width: 20px;
+  width: 22px;
 }
 
 .attachment-reference-visual[data-badge-length="4"] {
-  width: 24px;
+  width: 26px;
 }
 
 .attachment-reference-visual > span {

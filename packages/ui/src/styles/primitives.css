@@ -129,16 +129,22 @@
   font-weight: var(--openbot-weight-medium);
 }
 
+/* A class, not `:where()`: the base `button { font: inherit }` reset outranks `:where()`, so the small
+   sizes took the 14px above. They use the body size, so their labels stay as readable as the text
+   beside them. */
+.ui-button-size-xs,
+.ui-button-size-sm {
+  font-size: var(--openbot-text-md);
+}
+
 :where(.ui-button-size-xs) {
   height: var(--openbot-control-xs);
   padding-inline: var(--openbot-space-2);
-  font-size: var(--openbot-text-sm);
 }
 
 :where(.ui-button-size-sm) {
   height: var(--openbot-control-md);
   padding-inline: var(--openbot-space-3);
-  font-size: var(--openbot-text-sm);
 }
 
 :where(.ui-button-size-default) {

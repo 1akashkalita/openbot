@@ -56,6 +56,8 @@
 }
 
 .message-preview-body[data-preview-kind="mermaid"] {
+  /* `safe`: a diagram wider than the column starts at its left edge, so all of it scrolls into view. */
+  place-items: safe center;
   max-height: 420px;
   overflow: auto;
   padding: var(--openbot-space-3);
@@ -72,7 +74,10 @@
   background: var(--openbot-bg-sidebar);
 }
 
+/* A diagram fits its column, but not below 80% of its drawn size: beyond that its labels are too
+   small to read, so a wide diagram scrolls sideways instead. */
 .message-preview-diagram {
+  min-width: calc(var(--message-preview-diagram-width, 0px) * 0.8);
   max-width: 100%;
   height: auto;
   display: block;
