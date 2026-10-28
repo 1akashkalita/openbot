@@ -1,4 +1,4 @@
-/* The logo color swatches, in the same shape as the agent avatar color grid. */
+/* The logo color swatches, on the grid of the agent avatar colors. The tile is round, as the swatch is. */
 .logo-color-grid {
   display: grid;
   grid-template-columns: repeat(5, 32px);
@@ -16,7 +16,7 @@
   place-items: center;
   padding: 0;
   border: 1px solid transparent;
-  border-radius: var(--openbot-radius-md);
+  border-radius: var(--openbot-radius-pill);
   background: transparent;
   transition-property: scale, background-color, box-shadow;
   transition-duration: var(--openbot-duration-normal), var(--openbot-duration-hover), var(--openbot-duration-hover);
