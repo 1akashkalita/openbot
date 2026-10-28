@@ -29,7 +29,7 @@ import {
 import { matchingSourceKeys, sourceText } from "@openbot/i18n/source";
 import { createOpenBotLogger, redactText } from "@openbot/logging";
 import { classifyUserError } from "@openbot/user-errors";
-import { Deferred, Effect, Exit, Result, Schema, Scope, Semaphore } from "effect";
+import { Deferred, Effect, Exit, Fiber, Result, Schema, Scope, Semaphore } from "effect";
 import { startAcpAuthentication } from "./../acp-sign-in";
 import { type AgentClient, AgentProcessExitError, type AgentProvider } from "./../agent-client";
 import { CodexAppServerClient } from "./../app-server-client";
@@ -570,10 +570,14 @@ export class ProviderRuntime implements ProviderPort {
             const temp = provider === "antigravity" ? antigravityTemp(this.#credentials) : undefined;
             return temp && { ...temp, provider: providerLabel(provider) };
           },
-          authenticate: (provider, cli, accountEnvironment) =>
-            this.#authenticateClient(provider, cli, { accountEnvironment }).pipe(
-              Effect.mapError((error) => new ProviderAccountFailed({ cause: error.cause })),
-            ),
+          // The sign-in process waits for a slow start, so the check after it waits as long (#3546).
+          // A cancel or a removal must not wait for that start: the accounts start it uninterruptibly.
+          authenticate: (provider, cli, accountEnvironment, afterSignIn) =>
+            this.#authenticateClient(provider, cli, {
+              accountEnvironment,
+              interruptibleStart: true,
+              ...(afterSignIn ? { startTimeoutMs: this.#longStartWaitMs(provider) } : {}),
+            }).pipe(Effect.mapError((error) => new ProviderAccountFailed({ cause: error.cause }))),
           stopClient: (client) =>
             Effect.gen({ self: this }, function* () {
               yield* client.stop().pipe(Effect.ignore);
@@ -1508,7 +1512,18 @@ export class ProviderRuntime implements ProviderPort {
   ) {
     yield* providerStep(() => this.requireProviderOn(provider));
     const accounts = yield* this.#requireAccounts(provider);
-    yield* accounts.connect(provider, accountId, openExternal, false).pipe(toProviderOperationFailed);
+    const signIn = yield* accounts.connect(provider, accountId, openExternal, false).pipe(toProviderOperationFailed);
+    // A new account that fails goes with its row, so the error is the only report of why. A cancel
+    // interrupts the sign-in and shows nothing.
+    if (accountId === null)
+      yield* signIn.ended.pipe(
+        Effect.tap((error) =>
+          Effect.sync(() => {
+            if (error) this.#emitError(`${provider}_account_sign_in_failed`, error);
+          }),
+        ),
+        Effect.forkIn(this.#scope),
+      );
     return this.status();
   }).bind(this);
 
@@ -2674,11 +2689,14 @@ export class ProviderRuntime implements ProviderPort {
         confinement,
         startTimeoutMs,
         accountEnvironment,
+        interruptibleStart,
       }: {
         confinement?: ProcessConfinement;
         startTimeoutMs?: number;
         /** The home folder of a provider account after the first. */
         accountEnvironment?: Readonly<Record<string, string>>;
+        /** An interrupt stops the start and the client, also in an uninterruptible caller. */
+        interruptibleStart?: boolean;
       } = {},
     ) {
       const driver = requireProviderDriver(provider);
@@ -2702,7 +2720,16 @@ export class ProviderRuntime implements ProviderPort {
             });
             const startedAt = performance.now();
             const durationMs = () => Math.round(performance.now() - startedAt);
-            yield* this.#initializeProviderClient(client, startTimeoutMs).pipe(
+            const initialize = this.#initializeProviderClient(client, startTimeoutMs);
+            // The client's start is uninterruptible, so it runs on its own fiber. An interrupt stops the
+            // wait, and the release stops the client, which ends that start.
+            const start = interruptibleStart
+              ? Effect.forkIn(Effect.exit(initialize), this.#scope).pipe(
+                  Effect.flatMap((fiber) => Effect.interruptible(Fiber.join(fiber))),
+                  Effect.flatten,
+                )
+              : initialize;
+            yield* start.pipe(
               Effect.tapError((failure) =>
                 Effect.sync(() => {
                   const error = this.#withExitDetail(failure.cause);
