@@ -1026,9 +1026,8 @@
   height: var(--ui-switch-thumb-size);
   display: block;
   border-radius: var(--openbot-radius-pill);
-  /* Off is a muted thumb. A thumb in the text colour read as on in the light theme, where the
-     checked track is dark too. */
-  background: var(--openbot-text-muted);
+  /* The off thumb has its own token for each theme: see `--openbot-switch-thumb-off`. */
+  background: var(--openbot-switch-thumb-off);
   box-shadow: 0 1px 2px var(--openbot-shadow-ring);
   transform: translate3d(
       calc(var(--ui-switch-inset) + (var(--ui-switch-position, 0) * var(--ui-switch-travel))),

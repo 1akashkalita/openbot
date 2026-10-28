@@ -24,6 +24,11 @@
   padding-top: var(--openbot-chat-marker-gap);
 }
 
+/* The time of the marker above already covers this one, so the centred row holds only its label. */
+.virtual-chat-row[data-repeated-time] .chat-action-marker-time:not(.chat-action-run-group-time) {
+  display: none;
+}
+
 .virtual-chat-row > .chat-action-marker + .message-entry {
   margin-top: var(--openbot-chat-marker-gap);
 }

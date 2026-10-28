@@ -47,6 +47,14 @@
 - The selected agent colour and face have no shadow.
 - Settings pages have a Back button before the title, as the usage page has. Escape now also closes
   the usage and schedule pages.
+- A switch that is off has a brighter thumb in the dark theme, so it no longer looks disabled.
+- Messages in a conversation sit closer together, and sidebar rows have a smaller gap.
+- In the server menu, "Add remote server" has a plain plus icon. The check that marks the current
+  server has more space before the submenu arrow.
+- A code block with only its language shows the language as a plain title, not as a button.
+- The note under a setting that applies only to development builds uses smaller text.
+- In a run of conversation events from the same minute, only the first event shows the time.
+- Sidebar unread counts are less bright than agent names.
 - The website and the status page use the same type sizes, weights, letter spacing and corner
   radii as the app. Website text uses the optical sizes of Inter, so long titles take fewer lines.
 
@@ -57,5 +65,6 @@
 - A file in a message no longer shows a stray "@" before it, or a wide gap after it.
 - Punctuation after a file name in a message no longer has a gap before it.
 - An agent name in a message no longer makes its line taller than the lines around it.
+- The last event in a channel no longer touches the failed-task panel below it.
 - Small code labels in code previews and in chat visuals used the default text size because their
   size token was missing. They now use the small text size.

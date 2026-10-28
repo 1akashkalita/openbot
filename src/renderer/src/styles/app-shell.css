@@ -1193,7 +1193,13 @@ textarea {
   margin-left: 0;
 }
 
-/* The add item: a dashed circle that fills in on the highlighted row, with the plus cut out of it. */
+/* A trailing value, such as the current-server check or the layout name, keeps a clear gap before the
+   submenu chevron, and both rows end at one edge. */
+.server-menu :is(.server-menu-current, .ui-menu-trailing) {
+  margin-inline-end: var(--openbot-space-1);
+}
+
+/* The add item: a plain plus in the icon column, as the other menu items have, in the secondary text colour. */
 .ui-action-menu .server-menu-add {
   color: var(--openbot-text-secondary);
 }
@@ -1208,23 +1214,11 @@ textarea {
   height: var(--openbot-icon-md);
   flex: 0 0 auto;
   place-items: center;
-  border: 1px dashed color-mix(in srgb, var(--openbot-text-primary) 30%, transparent);
-  border-radius: var(--openbot-radius-pill);
 }
 
 .ui-action-menu .server-menu-add-circle > svg {
-  width: var(--ui-menu-inset);
-  height: var(--ui-menu-inset);
-  stroke-width: 2.5;
-}
-
-.ui-action-menu .server-menu-add:is(:hover, [data-highlighted]) .server-menu-add-circle {
-  border-color: transparent;
-  background: var(--openbot-text-primary);
-}
-
-.ui-action-menu .server-menu-add:is(:hover, [data-highlighted]) .server-menu-add-circle > svg {
-  color: var(--ui-menu-bg);
+  width: var(--openbot-icon-md);
+  height: var(--openbot-icon-md);
 }
 
 .sidebar-topbar-actions {
@@ -1803,7 +1797,7 @@ textarea {
 }
 
 .sidebar-agent-item + .sidebar-agent-item {
-  margin-top: 4px;
+  margin-top: var(--openbot-space-0-5);
 }
 
 .sidebar-agent-item-dragging {
@@ -2089,7 +2083,8 @@ textarea {
   place-items: center;
   border: 2px solid var(--openbot-bg-sidebar);
   border-radius: var(--openbot-radius-pill);
-  background: var(--openbot-text-primary);
+  /* One step below the name, so a count does not draw the eye before the agent it belongs to. */
+  background: var(--openbot-text-secondary);
   padding: 0 3px;
   color: var(--openbot-bg-sidebar);
   font-size: var(--openbot-text-sm);
@@ -2218,7 +2213,7 @@ textarea {
   min-width: 16px;
   height: 16px;
   border-radius: var(--openbot-radius-pill);
-  background: var(--openbot-text-primary);
+  background: var(--openbot-text-secondary);
   padding: 0 3px;
   color: var(--openbot-bg-sidebar);
   font-size: var(--openbot-text-sm);

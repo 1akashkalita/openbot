@@ -265,6 +265,12 @@
   white-space: normal;
 }
 
+/* A note after the description, such as what a development build does, is one step quieter than the description. */
+.settings-modal .ui-item-description.settings-item-note {
+  font-size: var(--openbot-text-sm);
+  line-height: var(--openbot-leading-sm);
+}
+
 .settings-modal :where(.ui-item-content, .ui-switch-copy) {
   gap: var(--openbot-space-0-5);
 }

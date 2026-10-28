@@ -355,6 +355,8 @@
   --openbot-switch-height: 20px;
   --openbot-switch-thumb: 16px;
   --openbot-switch-inset: 2px;
+  /* An off thumb: bright on the dark track, so the switch reads as a control, not as disabled. */
+  --openbot-switch-thumb-off: var(--openbot-text-secondary);
   --openbot-switch-sm-width: 24px;
   --openbot-switch-sm-height: 14px;
   --openbot-switch-sm-thumb: 12px;
@@ -374,7 +376,7 @@
   --openbot-icon-sm: 14px;
   --openbot-icon-md: 16px;
   --openbot-icon-lg: 20px;
-  --openbot-chat-entry-gap: var(--openbot-space-3);
+  --openbot-chat-entry-gap: var(--openbot-space-2);
   --openbot-chat-marker-gap: var(--openbot-space-1);
   --openbot-chat-marker-height: var(--openbot-control-xs);
   --openbot-chat-marker-avatar: var(--openbot-icon-md);
