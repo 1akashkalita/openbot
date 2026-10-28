@@ -22,6 +22,7 @@ function loadMermaid(): Promise<Mermaid> {
 
 /** `strict` escapes the HTML in labels and turns off click handlers; a diagram cannot change it. */
 function initializeMermaid(api: Mermaid, scheme: DocumentColorScheme): void {
+  const edge = tokenColor("--openbot-text-muted");
   api.initialize({
     startOnLoad: false,
     securityLevel: "strict",
@@ -35,11 +36,14 @@ function initializeMermaid(api: Mermaid, scheme: DocumentColorScheme): void {
       dropShadow: "none",
       edgeLabelBackground: tokenColor("--openbot-bg-sidebar"),
       mainBkg: tokenColor("--openbot-bg-surface-raised"),
-      nodeBorder: tokenColor("--openbot-text-muted"),
-      lineColor: tokenColor("--openbot-text-muted"),
+      nodeBorder: edge,
+      lineColor: edge,
     },
-    // Boxes take the card corner radius of the app; a diamond or a circle keeps its shape.
-    themeCSS: ".node rect { rx: 8px; ry: 8px; }",
+    // Boxes take the card corner radius of the app; a diamond or a circle keeps its shape. Mermaid's
+    // own box edge is a gradient that fades on the light palette, so every shape takes the line colour;
+    // `[data-look]` matches the weight of Mermaid's gradient rule. The diagram is drawn smaller than its
+    // source, so a 1.25px edge still shows as a full 1px line.
+    themeCSS: `.node rect { rx: 8px; ry: 8px; } :is(.node, [data-look].node) :is(rect, polygon, circle, ellipse) { stroke: ${edge}; stroke-width: 1.25px; }`,
     fontFamily: CHAT_MERMAID_FONT_FAMILY,
     // HTML labels write a line break as an unclosed `<br>`, and an image of that SVG does not load.
     htmlLabels: false,

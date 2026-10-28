@@ -54,6 +54,8 @@
 - A code block with only its language shows the language as a plain title, not as a button.
 - Setting descriptions use the small text size, one step below the setting name.
 - The selected logo color has a round ring, as the color has.
+- Boxes in Mermaid diagrams have a clear edge in the light theme. Before, the edge almost disappeared.
+- A switch that is off has the same edge as a field.
 - In a run of conversation events from the same minute, only the first event shows the time.
 - Sidebar unread counts are less bright than agent names.
 
